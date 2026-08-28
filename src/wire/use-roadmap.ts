@@ -196,11 +196,42 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
       }
     }
 
+    /**
+     * The connection is stored BEFORE the greeting is acted on, and the order
+     * is the whole of a bug that made this page hang forever.
+     *
+     * `connect` subscribes to the mailbox, and the mailbox replays what has
+     * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
+     * always arrives before React mounts — that is the entire reason the
+     * mailbox exists — so `onHello` fired on this line, before `host.current`
+     * had been assigned. `look` reads `host.current`, found null, returned
+     * early, and left the page reading "Asking about …". It started no timer
+     * either, so nothing ever timed out: not a slow answer, not a refusal, just
+     * a sentence that never changed.
+     *
+     * Worse, it worked often enough to look fine. When the host happened to
+     * greet after this effect returned — a slow module, a reload, a busy
+     * machine — the assignment had already happened and everything behaved. A
+     * race whose good outcome is the common one is the kind that ships.
+     *
+     * So anything that fires too early is held and delivered the moment the
+     * assignment is done. Not deferred to a microtask: that would fix the
+     * symptom and leave the next reader to work out why the order mattered.
+     */
+    let ready = false
+    let early: Parameters<typeof arrived>[0] | null = null
+    const held = (context: Parameters<typeof arrived>[0]) => {
+      if (ready) arrived(context)
+      else early = context
+    }
+
     host.current = connect(id, {
-      onHello: arrived,
-      onContext: arrived,
+      onHello: held,
+      onContext: held,
       onGoto: (message, answer) => goto.current(message, answer),
     })
+    ready = true
+    if (early) arrived(early)
 
     const grace = setTimeout(() => {
       setSight((was) => (was.at === 'listening' ? { at: 'unhosted' } : was))
