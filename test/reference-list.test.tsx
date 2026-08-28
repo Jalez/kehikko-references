@@ -36,7 +36,7 @@ function reading(count: number) {
 describe('four hundred rows', () => {
   test('four hundred of them reach the document', () => {
     const rows = collect(reading(400))
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelectorAll('li')).toHaveLength(400)
   })
 
@@ -45,7 +45,7 @@ describe('four hundred rows', () => {
        that is in the reading and not in the document is one the browser's own
        find cannot reach, and somebody concludes their work is not filed. */
     const rows = collect(reading(400))
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const drawn = new Set([...container.querySelectorAll('li')].map((li) => li.getAttribute('data-ref')))
     for (const row of rows) expect(drawn.has(row.ref)).toBe(true)
   })
@@ -53,7 +53,7 @@ describe('four hundred rows', () => {
   test('a filtered list draws exactly what the filter kept, and nothing else', () => {
     const rows = collect(reading(400))
     const kept = sift(rows, { ...EVERYTHING, state: 'closed' })
-    const { container } = render(<ReferenceList rows={kept} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={kept} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelectorAll('li')).toHaveLength(kept.length)
     expect(kept.length).toBeGreaterThan(0)
     expect(kept.length).toBeLessThan(400)
@@ -63,7 +63,7 @@ describe('four hundred rows', () => {
 describe('what a row shows when the reading is thin', () => {
   test('a row with no title says which kind of nothing it is', () => {
     const rows = collect({ issues: { '1': {}, '2': null } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const text = container.textContent ?? ''
     expect(text).toContain('no title in the reading')
     expect(text).toContain('this reference arrived with no reading at all')
@@ -71,20 +71,50 @@ describe('what a row shows when the reading is thin', () => {
 
   test('an unreadable state is drawn as unseen, never as open', () => {
     const rows = collect({ issues: { '1': { state: 'something-else', title: 'x' } } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.textContent).toContain('unseen')
     expect(container.textContent).not.toContain('open')
   })
 
   test('a row with nobody on it says nobody rather than nothing', () => {
     const rows = collect({ issues: { '1': { state: 'opened', title: 'x' } } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.textContent).toContain('nobody')
   })
 
   test('a reference with no readable link is not a link', () => {
     const rows = collect({ issues: { '1': { state: 'opened', title: 'x', url: 'javascript:alert(1)' } } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelector('a')).toBeNull()
+  })
+
+  test('a change says it is one, because GitHub spells it exactly like an issue', () => {
+    /* `#41` and `!41` tell a reader apart on GitLab. `gh#131` and `gh#105` do
+       not, because GitHub numbers issues and pull requests in one sequence and
+       spells them the same — so a merged pull request was only distinguishable
+       by the word `merged`, and an OPEN one was not distinguishable at all. */
+    const rows = collect({
+      ghIssues: { 'gh#131': { state: 'opened', title: 'an issue' } },
+      ghPrs: { 'gh#105': { state: 'opened', title: 'a pull request' } },
+    })
+    const { container } = render(
+      <ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />,
+    )
+    const marked = [...container.querySelectorAll('li[data-ref]')]
+      .filter((li) => li.querySelector('[data-kind="change"]'))
+      .map((li) => li.getAttribute('data-ref'))
+    expect(marked).toEqual(['gh#105'])
+    /* And it is named in the words the tracker uses rather than in the filter's
+       word: nobody has ever gone looking for "a change". */
+    expect(container.querySelector('li[data-ref="gh#105"]')?.getAttribute('title')).toContain('pull request')
+    expect(container.querySelector('li[data-ref="gh#131"]')?.getAttribute('title')).toContain('issue')
+  })
+
+  test('the same distinction on GitLab uses GitLab’s word', () => {
+    const rows = collect({ mrs: { '17': { state: 'opened', title: 'a merge request' } } })
+    const { container } = render(
+      <ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />,
+    )
+    expect(container.querySelector('li[data-ref="!17"]')?.getAttribute('title')).toContain('merge request')
   })
 })

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Every piece of work a journey names \u2014 issues, merge requests, pull requests \u2014 as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A roadmap may frame it, and then it has data.",
+  "description": "Every piece of work a journey names — issues, merge requests, pull requests — as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A roadmap may frame it, and then it has data.",
   "scripts": {
     "build": "vite build",
     "dev": "vite",
@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-checkbox": "^1.3.11",
+    "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-slot": "^1.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

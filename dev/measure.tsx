@@ -59,7 +59,7 @@ for (const count of [50, 400, 1000, 4000]) {
   const sifted = (at() - siftStart) / 10
 
   const renderStart = at()
-  const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
+  const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
   const rendered = at() - renderStart
   const nodes = container.querySelectorAll('*').length
   cleanup()

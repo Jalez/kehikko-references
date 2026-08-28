@@ -48,18 +48,34 @@ const READING = {
   },
 }
 
-/** The one element that carries a row's layout, whichever tag it turned out to be. */
+/**
+ * The one element that carries a row's columns.
+ *
+ * It is the pressable middle of the row now rather than the row's only child:
+ * the checkbox and the tracker link are siblings of it, and they are not part of
+ * the layout these tests are about. It is the row's only direct child that is a
+ * button — the checkbox is one too, and is nested inside a span for exactly the
+ * padding reason given in `reference-row.tsx`, which is what makes `>` enough to
+ * tell them apart.
+ */
 function rowLine(container: HTMLElement): HTMLElement {
-  const line = container.querySelector('li[data-ref] > *')
-  if (!(line instanceof HTMLElement)) throw new Error('the row drew nothing inside its <li>')
+  const line = container.querySelector('li[data-ref] > button')
+  if (!(line instanceof HTMLElement)) throw new Error('the row drew nothing pressable inside its <li>')
   return line
+}
+
+/** The row itself, which is where the whole-row tooltip hangs. */
+function rowBox(container: HTMLElement): HTMLElement {
+  const li = container.querySelector('li[data-ref]')
+  if (!(li instanceof HTMLElement)) throw new Error('no row was drawn at all')
+  return li
 }
 
 describe('the three things a row may never stop showing', () => {
   const three: ('identifier' | 'state' | 'title')[] = ['identifier', 'state', 'title']
 
   test.each(three)('the %s carries no rule that hides it at any width', (which) => {
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const line = rowLine(container)
     /* First, second and third in document order: the identifier and the state
        are wrapped together in the stacked layout and dissolve into the line
@@ -83,7 +99,7 @@ describe('the three things a row may never stop showing', () => {
        makes the measurement come out. `flex-col` is the stacked layout and
        `@xs:flex-row` is the line, and one without the other is a row that is
        either always stacked or never rescued. */
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const className = rowLine(container).className
     expect(className).toContain('flex-col')
     expect(className).toContain('@xs:flex-row')
@@ -94,7 +110,7 @@ describe('the three things a row may never stop showing', () => {
        window's width are different numbers. A stray `sm:` here would make the
        row decide out of the wrong one, and would look completely correct in
        every test and in a tab. */
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} />)
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const classes = [...container.querySelectorAll('*')].flatMap((e) => e.className.toString().split(/\s+/))
     const viewport = classes.filter((c) => /^(sm|md|lg|xl|2xl):/.test(c))
     expect(viewport).toEqual([])
@@ -103,8 +119,8 @@ describe('the three things a row may never stop showing', () => {
 
 describe('what a narrow pane hides is still reachable', () => {
   test('the row carries everything it can drop as its own tooltip', () => {
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} />)
-    const overview = rowLine(container).getAttribute('title') ?? ''
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const overview = rowBox(container).getAttribute("title") ?? ''
     /* Every piece the drop order is allowed to take away has to be in here,
        because this is the answer to "reachable how" for somebody who does not
        know the word to type into the filter. */
@@ -118,14 +134,14 @@ describe('what a narrow pane hides is still reachable', () => {
 
   test('a row with nobody on it says so in the tooltip too, rather than trailing off', () => {
     const rows = collect({ issues: { '1': { state: 'opened', title: 'x' } } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
-    expect(rowLine(container).getAttribute('title')).toContain('nobody')
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    expect(rowBox(container).getAttribute("title")).toContain('nobody')
   })
 
   test('a state nobody could read is named in the tooltip, never left blank', () => {
     const rows = collect({ issues: { '1': { state: 'something-else', title: 'x' } } })
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} />)
-    const overview = rowLine(container).getAttribute('title') ?? ''
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const overview = rowBox(container).getAttribute("title") ?? ''
     expect(overview).toContain('state unread')
     expect(overview).not.toContain('· opened ·')
   })
@@ -133,7 +149,7 @@ describe('what a narrow pane hides is still reachable', () => {
 
 describe('the filter bar in a column narrower than it is', () => {
   test('every option is drawn, and the current one is marked, with no width to hide behind', () => {
-    render(<Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onChange={() => {}} showing={1} total={24} />)
+    render(<Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={1} total={24} />)
     for (const label of ['All', 'Issues', 'Changes', 'Any', 'Open', 'Merged', 'Closed']) {
       const button = screen.getByRole('button', { name: label })
       expect(button.className).not.toContain('hidden')
@@ -150,7 +166,7 @@ describe('the filter bar in a column narrower than it is', () => {
     /* Six pixels of a button past the right edge gave the whole page a sideways
        scrollbar, and the fix is that every flex line in here is allowed to
        break. Asserted on the two groups, because they are what overflowed. */
-    const { container } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} showing={24} total={24} />)
+    const { container } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
     const groups = [...container.querySelectorAll('[role="group"]')]
     expect(groups).toHaveLength(2)
     for (const group of groups) expect(group.className).toContain('flex-wrap')
@@ -159,9 +175,9 @@ describe('the filter bar in a column narrower than it is', () => {
   })
 
   test('the count names both numbers whatever the width, because a short list and a filtered one look the same', () => {
-    const { rerender } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} showing={24} total={24} />)
+    const { rerender } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
     expect(screen.getByText('24 references')).toBeDefined()
-    rerender(<Toolbar sifting={{ ...EVERYTHING, kind: 'issue' }} onChange={() => {}} showing={7} total={24} />)
+    rerender(<Toolbar sifting={{ ...EVERYTHING, kind: 'issue' }} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
     expect(screen.getByText('7 of 24 shown')).toBeDefined()
   })
 })
