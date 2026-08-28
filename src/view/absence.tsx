@@ -28,11 +28,38 @@ import type { EpicBrief } from '@/wire/use-roadmap.ts'
  * different situations. They are tested, word for word, for the same reason.
  */
 
+/**
+ * The frame every one of these paragraphs sits in.
+ *
+ * ## It scrolls itself, for the reason the list does
+ *
+ * These are the states with no rows, and it is easy to forget that one of them
+ * is still the whole of a pane — a pane that is often 220 by 340. "Nothing has
+ * told me anything" is three paragraphs and wants about six hundred pixels of
+ * height there. Without a scroller of its own the last of those paragraphs sat
+ * below the bottom edge of the frame, and it is the one that says what to DO
+ * about the situation. An honest sentence nobody can reach is worth no more
+ * than one that was never written.
+ *
+ * So the panel is the pane and scrolls inside it, which is the same shape the
+ * list has — see the note about `h-full` in `main.tsx`.
+ *
+ * `@container` is declared here rather than inherited because a panel is drawn
+ * INSTEAD of the frame in `app.tsx` rather than inside it, so there is nothing
+ * above it to ask. What it asks about is the padding: ten rems of vertical air
+ * is right on a screen and is a third of the height of a short pane.
+ *
+ * `break-words` is for the identifiers. Most of these paragraphs name an epic
+ * or quote a host's own error, and an epic slug is one long unbreakable token
+ * that would otherwise push the whole page sideways.
+ */
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-prose px-4 py-10 text-sm">
-      <h2 className="text-base font-medium text-foreground">{title}</h2>
-      <div className="mt-3 space-y-3 text-muted-foreground">{children}</div>
+    <div className="@container h-full overflow-y-auto">
+      <div className="mx-auto max-w-prose px-3 py-5 text-sm break-words @md:px-4 @md:py-10">
+        <h2 className="text-base font-medium text-foreground">{title}</h2>
+        <div className="mt-3 space-y-3 text-muted-foreground">{children}</div>
+      </div>
     </div>
   )
 }
@@ -85,11 +112,23 @@ export function NoEpic({ epics, look }: { epics: EpicBrief[]; look: (epic: strin
       {epics.length > 0 && (
         <>
           <p>Or ask about one of these directly:</p>
+          {/* An epic's title is a sentence more often than it is a word, and a
+              button is `whitespace-nowrap`, so in a narrow pane one of these
+              was a control wider than the page. It is capped at the pane and
+              truncated instead, with the whole title on the button's own
+              `title` — a name clipped on a button somebody is about to press is
+              a smaller loss than a page that scrolls sideways. */}
           <ul className="flex flex-wrap gap-2">
             {epics.map((brief) => (
-              <li key={brief.epic}>
-                <Button variant="outline" size="sm" onClick={() => look(brief.epic)}>
-                  {brief.title}
+              <li key={brief.epic} className="max-w-full">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="max-w-full"
+                  title={brief.title}
+                  onClick={() => look(brief.epic)}
+                >
+                  <span className="min-w-0 truncate">{brief.title}</span>
                 </Button>
               </li>
             ))}

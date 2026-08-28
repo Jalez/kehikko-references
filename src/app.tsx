@@ -127,8 +127,20 @@ export function App() {
   if (rows.length === 0) return <NothingFound epic={sight.epic} generated={generated} />
 
   return (
-    <div ref={frame} className="flex h-full flex-col">
-      <header className="flex items-baseline gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
+    /* `@container` is the one thing this element does beyond stacking three
+       boxes, and it is what every size decision below it is measured against. A
+       module's width is its pane's width, and a reader changes that by dragging
+       a corner on somebody else's canvas: the window is never resized, no
+       viewport breakpoint fires, and a layout keyed to `md:` would sit at its
+       widest inside a column two hundred pixels across. So the header and the
+       toolbar ask this element how wide they are; a row asks itself, because a
+       row's own width is what its columns have to divide. */
+    <div ref={frame} className="@container flex h-full flex-col">
+      {/* It wraps, because the two things here are an epic's name and a
+          timestamp and neither of them shortens. In a narrow pane they take a
+          line each. The alternative was truncating an identifier, which is the
+          one kind of text on this page that has to be readable in full. */}
+      <header className="flex flex-wrap items-baseline gap-x-2 border-b border-border px-3 py-1.5 text-xs break-words text-muted-foreground @md:py-2">
         <span className="font-mono text-foreground">{sight.epic}</span>
         {/* Said once, here, rather than on every row: freshness is a fact about
             the reading and not about any one reference in it. */}

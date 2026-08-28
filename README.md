@@ -122,6 +122,51 @@ check, and the title is how they recognise the right one when they only half
 remember the number. A row that has lost one of those three has stopped being a
 row and become a hint.
 
+Whatever the width takes away is on the row as its own `title`, in the order the
+wide layout would have drawn it. "The filter searches it" is a fair answer to
+somebody who knows the word to type and no answer at all to somebody who does
+not, so hovering a row says everything the row would say at full width.
+
+### Two lines under 20rem, and the measurement that forced it
+
+"Never dropped" was a claim rather than a fact until it was measured. In a
+Chromium pane 220 pixels wide — an ordinary size on a grid canvas — the fixed
+5.5rem identifier column and 4.5rem state column left the title **twelve
+pixels**. The row was in the document and findable by Ctrl+F, and unreadable.
+
+So under 20rem the row is two lines: the identifier and the state share the
+first, the title has the whole of the second. It costs about sixteen pixels of
+height per row and the same measurement now reads **196 pixels** of title. The
+fixed columns, which exist so a column of identifiers can be scanned rather than
+read, come back at 28rem, where there is width to pay for them.
+
+### The filter bar wraps, and does not scroll
+
+At 220 pixels the seven buttons and the count came to 226 and the whole page got
+a sideways scrollbar. Three ways out; the bar **wraps**, and every group wraps
+within itself, so no line is ever wider than the pane.
+
+Scrolling the bar inside its own container was rejected, and the reason is the
+reason the count exists: the pressed button *is* the current filter, and a strip
+scrolled back to its left edge hides `Closed` while the list goes on showing only
+closed things. Collapsing to a select was rejected because the whole set has to
+be readable without being opened. The cost is vertical — four lines at 220
+pixels, bought down with tighter padding below 28rem — and it is paid, because
+the alternative was a control whose current setting could be off screen.
+
+### The absences scroll too
+
+Every panel in `absence.tsx` is the whole of a pane when it is drawn, and one of
+them is three paragraphs long. At 220×340 the last of those paragraphs — the one
+that says what to do about the situation — was below the bottom edge with nothing
+to scroll. Each panel is now its own scroller inside the frame, which is the
+shape the list already had; see the note about `h-full` in `main.tsx`.
+
+Measured in Chromium at 220×300, 220×340, 260×400, 320×400, 400×300, 400×700,
+560×700 and 900×700, with the real reading for one epic: no page scrolls
+sideways, all 24 references are in the document at every size, and the pressed
+filter is on screen at every size and after every press.
+
 ## Layout of the program
 
 ```
@@ -144,3 +189,11 @@ dev/measure.tsx      the numbers in this file
 question nobody asked; the six absences, word for word; the filter, including
 that a state nobody could read is never counted as open; and, twice, that four
 hundred references become four hundred rows.
+
+`test/narrow.test.tsx` is the odd one and says why in its own header: happy-dom
+does no layout, so it cannot measure a title's width. What it holds instead is
+which pieces of a row are allowed to carry a hiding rule at all — none of the
+three that may never be dropped — that every threshold in the row is a container
+query and never a viewport one, that the row carries what it drops as its own
+tooltip, and that the filter groups wrap rather than overflow. The widths
+themselves are measured in a browser; the numbers are above.
