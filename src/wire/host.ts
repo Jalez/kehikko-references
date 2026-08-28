@@ -195,27 +195,25 @@ export function connect(id: string, events: HostEvents = {}, window_: MessageSou
     if (ev.source !== host) return
 
     if (message.type === MESSAGE.CONTEXT) {
-      /* Rebuilt field by field rather than passed along, because a context
-         message carries a `type` a `ModuleContext` does not have, and the two
-         shapes are only nearly the same. `selection` is in that list now: it is
-         the host's answer to every `selection.set` anyone on the canvas makes,
-         including ours, and dropping it here is the difference between a page
-         that shows what is picked and one that ticks nothing however hard it is
-         clicked. */
-      events.onContext?.({
-        epic: message.epic,
-        project: message.project,
-        theme: message.theme,
-        selection: message.selection,
-        /* Carried, and deliberately not acted on yet. `pinned` is a host saying
-           "what you were last told is what you keep" — the protocol's own essay
-           argues that a pin nobody was told about is the failure, and that a
-           module which ignores the field is exactly as correct as it was before,
-           it simply stops receiving updates. So passing it on costs a line and
-           leaves the honest sentence available to whoever writes it; what this
-           page does NOT do is invent one it has never seen a host send. */
-        pinned: message.pinned,
-      })
+      /* Everything except the envelope, rather than a list of fields — and the
+         change away from a list is the point.
+
+         This used to name each field it wanted, which is a bug that fails
+         silently and gets worse with every protocol release. `selection` was
+         nearly lost to it and `prompt` actually was: it arrived on the wire,
+         was visible in the message, and was dropped one line before anything
+         could act on it. There is nothing to see when that happens — no error,
+         no warning, just a field that is never there — and Journeys needed a
+         wire trace to find the same bug in its own copy of this code.
+
+         So the message is passed through with only `type` and `protocol`
+         removed, which are the two things a `ModuleContext` does not have. A
+         field this page does not understand today reaches the code that might
+         tomorrow. `pinned` is already one of those: carried, honestly not acted
+         on, and available to whoever writes the sentence for it rather than
+         invented by a page that has never seen a host send one. */
+      const { type: _envelope, protocol: _spoken, ...context } = message
+      events.onContext?.(context)
       return
     }
 

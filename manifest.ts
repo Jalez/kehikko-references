@@ -93,6 +93,20 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   name: 'References',
   version: VERSION,
   summary: 'Every issue, merge request and pull request an epic names, as one list.',
+  /**
+   * What an agent should do about this module, given that it is here.
+   *
+   * Not the summary: that says what this IS, for a person deciding whether to
+   * place it. This says what its PRESENCE OBLIGES, and a host composes it into
+   * the prompt every agent on the canvas is handed — attributed to this module,
+   * because it is this module's claim and not the host's.
+   */
+  guidance:
+    'Every issue, merge request and pull request this epic names is listed here, including ones ' +
+    'nobody mentioned to you. Before deciding what to work on, read the list rather than assuming ' +
+    'the work is the one thing you were pointed at — very often a change is already open for it. ' +
+    'Picking a row sets the canvas selection and other modules react to it, so select the ' +
+    'reference you are working on and leave it selected while you work.',
   entry: '/',
   modes: [{ id: 'references', label: 'References', scope: 'epic' }],
   declares: {
