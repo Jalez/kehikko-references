@@ -6,14 +6,30 @@
 #
 # Two rules it has to keep:
 #   - listen on $PORT when one is set, so two apps cannot be registered onto the
-#     same port by accident;
+#     same port by accident. This line used to say that itself — `--port
+#     "${PORT:-7820}" --strictPort` — and it no longer does. `serves()` in
+#     `vite.config.ts` reads $PORT now, falling back to `PREFERRED_PORT` in
+#     `manifest.ts`, which is the one place the number is written. The rule is
+#     unchanged: whoever starts this chose the port, and a roadmap that spawns
+#     this script passes the port from the registration, which is the address it
+#     is about to go and read.
+#
+#     `--strictPort` went with it, and that is the part worth saying out loud.
+#     What it bought was an app that DIED on a taken port — `Error: Port 7820 is
+#     already in use`, exit 1 — rather than one answering somewhere nobody was
+#     looking, and that was the only honest option while nothing handled a
+#     collision. `serves()` handles it: a free 7820 is taken in silence, this app
+#     already answering there ends the start cleanly instead of making a second
+#     copy, and anything else is a loud move to the next free port with
+#     `~/.roadmap/modules` rewritten to wherever the server actually bound. The
+#     registry is what a roadmap reads, so the registry is what is kept true.
 #   - stay in the foreground. Whoever started this process stops that process; a
 #     script that forks and returns leaves them holding a pid that stops
 #     nothing. Hence `exec`: the server becomes this process rather than a child
 #     of it, and a signal aimed here lands on the thing that is listening.
 #
 # It is also simply how a person runs this app on their own: `./run.sh`, or
-# `PORT=7820 ./run.sh`. There is nothing about it that needs a roadmap.
+# `PORT=7821 ./run.sh`. There is nothing about it that needs a roadmap.
 #
 # ## There is no build here any more, and no `dist`
 #
@@ -41,4 +57,4 @@ if [ ! -d node_modules ]; then
   bun install >&2
 fi
 
-exec bunx vite --host 127.0.0.1 --port "${PORT:-7820}" --strictPort
+exec bunx vite

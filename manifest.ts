@@ -161,6 +161,30 @@ export const ID = 'roadmap.references'
 export const VERSION = '2.0.0'
 
 /**
+ * The port this app would rather have.
+ *
+ * `run.sh` used to demand it — `--port "${PORT:-7820}" --strictPort` — which
+ * meant a taken 7820 printed `Error: Port 7820 is already in use` and exited 1,
+ * and this app did not start because of a program it has nothing to do with.
+ * The number is said here instead, next to the id, and `serves()` in
+ * `vite.config.ts` is what acts on it.
+ *
+ * This module has no `register.ts`, so unlike its siblings it has only one
+ * reader for this constant. It is still here rather than in `vite.config.ts`,
+ * because the id is here and a preferred port with the name it belongs to is
+ * legible in a way that one buried in a plugin argument is not — and because a
+ * `register.ts` is the obvious thing to add next, and it would want this.
+ *
+ * It is a PREFERENCE and not a promise. 7830 through 7960 belong to the other
+ * modules on this machine, and if something else holds 7820 when this starts,
+ * `serves()` moves to the next free port and rewrites `~/.roadmap/modules` to
+ * match — see `roadmap-module-protocol/serve`. A roadmap reads the registry, so
+ * the registry is what has to be true; this number is only where to start
+ * looking.
+ */
+export const PREFERRED_PORT = 7820
+
+/**
  * Parsed here, at module load, rather than shipped as a bare object.
  *
  * The protocol package is explicit that its schemas are a convenience and never

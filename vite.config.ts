@@ -5,8 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { WELL_KNOWN } from 'roadmap-module-protocol'
+import { serves } from 'roadmap-module-protocol/serve'
 
 import { MANIFEST, answer } from './doors.ts'
+import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
  * The doors this app answers on, other than the page itself.
@@ -151,10 +153,26 @@ function doors(): Plugin {
  * nobody here chose. Absolute asset paths are correct in the first case and a
  * guess in the second; relative ones are a fact in both, because the browser
  * resolves them against the document it just fetched.
+ *
+ * ## `server` keeps `cors: false` and deliberately names no port
+ *
+ * The port used to be demanded on the `bunx vite` line in `run.sh`, with
+ * `--strictPort` behind it, so a taken 7820 stopped this app from starting at
+ * all. `serves()` decides it instead, from `PREFERRED_PORT` in `manifest.ts`,
+ * and it is FIRST in the plugin list because it has to claim a port before
+ * anything else in this config asks for one.
+ *
+ * A free 7820 is taken in silence, so the `curl` line above still means what it
+ * says. This app already answering there ends the start cleanly rather than
+ * making a second copy of it. Anything else is a loud move to the next free
+ * port, with `~/.roadmap/modules` rewritten to the port the server ACTUALLY
+ * bound — read off `httpServer.address()` after `listening` rather than off what
+ * was asked for, because a registration naming a port this app has drifted off
+ * is one a roadmap sweeps to find nothing.
  */
 export default defineConfig({
   base: './',
-  plugins: [doors(), react(), tailwindcss()],
+  plugins: [serves({ id: ID, prefer: PREFERRED_PORT }), doors(), react(), tailwindcss()],
   resolve: { alias: { '@': resolve(import.meta.dirname, 'src') } },
   server: { cors: false },
   build: { outDir: 'dist', emptyOutDir: true },
