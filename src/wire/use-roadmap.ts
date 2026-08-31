@@ -2,16 +2,41 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ask, type Fetcher } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
-import { HostRefused, connect, type Host, type HostEvents, type Refusal } from './host.ts'
+import {
+  HostRefused,
+  connect,
+  type Connection,
+  type HostEvents,
+  type Refusal,
+} from 'roadmap-module-protocol/client'
 
 /**
  * The bridge, as one React value.
  *
- * `host.ts` is the wire and knows no React; this is the only file that turns
- * messages into state, and it is deliberately the only one. Two places driving
- * a `Sight` would eventually disagree about which state a page is in, and
- * "which absence is this" is the one question this app cannot afford to be
- * confused about.
+ * `roadmap-module-protocol/client` is the wire and knows no React; this is the
+ * only file that turns messages into state, and it is deliberately the only
+ * one. Two places driving a `Sight` would eventually disagree about which state
+ * a page is in, and "which absence is this" is the one question this app cannot
+ * afford to be confused about.
+ *
+ * ## What used to be underneath this
+ *
+ * `wire/host.ts` and `wire/mailbox.ts` — 423 lines. This module is where the
+ * store-before-listen bug was FOUND: a handler that reached for the connection
+ * during the mailbox's synchronous replay hung this page forever, with no
+ * question sent and no timeout, on a sentence that never changed. The comment
+ * below is that afternoon, and it now describes two calls instead of a
+ * workaround.
+ *
+ * `mailbox.ts` also grew a `forget()` here, after a real test-isolation bug:
+ * one case's greeting replayed into the next case's freshly mounted app and
+ * every counting assertion in `test/app.test.tsx` went off by one. The client
+ * ships `MessageSource.forget?()` for exactly that, so the test keeps its
+ * `afterEach` and calls the package's.
+ *
+ * The context was already passed through whole here, so no field starts or
+ * stops arriving. The `goto` backstop stays at 500ms, which is this module's
+ * lineage and the client's default.
  *
  * It is also the only file that decides WHEN a read happens, which used to be a
  * trivial question and is not any more. See `standingOn` below.
@@ -132,7 +157,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
   const [selection, setSelection] = useState<string[]>([])
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [kept, setKept] = useState<string | null | undefined>(undefined)
-  const host = useRef<Host | null>(null)
+  const host = useRef<Connection | null>(null)
 
   /**
    * The handler, held in a ref and read at the moment a `goto` arrives.
@@ -313,50 +338,38 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
     }
 
     /**
-     * The connection is stored BEFORE the greeting is acted on, and the order
-     * is the whole of a bug that made this page hang forever.
+     * The connection is stored BEFORE it is told to listen, and the order is
+     * the whole of a bug that made this page hang forever.
      *
-     * `connect` subscribes to the mailbox, and the mailbox replays what has
+     * `listen()` subscribes to the mailbox, and the mailbox replays what has
      * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
      * always arrives before React mounts — that is the entire reason the
-     * mailbox exists — so `onHello` fired on this line, before `host.current`
-     * had been assigned. Anything reading `host.current` found null and
-     * returned early, and the page was left reading a sentence that never
-     * changed.
+     * mailbox exists — so `onHello` fires on that line. When `connect` also
+     * subscribed, that happened before `host.current` had been assigned:
+     * anything reading `host.current` found null and returned early, and the
+     * page was left on a sentence that never changed, with no question sent
+     * and nothing to time out.
      *
      * Worse, it worked often enough to look fine. When the host happened to
      * greet after this effect returned — a slow module, a reload, a busy
      * machine — the assignment had already happened and everything behaved. A
      * race whose good outcome is the common one is the kind that ships.
      *
-     * So anything that fires too early is held and delivered the moment the
-     * assignment is done. Not deferred to a microtask: that would fix the
-     * symptom and leave the next reader to work out why the order mattered.
+     * What stood here was a box that caught the too-early arrival and replayed
+     * it once the assignment was done. It worked, and it was the wrong shape:
+     * it fixed this module's copy of a hazard every module in the family had.
+     * `connect` and `listen` are two calls now, so the ordering is three plain
+     * lines that read in the order they happen, and the protocol package holds
+     * a test that runs a one-step connect against the same greeting and
+     * watches it fail.
      */
-    type Arrival = [
-      context: { projectPath?: string | null; theme: 'light' | 'dark'; selection: string[] },
-      greeting: boolean,
-      state: string | null,
-    ]
-    let ready = false
-    /* A box rather than a bare `let`, and only because of the compiler: this is
-       assigned inside a callback that `connect` invokes, which the flow analysis
-       cannot see, so a plain variable is narrowed to `null` for the rest of this
-       function and the replay below stops type-checking. A property is not
-       narrowed across a call, which is the truth here. */
-    const early: { arrival: Arrival | null } = { arrival: null }
-    const held = (...arrival: Arrival) => {
-      if (ready) arrived(...arrival)
-      else early.arrival = arrival
-    }
-
-    host.current = connect(id, {
-      onHello: (context, state) => held(context, true, state),
-      onContext: (context) => held(context, false, null),
+    const live = connect(id, {
+      onHello: (context, state) => arrived(context, true, state),
+      onContext: (context) => arrived(context, false, null),
       onGoto: (message, answer) => goto.current(message, answer),
     })
-    ready = true
-    if (early.arrival) arrived(...early.arrival)
+    host.current = live
+    live.listen()
 
     const grace = setTimeout(() => {
       setSight((was) => (was.at === 'listening' ? { at: 'unhosted' } : was))
@@ -369,8 +382,10 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
          waited on for a container that no longer exists. */
       inFlight.current?.abort()
       inFlight.current = null
-      host.current?.stop()
-      host.current = null
+      live.stop()
+      /* Cleared only if it is still ours: under StrictMode the second mount has
+         already assigned its own connection by the time some cleanups run. */
+      if (host.current === live) host.current = null
     }
   }, [id, read])
 

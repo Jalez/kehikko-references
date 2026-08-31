@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
+import { mailbox } from 'roadmap-module-protocol/client'
 
 import { App } from '@/app.tsx'
 import type { Fetcher } from '@/live/ask.ts'
-import { forget } from '@/wire/mailbox.ts'
 
 /**
  * The whole app, against a roadmap that is not there and then one that is.
@@ -28,8 +28,15 @@ afterEach(() => {
   /* The mailbox is a singleton and this file shares one `window` across every
      case in it, so without this a greeting from the previous test is replayed
      into the next test's freshly mounted app — which then reads a tracker
-     nobody asked it to, and every counting assertion below is off by one. */
-  forget()
+     nobody asked it to, and every counting assertion below is off by one.
+
+     This used to be `forget()` out of this module's own `wire/mailbox.ts`. It
+     was found here, in this file, and the client carries it now as an optional
+     member of `MessageSource` — declared optional because a test's fake source
+     has no backlog to clear, and documented as being for a suite and never for
+     a page: forgetting the backlog in a browser throws away the greeting the
+     backlog exists to hold. */
+  mailbox.forget?.()
 })
 
 const PROJECT = '/Users/somebody/Projects/roadmap'
