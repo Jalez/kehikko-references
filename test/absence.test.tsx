@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, render, screen } from '@testing-library/react'
 
-import { Asking, Listening, NoEpic, NothingFound, NothingMatches, Refused, Unhosted, Unread } from '@/view/absence.tsx'
+import type { Trouble, TroubleKind } from '@/live/sight.ts'
+import {
+  Asking,
+  Listening,
+  NoProject,
+  NothingFound,
+  NothingMatches,
+  Troubled,
+  Unhosted,
+  projectName,
+} from '@/view/absence.tsx'
 
 /**
  * The words, word for word.
@@ -24,6 +34,12 @@ import { Asking, Listening, NoEpic, NothingFound, NothingMatches, Refused, Unhos
 
 afterEach(cleanup)
 
+const trouble = (kind: TroubleKind, why = 'something happened', said: string | null = null): Trouble => ({
+  kind,
+  why,
+  said,
+})
+
 describe('nothing has told me anything', () => {
   test('says it is not an empty list, in as many words', () => {
     render(<Unhosted />)
@@ -37,9 +53,14 @@ describe('nothing has told me anything', () => {
     expect(said.toLowerCase()).not.toContain('no references found')
     expect(said.toLowerCase()).not.toContain('no results')
   })
+
+  test('names where the rows would have come from, which is no longer a roadmap’s cache', () => {
+    render(<Unhosted />)
+    expect(document.body.textContent).toContain('read out of one project’s GitHub')
+  })
 })
 
-describe('the four absences are four different sentences', () => {
+describe('the absences are different sentences', () => {
   test('waiting to be greeted is not the same as ungreeted', () => {
     render(<Listening />)
     expect(screen.getByText('Waiting to be greeted.')).toBeTruthy()
@@ -48,65 +69,125 @@ describe('the four absences are four different sentences', () => {
     expect(screen.queryByText('Waiting to be greeted.')).toBeNull()
   })
 
-  test('an open roadmap with no epic says so, and offers what it was given', () => {
-    render(<NoEpic epics={[{ epic: 'connected-apps', title: 'Connected apps' }]} look={() => {}} />)
-    expect(screen.getByText('A roadmap is here, and no epic is open.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Connected apps' })).toBeTruthy()
+  test('a roadmap with no project folder says so, and does not offer to pick one', () => {
+    /* The old page offered an epic picker in the equivalent state. Which project
+       a canvas stands in is the host's, and a pane offering to change it would
+       be one corner steering the whole canvas. */
+    render(<NoProject />)
+    expect(screen.getByText('A roadmap is here, and it named no project folder.')).toBeTruthy()
+    expect(document.body.textContent).toContain('That is not a fault.')
+    expect(document.querySelectorAll('button')).toHaveLength(0)
   })
 
   test('asking is the one honest wait, and says why', () => {
-    render(<Asking epic="modes-are-modules" />)
-    expect(screen.getByText('Asking about modes-are-modules.')).toBeTruthy()
+    render(<Asking project="/Users/somebody/Projects/roadmap" />)
+    expect(screen.getByText('Reading the tracker in roadmap.')).toBeTruthy()
     expect(document.body.textContent).toContain('the one wait on this page that means an answer is coming')
   })
 
-  test('never refreshed is not the same as nothing found', () => {
-    render(<Unread epic="modes-are-modules" />)
-    expect(screen.getByText('This epic has never been refreshed.')).toBeTruthy()
-    expect(document.body.textContent).toContain('not an empty set of references, but no reading')
-    cleanup()
-    render(<NothingFound epic="modes-are-modules" generated="2026-08-27T10:00:00Z" />)
-    expect(screen.getByText('The last refresh found no references here.')).toBeTruthy()
+  test('an empty tracker is an answer rather than a gap, and dates itself', () => {
+    render(<NothingFound project="/Users/x/roadmap" generated="2026-08-27T10:00:00Z" />)
+    expect(screen.getByText('This project’s tracker has nothing in it.')).toBeTruthy()
     expect(document.body.textContent).toContain('This one is an answer rather than a gap.')
     expect(document.body.textContent).toContain('2026-08-27T10:00:00Z')
   })
 
   test('a reading with no date says nothing about a date', () => {
-    render(<NothingFound epic="x" generated={null} />)
-    expect(document.body.textContent).toContain('The roadmap looked')
+    render(<NothingFound project="/x" generated={null} />)
+    expect(document.body.textContent).toContain('GitHub was asked')
     expect(document.body.textContent).not.toContain('the reading is dated')
+  })
+
+  test('an empty tracker is never confused with a tracker that could not be read', () => {
+    render(<NothingFound project="/x" generated={null} />)
+    const found = document.body.textContent ?? ''
+    cleanup()
+    render(<Troubled project="/x" trouble={trouble('offline')} again={() => {}} />)
+    const missed = document.body.textContent ?? ''
+    expect(found).toContain('genuinely no work filed')
+    expect(missed).not.toContain('genuinely no work filed')
   })
 })
 
-describe('a refusal carries both halves and a third sentence', () => {
-  test('the word, the host’s own sentence, and what it means for the reader', () => {
+describe('the failures are told apart, one sentence each', () => {
+  const KINDS: TroubleKind[] = [
+    'bad-project',
+    'no-gh',
+    'not-a-repo',
+    'no-remote',
+    'unauthenticated',
+    'offline',
+    'rate-limited',
+    'refused',
+    'door',
+  ]
+
+  test('every kind has a heading of its own', () => {
+    const titles = new Set<string>()
+    for (const kind of KINDS) {
+      render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
+      titles.add((document.querySelector('h2')?.textContent ?? '').trim())
+      cleanup()
+    }
+    expect(titles.size).toBe(KINDS.length)
+  })
+
+  test('every kind says what it is NOT, and no two say the same thing', () => {
+    const means = new Set<string>()
+    for (const kind of KINDS) {
+      render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
+      const paragraphs = [...document.querySelectorAll('p')].map((p) => p.textContent ?? '')
+      means.add(paragraphs[1] ?? '')
+      cleanup()
+    }
+    expect(means.size).toBe(KINDS.length)
+  })
+
+  test('the door’s own sentence is drawn, because it is the specific one', () => {
     render(
-      <Refused
-        epic="modes-are-modules"
-        refusal={{ reason: 'unknown-method', error: 'this roadmap does not answer live.get' }}
+      <Troubled
+        project="/x"
+        trouble={trouble('unauthenticated', 'The GitHub CLI on this machine is not logged in.')}
         again={() => {}}
       />,
     )
-    const said = document.body.textContent ?? ''
-    expect(said).toContain('unknown-method')
-    expect(said).toContain('this roadmap does not answer live.get')
-    expect(said).toContain('That is not a wait: it will not begin answering')
+    expect(document.body.textContent).toContain('The GitHub CLI on this machine is not logged in.')
   })
 
-  test('only the refusals worth retrying offer a retry', () => {
-    render(<Refused epic="x" refusal={{ reason: 'unknown-method', error: '' }} again={() => {}} />)
-    expect(screen.queryByRole('button', { name: 'Ask again' })).toBeNull()
-    cleanup()
-    render(<Refused epic="x" refusal={{ reason: 'failed', error: 'the disk went away' }} again={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Ask again' })).toBeTruthy()
-    cleanup()
-    render(<Refused epic="x" refusal={{ reason: 'silent', error: 'no answer in 12 seconds' }} again={() => {}} />)
-    expect(screen.getByRole('button', { name: 'Ask again' })).toBeTruthy()
+  test('what the CLI printed is shown rather than summarised, and never on its own', () => {
+    render(<Troubled project="/x" trouble={trouble('refused', 'it refused', 'exit status 1: nope')} again={() => {}} />)
+    expect(document.body.textContent).toContain('exit status 1: nope')
+    expect(document.body.textContent).toContain('it refused')
   })
 
-  test('a host that sent no sentence gets no empty quote drawn for it', () => {
-    render(<Refused epic="x" refusal={{ reason: 'failed', error: '' }} again={() => {}} />)
+  test('a failure that printed nothing gets no empty quote drawn for it', () => {
+    render(<Troubled project="/x" trouble={trouble('offline')} again={() => {}} />)
     expect(document.body.querySelector('.italic')).toBeNull()
+  })
+
+  test('the whole project path is on screen, because a fix happens in a terminal', () => {
+    render(<Troubled project="/Users/x/Projects/roadmap" trouble={trouble('no-remote')} again={() => {}} />)
+    expect(document.body.textContent).toContain('/Users/x/Projects/roadmap')
+  })
+
+  test('only the failures that can pass on their own offer to try again', () => {
+    for (const kind of ['offline', 'rate-limited', 'unauthenticated', 'door', 'refused'] as TroubleKind[]) {
+      render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
+      expect(screen.getByRole('button', { name: 'Read it again' })).toBeTruthy()
+      cleanup()
+    }
+    for (const kind of ['not-a-repo', 'no-remote', 'no-gh', 'bad-project'] as TroubleKind[]) {
+      render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
+      expect(screen.queryByRole('button', { name: 'Read it again' })).toBeNull()
+      cleanup()
+    }
+  })
+
+  test('a project that is not a repository never reads as a fault', () => {
+    render(<Troubled project="/x" trouble={trouble('not-a-repo')} again={() => {}} />)
+    const said = document.body.textContent ?? ''
+    expect(said).toContain('Nothing is wrong and nothing is being waited for')
+    expect(said.toLowerCase()).not.toContain('error')
   })
 })
 
@@ -118,10 +199,22 @@ describe('the filter hiding everything is the reader’s own doing', () => {
     expect(screen.getByRole('button', { name: 'Show all 412' })).toBeTruthy()
   })
 
-  test('never blames the roadmap for it', () => {
+  test('never blames anywhere else for it', () => {
     render(<NothingMatches total={1} clear={() => {}} />)
     const said = document.body.textContent ?? ''
     expect(said).toContain('Nothing has gone missing')
     expect(said).not.toContain('refresh')
+  })
+})
+
+describe('what this page calls a project', () => {
+  test('the last segment, which is what a person calls it', () => {
+    expect(projectName('/Users/somebody/Projects/roadmap')).toBe('roadmap')
+    expect(projectName('/Users/somebody/Projects/roadmap/')).toBe('roadmap')
+  })
+
+  test('a path with nothing to shorten is left alone rather than emptied', () => {
+    expect(projectName('roadmap')).toBe('roadmap')
+    expect(projectName('/')).toBe('/')
   })
 })

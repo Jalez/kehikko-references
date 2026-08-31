@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { ask, type Fetcher } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
 import { HostRefused, connect, type Host, type HostEvents, type Refusal } from './host.ts'
 
@@ -8,9 +9,12 @@ import { HostRefused, connect, type Host, type HostEvents, type Refusal } from '
  *
  * `host.ts` is the wire and knows no React; this is the only file that turns
  * messages into state, and it is deliberately the only one. Two places driving
- * a `Sight` would eventually disagree about which of the six a page is in, and
+ * a `Sight` would eventually disagree about which state a page is in, and
  * "which absence is this" is the one question this app cannot afford to be
  * confused about.
+ *
+ * It is also the only file that decides WHEN a read happens, which used to be a
+ * trivial question and is not any more. See `standingOn` below.
  *
  * ## The grace, and why there is one
  *
@@ -26,18 +30,33 @@ import { HostRefused, connect, type Host, type HostEvents, type Refusal } from '
  */
 const GREETING_GRACE_MS = 700
 
-/** One row of `epics.list`, as much of it as this app reads. */
-export interface EpicBrief {
-  epic: string
-  title: string
-}
-
 export interface Roadmap {
   sight: Sight
-  /** Every epic the host will name, for the picker. Empty until asked and answered. */
-  epics: EpicBrief[]
-  /** Ask about one epic — from the picker, or again after a refusal. */
-  look: (epic: string) => void
+  /**
+   * Whether a read is in flight right now.
+   *
+   * Held beside `sight` rather than inside it, and that separation is the whole
+   * of "the pane stays usable while the network is being waited on". A read that
+   * happens over rows already on screen must not throw them away: the list goes
+   * on scrolling, the filter goes on filtering, the selection goes on being the
+   * selection, and the only thing that changes is a word in the header. Folded
+   * into `sight` as a state, every refresh would blank the pane for as long as
+   * GitHub took, which is the failure this flag exists to make impossible.
+   *
+   * `sight.at === 'asking'` is the other case — busy AND nothing to show — and
+   * that one is a whole pane, because there is genuinely nothing else to draw.
+   */
+  busy: boolean
+  /**
+   * Read the tracker again, deliberately.
+   *
+   * `fresh` is what the Refresh control sends, and it is the only way past the
+   * cache. Everything else — a context arriving, a project changing — takes the
+   * cache when it is young enough, because a list that costs a network call
+   * every time somebody glances at a canvas is a list that spends a rate limit
+   * nobody agreed to. See the essay in `tracker/cache.ts`.
+   */
+  read: (fresh: boolean) => void
   /** Say how tall this page would like its frame to be. Silent when nothing is framing it. */
   resize: (height: number) => void
   /**
@@ -47,7 +66,7 @@ export interface Roadmap {
    * `contextSchema` is the argument and it is worth restating here, because the
    * shape of this hook is the place the argument is either kept or quietly
    * broken: a selection is a fact about the canvas, in the same family as which
-   * epic is open, and the host owns it. This page asks for a change and then
+   * project is open, and the host owns it. This page asks for a change and then
    * finds out what happened the same way every other framed module does —
    * through `roadmap.context`.
    *
@@ -57,6 +76,11 @@ export interface Roadmap {
    * the list, a second module that changed it in the same breath. So there is no
    * local copy at all, and a click that produced no context produced no tick —
    * which is a visible symptom of a real problem rather than a hidden one.
+   *
+   * Nothing about this changed when the rows started coming from GitHub, and
+   * that is the single most important sentence in this file. The refs are
+   * spelled identically, the round trip is identical, and every module that
+   * reacts to `gh#105` goes on reacting to it.
    */
   selection: string[]
   /** Ask the host to make this the canvas's selection. An empty list clears it. */
@@ -102,42 +126,9 @@ export interface Roadmap {
  */
 export type GotoHandler = NonNullable<HostEvents['onGoto']>
 
-/**
- * Read one epic brief defensively.
- *
- * The host promised nothing about this shape — the protocol is explicit that a
- * response is `unknown` — so a row with no usable name is not an epic we can
- * ask about and is left out of the picker. That is not the omission this app
- * forbids: a picker is a set of things to press, and a button that cannot ask a
- * question is worse than no button.
- *
- * ## Two spellings of the name, and why both are read
- *
- * The protocol package renamed this material from journeys to epics, and
- * `epics.list` is the method now. The hosts that exist today were written
- * against the older spelling and answer with rows carrying `slug`. Reading
- * either is not indecision: the field is a name for the same string, the
- * protocol has never said what a response looks like, and a module that read
- * only the newer spelling would show an empty picker against every host in the
- * field while being, technically, correct. When no host answers `slug` any
- * more, the second line goes.
- */
-function briefs(data: unknown): EpicBrief[] {
-  if (!Array.isArray(data)) return []
-  const out: EpicBrief[] = []
-  for (const row of data) {
-    if (typeof row !== 'object' || row === null) continue
-    const named = row as { epic?: unknown; slug?: unknown; title?: unknown }
-    const epic = typeof named.epic === 'string' ? named.epic : typeof named.slug === 'string' ? named.slug : ''
-    if (!epic) continue
-    out.push({ epic, title: typeof named.title === 'string' ? named.title : epic })
-  }
-  return out
-}
-
-export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
+export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = fetch): Roadmap {
   const [sight, setSight] = useState<Sight>({ at: 'listening' })
-  const [epics, setEpics] = useState<EpicBrief[]>([])
+  const [busy, setBusy] = useState(false)
   const [selection, setSelection] = useState<string[]>([])
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [kept, setKept] = useState<string | null | undefined>(undefined)
@@ -155,96 +146,85 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
   const goto = useRef(onGoto)
   goto.current = onGoto
 
+  /* Same reasoning, for the same reason: a caller that passed an inline
+     function would otherwise re-run every effect in this file on every render. */
+  const fetching = useRef(fetcher)
+  fetching.current = fetcher
+
   /**
-   * Which question is the current one.
+   * The read in flight, and the one before it.
    *
-   * Epics switch faster than a slow host answers, and without this the
-   * answer to the previous epic arrives after the answer to this one and
-   * quietly replaces it — a list of the right length, under the right title,
-   * about the wrong work. Every answer checks that it is still the one being
-   * waited for before it is allowed to become the page.
+   * Two mechanisms and they do different jobs. `inFlight` is an
+   * `AbortController`, and aborting it stops a `fetch` the answer to which
+   * nobody wants — which also stops the subprocess behind it being waited on.
+   * `asking` is a counter, and it is what stops a slow answer from BECOMING the
+   * page after a newer one already has: projects switch faster than GitHub
+   * answers, and without it the previous project's list arrives second and
+   * quietly replaces the current one. A list of the right length, under the
+   * right heading, about the wrong repository.
+   *
+   * Both, rather than either. Aborting alone leaves the window where an answer
+   * has already been parsed; counting alone leaves a subprocess running for a
+   * project nobody is looking at.
    */
+  const inFlight = useRef<AbortController | null>(null)
   const asking = useRef(0)
 
   /**
-   * The epic the last context put this page on.
+   * The project the page is standing on, as the host last said it.
    *
-   * Kept because context stopped being a message that only ever means "the
-   * reader moved". It now also carries the canvas's selection, so the host sends
-   * one after every `selection.set` — including ours, a few milliseconds after a
-   * click. Re-asking `live.get` on each of those would throw the whole reading
-   * away and put the page back into `asking` every time somebody ticked a
-   * checkbox: twenty-four rows would vanish, a paragraph would say the question
-   * was out, and the rows would come back a moment later having lost the
-   * reader's scroll position. The click that caused it would look like a bug in
-   * the list.
+   * Three values and not two: a path, `null` for "the host says there is no
+   * project folder", and `undefined` for "no context has been read yet".
+   * Collapsing the last two would make the first context of a conversation that
+   * names no project look like a repeat of a state the page was already in.
    *
-   * So the fetch is keyed to the epic CHANGING rather than to a context
-   * arriving. A repeated context about the same epic is now a normal event and
-   * the correct response to it is to read the parts that did change — the theme
-   * and the selection — and to leave the reading alone.
+   * ## When a read happens, which is the question this whole file answers
    *
-   * The cost, stated plainly: this page no longer refetches when a host re-sends
-   * the same epic to mean "you were hidden and are visible again". That was
-   * never a promise the protocol made, and the fix if it is ever wanted is a
-   * context field saying so, not a refetch on every tick.
+   * On the project CHANGING, and on the Refresh control. Not on a context
+   * arriving, and not on a timer, and never on a render.
    *
-   * Three values and not two: a slug, `null` for "the host says no epic is
-   * open", and `undefined` for "no context has been read yet". Collapsing the
-   * last two would make the first context of a conversation that names no epic
-   * look like a repeat of a state the page was already in, and the picker that
-   * belongs to that state would never be asked for.
+   * Context stopped being a message that only ever means "the reader moved". It
+   * carries the canvas's selection, so the host sends one after every
+   * `selection.set` — including ours, a few milliseconds after a click. Reading
+   * the tracker on each of those would be a network call and a subprocess per
+   * tick of a checkbox, it would throw the reading away each time, and the click
+   * that caused it would look like a bug in the list.
+   *
+   * So the read is keyed to the project changing. A repeated context about the
+   * same project is a normal event and the correct response to it is to read the
+   * parts that did change — the theme and the selection — and to leave the
+   * reading alone.
+   *
+   * There is no interval anywhere in this module, deliberately. An interval is a
+   * program spending somebody's GitHub rate limit while nobody is looking at the
+   * pane, and it buys freshness that a timestamp beside a button buys honestly.
+   * The cache decides whether a project change costs a call at all; see
+   * `tracker/cache.ts`.
    */
   const standingOn = useRef<string | null | undefined>(undefined)
 
-  const look = useCallback((epic: string) => {
+  const read = useCallback((fresh: boolean) => {
+    const project = standingOn.current
+    if (!project) return
+
     const mine = (asking.current += 1)
-    /* Set here rather than only where a context is read, because the picker in
-       `absence.tsx` calls this directly. Without it, the host's next context —
-       naming the epic the reader just chose — would read as a change and start
-       the same question over. */
-    standingOn.current = epic
-    setSight({ at: 'asking', epic })
-    const current = host.current
-    if (!current) return
-    void current
-      /**
-       * Both spellings of the same name, and this one is worth reading.
-       *
-       * `methodParams['live.get']` takes `{ epic }` in the protocol as it
-       * stands. The host this app was built beside reads `params.slug` and
-       * refuses anything else with "needs a journey slug" — the package
-       * renamed this material and the hosts have not caught up. Sending only
-       * the newer key would make this app correct and useless; sending only
-       * the older one would make it wrong the day a host is updated.
-       *
-       * So it sends both, which no host can be confused by: each reads the key
-       * it knows and neither sees a conflicting value, because there is only
-       * one name here spelled twice. The second key comes out when no host in
-       * the field reads it — and `briefs()` below has the receiving half of
-       * exactly the same transition, for the same reason.
-       */
-      .request('live.get', { epic, slug: epic })
-      .then((data) => {
-        if (asking.current !== mine) return
-        /* `null` is the roadmap's own word for "there is no reading for this
-           epic" — see `live.get` in the host: it answers `readLive(epic) ??
-           null`. It is not an error and it is not an empty list, and the whole
-           of `sight.ts` exists so that it does not become either. */
-        if (data === null || data === undefined) setSight({ at: 'unread', epic })
-        else setSight({ at: 'read', epic, live: data })
-      })
-      .catch((error: unknown) => {
-        if (asking.current !== mine) return
-        if (error instanceof HostRefused) setSight({ at: 'refused', epic, refusal: error.refusal })
-        else {
-          setSight({
-            at: 'refused',
-            epic,
-            refusal: { reason: 'failed', error: 'This app failed while reading the roadmap’s answer.' },
-          })
-        }
-      })
+    inFlight.current?.abort()
+    const stop = new AbortController()
+    inFlight.current = stop
+
+    setBusy(true)
+    /* Only when there is nothing to show. A read over rows already on screen
+       leaves them there and says what it is doing in the header — see `busy`
+       above, and the header in `app.tsx`. */
+    setSight((was) => (was.at === 'read' && was.project === project ? was : { at: 'asking', project }))
+
+    void ask(project, fresh, stop.signal, fetching.current).then((next) => {
+      if (asking.current !== mine) return
+      setBusy(false)
+      /* `null` is an abort, which means a newer read is on its way and this
+         answer is about a project the reader has already left. */
+      if (next) setSight(next)
+    })
   }, [])
 
   useEffect(() => {
@@ -258,25 +238,25 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
      * dark actually gets it — see the media query in `index.css`.
      */
     const arrived = (
-      context: { epic: string | null; theme: 'light' | 'dark'; selection: string[] },
+      context: { projectPath?: string | null; theme: 'light' | 'dark'; selection: string[] },
       /**
        * Whether this was a greeting rather than a later context, which decides
-       * whether the reading is asked for again.
+       * whether the tracker is read again.
        *
-       * A greeting always re-asks, because a greeting means the conversation is
+       * A greeting always re-reads, because a greeting means the conversation is
        * new: the host greets on every frame LOAD, so one arriving is a page that
        * has just come into existence, or a frame that reloaded itself and has
-       * forgotten everything it knew. Answering that with "the epic has not
+       * forgotten everything it knew. Answering that with "the project has not
        * changed, so there is nothing to do" would leave a page with no rows and
-       * no question outstanding, forever.
+       * nothing outstanding, forever.
        *
        * `StrictMode` is the case that proves it in the smallest possible space.
        * The effect below is torn down and set up again on purpose in
-       * development; the teardown refuses every question still in flight, and
-       * the setup replays the greeting out of the mailbox. If the replayed
-       * greeting were deduplicated against the epic the refused question had
-       * been about, the page would settle on the refusal and stay there — in
-       * development only, which is the worst place for a bug to be discovered.
+       * development; the teardown aborts the read still in flight, and the setup
+       * replays the greeting out of the mailbox. If the replayed greeting were
+       * deduplicated against the project the aborted read had been about, the
+       * page would sit on "asking" forever — in development only, which is the
+       * worst place for a bug to be discovered.
        */
       greeting: boolean,
       /**
@@ -300,44 +280,35 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
 
       /**
        * The selection is taken from every context, unconditionally, before
-       * anything decides whether the epic moved.
+       * anything decides whether the project moved.
        *
        * That order is the whole of "the UI follows rather than showing stale
-       * ticks" when the reader changes epic. The host clears the selection as
+       * ticks" when the reader changes project. The host clears the selection as
        * part of moving, and it says so in the same message that names the new
-       * epic — so a page that read the selection only on the branch where the
-       * epic stayed put would keep drawing the previous epic's ticks against
-       * whatever rows happen to share a ref with it. Reading it first means the
-       * clear lands whether the epic moved or not, and the refetch below is a
-       * separate question.
+       * project — so a page that read the selection only on the branch where the
+       * project stayed put would keep drawing the previous project's ticks
+       * against whatever rows happen to share a ref with it. GitHub numbers
+       * start at one in every repository, so `gh#1` exists nearly everywhere and
+       * that collision is the expected case rather than a contrived one.
        */
       setSelection(context.selection)
 
-      const moved = context.epic !== standingOn.current
-      standingOn.current = context.epic
+      /* Read once, defensively, and treated as absent unless it is a non-empty
+         string. The protocol says the host vouches for it being absolute; this
+         page does not check that, because the door does and is the thing that
+         would act on it. */
+      const project = typeof context.projectPath === 'string' && context.projectPath ? context.projectPath : null
+
+      const moved = project !== standingOn.current
+      standingOn.current = project
       if (!moved) return
 
-      if (context.epic) look(context.epic)
+      if (project) read(false)
       else {
-        setSight({ at: 'no-epic' })
-        /* Only here, and only once it matters. A module that asked for the
-           epic list on every load would be asking a question whose answer
-           it has no use for while an epic is open. */
-        /* And the method itself has two names, for the reason the params do.
-           `unknown-method` is the protocol's own word for "this host has never
-           heard of that", which makes it the one refusal it is safe to answer
-           by asking the older question — anything else is a host that knows the
-           method and said no, and asking again under another name would be this
-           app arguing with it. */
-        const list = (method: string) => host.current?.request(method, {}) ?? Promise.resolve(null)
-        void list('epics.list')
-          .catch((error: unknown) =>
-            error instanceof HostRefused && error.refusal.reason === 'unknown-method'
-              ? list('journeys.list')
-              : Promise.reject(error),
-          )
-          .then((data) => setEpics(briefs(data)))
-          .catch(() => setEpics([]))
+        inFlight.current?.abort()
+        asking.current += 1
+        setBusy(false)
+        setSight({ at: 'no-project' })
       }
     }
 
@@ -349,10 +320,9 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
      * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
      * always arrives before React mounts — that is the entire reason the
      * mailbox exists — so `onHello` fired on this line, before `host.current`
-     * had been assigned. `look` reads `host.current`, found null, returned
-     * early, and left the page reading "Asking about …". It started no timer
-     * either, so nothing ever timed out: not a slow answer, not a refusal, just
-     * a sentence that never changed.
+     * had been assigned. Anything reading `host.current` found null and
+     * returned early, and the page was left reading a sentence that never
+     * changed.
      *
      * Worse, it worked often enough to look fine. When the host happened to
      * greet after this effect returned — a slow module, a reload, a busy
@@ -364,7 +334,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
      * symptom and leave the next reader to work out why the order mattered.
      */
     type Arrival = [
-      context: { epic: string | null; theme: 'light' | 'dark'; selection: string[] },
+      context: { projectPath?: string | null; theme: 'light' | 'dark'; selection: string[] },
       greeting: boolean,
       state: string | null,
     ]
@@ -394,10 +364,15 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
 
     return () => {
       clearTimeout(grace)
+      /* The read goes with the listener. A page being torn down has no use for
+         an answer, and leaving the fetch running would leave a subprocess being
+         waited on for a pane that no longer exists. */
+      inFlight.current?.abort()
+      inFlight.current = null
       host.current?.stop()
       host.current = null
     }
-  }, [id, look])
+  }, [id, read])
 
   const resize = useCallback((height: number) => host.current?.resize(height), [])
 
@@ -413,8 +388,8 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
    * forbids: the host relays this into a context every framed module trusts, and
    * a host can vouch that these are the refs somebody picked while it cannot
    * vouch that one of them is an issue, because it was told and never checked. A
-   * module that needs the kind asks `live.get` and reads it where this page read
-   * it. So: refs, spelled exactly as this list draws them, and nothing more.
+   * module that needs the kind reads the tracker where this page read it. So:
+   * refs, spelled exactly as this list draws them, and nothing more.
    *
    * ## No state is set on the way out
    *
@@ -462,7 +437,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
   }, [])
 
   return useMemo(
-    () => ({ sight, epics, look, resize, selection, select, selectionRefused, kept, keep }),
-    [sight, epics, look, resize, selection, select, selectionRefused, kept, keep],
+    () => ({ sight, busy, read, resize, selection, select, selectionRefused, kept, keep }),
+    [sight, busy, read, resize, selection, select, selectionRefused, kept, keep],
   )
 }

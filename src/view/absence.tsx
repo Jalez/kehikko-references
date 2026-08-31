@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import type { Refusal } from '@/wire/host.ts'
-import type { EpicBrief } from '@/wire/use-roadmap.ts'
+import type { Trouble, TroubleKind } from '@/live/sight.ts'
 
 /**
  * The words for every way this page can have no rows.
@@ -14,8 +13,8 @@ import type { EpicBrief } from '@/wire/use-roadmap.ts'
  * empty list says somebody looked and found nothing. "No results" says the
  * filter is too narrow. Each of those is a specific claim, each is false in
  * most of the cases where a list is empty, and a reader who has been told a
- * false one goes off and does the wrong thing about it — refreshes an epic
- * that was never the problem, or reports work missing that was never asked for.
+ * false one goes off and does the wrong thing about it — logs in again when
+ * they were never logged out, or reports work missing that was never filed.
  *
  * So every state gets its own paragraph, written to be read by somebody who has
  * to decide what to do next, and the paragraph says three things: what happened,
@@ -26,6 +25,17 @@ import type { EpicBrief } from '@/wire/use-roadmap.ts'
  * components that trigger them, so that they can be read next to each other —
  * which is the only way to notice that two of them say the same thing about
  * different situations. They are tested, word for word, for the same reason.
+ *
+ * ## Where the words for a failed read actually live
+ *
+ * Not here. `Troubled` below draws a sentence it is handed, and that sentence is
+ * written in `tracker/gh.ts` and `tracker/project.ts`, beside the code that
+ * knows which failure it is. That is a deliberate exception to the paragraph
+ * above and it is worth saying why: the door is the only place holding the exit
+ * code and the CLI's own words, so a page that rewrote the sentence would be
+ * guessing at a distinction the door had already made. What this file owns for
+ * those is the TITLE and the second paragraph — what it is not, and what to do
+ * — because those are about the reader rather than about the process.
  */
 
 /**
@@ -49,9 +59,9 @@ import type { EpicBrief } from '@/wire/use-roadmap.ts'
  * above it to ask. What it asks about is the padding: ten rems of vertical air
  * is right on a screen and is a third of the height of a short pane.
  *
- * `break-words` is for the identifiers. Most of these paragraphs name an epic
- * or quote a host's own error, and an epic slug is one long unbreakable token
- * that would otherwise push the whole page sideways.
+ * `break-words` is for the identifiers. Most of these paragraphs name a project
+ * folder or quote a CLI's own error, and an absolute path is one long
+ * unbreakable token that would otherwise push the whole page sideways.
  */
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -84,12 +94,13 @@ export function Unhosted() {
   return (
     <Panel title="Nothing has told me anything.">
       <p>
-        This app holds no references of its own. It talks to no tracker, has no credentials to talk with, and
-        keeps no copy of anything it has been shown. Every row on this list comes from a roadmap that frames
-        this page and says which epic is open.
+        This app holds no references of its own. Every row on this list is read out of one project’s GitHub,
+        with the login the <code className="font-mono text-foreground">gh</code> command on this machine
+        already holds — and which project that is comes from a roadmap that frames this page and says where
+        it is standing.
       </p>
       <p>
-        Nothing has. So there is no epic, no reading, and nothing to list — which is different from a list
+        Nothing has. So there is no project, no reading, and nothing to list — which is different from a list
         with nothing in it. An empty list would mean somebody went and looked and found no work. Nobody has
         looked.
       </p>
@@ -101,92 +112,112 @@ export function Unhosted() {
   )
 }
 
-/** A roadmap is there; its context names no epic. */
-export function NoEpic({ epics, look }: { epics: EpicBrief[]; look: (epic: string) => void }) {
-  return (
-    <Panel title="A roadmap is here, and no epic is open.">
-      <p>
-        The greeting arrived and the context it carried named no epic, so there is nothing yet for this
-        list to be about. Open one in the roadmap and this fills in.
-      </p>
-      {epics.length > 0 && (
-        <>
-          <p>Or ask about one of these directly:</p>
-          {/* An epic's title is a sentence more often than it is a word, and a
-              button is `whitespace-nowrap`, so in a narrow pane one of these
-              was a control wider than the page. It is capped at the pane and
-              truncated instead, with the whole title on the button's own
-              `title` — a name clipped on a button somebody is about to press is
-              a smaller loss than a page that scrolls sideways. */}
-          <ul className="flex flex-wrap gap-2">
-            {epics.map((brief) => (
-              <li key={brief.epic} className="max-w-full">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="max-w-full"
-                  title={brief.title}
-                  onClick={() => look(brief.epic)}
-                >
-                  <span className="min-w-0 truncate">{brief.title}</span>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </Panel>
-  )
-}
-
 /**
- * The question is out. The one state on this page where waiting is honest,
- * because something really is on its way.
- */
-export function Asking({ epic }: { epic: string }) {
-  return (
-    <Panel title={`Asking about ${epic}.`}>
-      <p>
-        The question is out: what did the last refresh find in the trackers for this epic. This is the one
-        wait on this page that means an answer is coming.
-      </p>
-    </Panel>
-  )
-}
-
-/**
- * What each refusal means for the person reading it.
+ * A roadmap is there; its context names no project folder.
  *
- * The protocol carries two halves and both are shown: `reason` is the word for
- * this code, and the host's own sentence is for whoever is writing a module.
- * Neither is enough on its own for the person who just wanted to see their
- * work, so there is a third sentence here — what this refusal means for them —
- * and it is different for each reason because the futures are different.
+ * The protocol is explicit that this is a real state rather than an oversight: a
+ * host with no filesystem of its own knows the name of the project somebody is
+ * looking at and has no folder to point at. So this paragraph is careful not to
+ * read as a fault — there is nothing here for anybody to fix, and the previous
+ * version of this page offered a picker in the equivalent state, which is a
+ * thing this one deliberately does not do. Which project a canvas stands in is
+ * the host's to decide, and a module offering to change it would be a pane
+ * steering the whole canvas from the corner.
  */
-const WHAT_IT_MEANS: Record<Refusal['reason'], string> = {
-  'unknown-method':
-    'This host does not answer live.get at all. That is not a wait: it will not begin answering, and nothing on this page can be filled in from it.',
-  'unknown-module':
-    'This host has no module by this name any more — most likely it was removed while this frame stayed open. Reinstalling it and reloading the page is what fixes that.',
-  failed:
-    'Something went wrong on the roadmap’s side. That is the one refusal worth simply asking again about.',
-  silent:
-    'The roadmap was asked and said nothing at all. It may still be starting, or it may be gone; either way this page will not find out by waiting longer.',
+export function NoProject() {
+  return (
+    <Panel title="A roadmap is here, and it named no project folder.">
+      <p>
+        The greeting arrived and the context it carried had no{' '}
+        <code className="font-mono text-foreground">projectPath</code> in it. This list is read out of a
+        project’s own GitHub, so with no folder there is nothing to read and nothing to be about.
+      </p>
+      <p>
+        That is not a fault. A roadmap with no filesystem of its own knows which project you are looking at
+        and has no folder to point at, and the protocol says so. Open a project with a folder behind it and
+        this fills in.
+      </p>
+    </Panel>
+  )
 }
 
-export function Refused({ epic, refusal, again }: { epic: string; refusal: Refusal; again: () => void }) {
+/**
+ * The read is out and there is nothing on screen to keep somebody company.
+ *
+ * The one state on this page where a whole pane of waiting is honest, and the
+ * only one — a read that happens over rows that are already drawn leaves them
+ * there and says what it is doing in the header instead. See `busy` in
+ * `use-roadmap.ts`.
+ */
+export function Asking({ project }: { project: string }) {
   return (
-    <Panel title="The roadmap refused the question.">
+    <Panel title={`Reading the tracker in ${projectName(project)}.`}>
       <p>
-        It was asked <code className="font-mono text-foreground">live.get</code> for{' '}
-        <code className="font-mono text-foreground">{epic}</code> and answered{' '}
-        <code className="font-mono text-foreground">{refusal.reason}</code>.
+        The <code className="font-mono text-foreground">gh</code> command is being asked for this project’s
+        issues and pull requests. This is the one wait on this page that means an answer is coming.
       </p>
-      {refusal.error && <p className="border-l-2 border-border pl-3 italic">{refusal.error}</p>}
-      <p>{WHAT_IT_MEANS[refusal.reason]}</p>
-      {(refusal.reason === 'failed' || refusal.reason === 'silent') && (
+    </Panel>
+  )
+}
+
+/**
+ * What each kind of failure is NOT, and what to do about it.
+ *
+ * The sentence saying what happened comes from the door — see the note at the
+ * top of this file — and these are the two things the door is in no position to
+ * write, because they are about the reader. Each is different because the
+ * futures are different: some of these fix themselves, one of them is not a
+ * failure at all, and exactly one of them is worth pressing the button again
+ * about.
+ */
+const WHAT_IT_MEANS: Record<TroubleKind, string> = {
+  'bad-project':
+    'This is the roadmap and this app disagreeing about where the project is, rather than anything about the project itself. Nothing was read and nothing was cached, so there is no older list hiding behind this.',
+  'no-gh':
+    'This is not an empty list and it is not a failed read: no read was attempted, because the program that does the reading is not here. Every row on this page comes through it.',
+  'not-a-repo':
+    'Nothing is wrong and nothing is being waited for. There is no button on this panel because there is nothing to press: a project with no repository has no issues and no pull requests anywhere for this list to be missing.',
+  'no-remote':
+    'The repository is real and the work in it is real; it is the tracker that does not exist, because a tracker lives on a forge and this repository has not been pushed to one.',
+  unauthenticated:
+    'The project is fine and the network is fine. This is the one failure on this page that is entirely about this machine, and it stays until somebody logs in — waiting will not clear it.',
+  offline:
+    'Nothing is wrong with the project, the login or this app. This is the failure worth simply trying again once there is a network.',
+  'rate-limited':
+    'This is a limit rather than a refusal: the same read works later without anything being changed. Note that the limit is shared with every other program on this machine using the same login, so it may not have been this pane that spent it.',
+  refused:
+    'This app has no specific sentence for this one, which means it is something neither this program nor its author has seen. The words above are the whole of what is known about it.',
+  door:
+    'This is this program disagreeing with itself rather than anything about the project, the login or the network. The page and the server that answers it are two halves of one app, and they are out of step.',
+}
+
+/**
+ * A read that did not happen, with nothing cached to fall back to.
+ *
+ * The button is offered for the failures that can pass on their own — a network
+ * that comes back, a rate limit that resets, a machine somebody logs in on — and
+ * withheld for the ones that cannot, because a button that cannot work is worse
+ * than no button: it invites somebody to press it four times before reading the
+ * sentence that says it will not help.
+ */
+export function Troubled({ project, trouble, again }: { project: string; trouble: Trouble; again: () => void }) {
+  const worthRetrying =
+    trouble.kind === 'offline' ||
+    trouble.kind === 'rate-limited' ||
+    trouble.kind === 'unauthenticated' ||
+    trouble.kind === 'door' ||
+    trouble.kind === 'refused'
+  return (
+    <Panel title={TITLES[trouble.kind]}>
+      <p>{trouble.why}</p>
+      {trouble.said && <p className="border-l-2 border-border pl-3 font-mono text-xs italic">{trouble.said}</p>}
+      <p>{WHAT_IT_MEANS[trouble.kind]}</p>
+      <p className="text-xs">
+        The project is <code className="font-mono">{project}</code>.
+      </p>
+      {worthRetrying && (
         <Button variant="outline" size="sm" onClick={again}>
-          Ask again
+          Read it again
         </Button>
       )}
     </Panel>
@@ -194,40 +225,42 @@ export function Refused({ epic, refusal, again }: { epic: string; refusal: Refus
 }
 
 /**
- * The roadmap answered with nothing at all.
+ * The heading for each failure, which is the only line most people read.
  *
- * The absence hardest to draw honestly, and the reason `null` is not collapsed
- * into an empty array anywhere upstream of here.
+ * Written as statements of fact rather than as apologies, and each names the
+ * thing that is actually wrong — because the heading is what somebody sees in a
+ * 220-pixel pane before deciding whether to read the rest.
  */
-export function Unread({ epic }: { epic: string }) {
-  return (
-    <Panel title="This epic has never been refreshed.">
-      <p>
-        The roadmap answered, and what it had for <code className="font-mono text-foreground">{epic}</code> was
-        nothing at all — not an empty set of references, but no reading.
-      </p>
-      <p>
-        Nothing has yet gone and looked at the trackers for this epic, so there is no issue, no merge
-        request and no pull request to be missing. Refresh the epic in the roadmap and this list fills in.
-      </p>
-    </Panel>
-  )
+const TITLES: Record<TroubleKind, string> = {
+  'bad-project': 'That project folder is not one this app can read.',
+  'no-gh': 'The GitHub CLI is not on this machine.',
+  'not-a-repo': 'This project is not a git repository.',
+  'no-remote': 'This repository has no remote, so it has no tracker.',
+  unauthenticated: 'This machine is not logged in to GitHub.',
+  offline: 'GitHub could not be reached.',
+  'rate-limited': 'GitHub is rate-limiting this machine.',
+  refused: 'The GitHub CLI refused this read.',
+  door: 'This app’s own server did not answer.',
 }
 
 /**
  * A reading, containing nothing. The one genuinely empty list on this page, and
  * the only place the word "found" is honest.
  */
-export function NothingFound({ epic, generated }: { epic: string; generated: string | null }) {
+export function NothingFound({ project, generated }: { project: string; generated: string | null }) {
   return (
-    <Panel title="The last refresh found no references here.">
+    <Panel title="This project’s tracker has nothing in it.">
       <p>
-        This one is an answer rather than a gap. The roadmap looked
+        This one is an answer rather than a gap. GitHub was asked
         {generated ? ` — the reading is dated ${generated} — ` : ' '}
-        and epic <code className="font-mono text-foreground">{epic}</code> named no issue, no merge request
-        and no pull request.
+        for every issue and every pull request in{' '}
+        <code className="font-mono text-foreground">{projectName(project)}</code>, in every state, and it
+        named none.
       </p>
-      <p>Nothing is hidden and nothing is being waited for. There is genuinely no work filed against it.</p>
+      <p>
+        Nothing is hidden and nothing is being waited for. There is genuinely no work filed against this
+        repository — which is the ordinary state of a new one.
+      </p>
     </Panel>
   )
 }
@@ -237,13 +270,13 @@ export function NothingFound({ epic, generated }: { epic: string; generated: str
  *
  * Deliberately worded so it can never be mistaken for the state above. This is
  * the only absence on the page the reader caused, so it is the only one whose
- * remedy is a button rather than a sentence about the roadmap.
+ * remedy is a button rather than a sentence about somewhere else.
  */
 export function NothingMatches({ total, clear }: { total: number; clear: () => void }) {
   return (
     <Panel title="Nothing here matches what you asked for.">
       <p>
-        This epic has {total} {total === 1 ? 'reference' : 'references'} and the filter is hiding every one
+        This project has {total} {total === 1 ? 'reference' : 'references'} and the filter is hiding every one
         of them. Nothing has gone missing; the list is narrower than the work.
       </p>
       <Button variant="outline" size="sm" onClick={clear}>
@@ -251,4 +284,22 @@ export function NothingMatches({ total, clear }: { total: number; clear: () => v
       </Button>
     </Panel>
   )
+}
+
+/**
+ * The short name for a project folder, for a heading in a 220px pane.
+ *
+ * The last segment, which is what a person calls their project. The full path is
+ * never dropped from the page — `Troubled` prints it, and the header's tooltip
+ * carries it — because a label that could be two different checkouts is fine on
+ * a screen that is only ever showing one of them, and is not fine in a sentence
+ * about a failure somebody has to go and fix.
+ *
+ * Exported because the header in `app.tsx` needs the same rule, and two copies
+ * of "what do we call this project" would eventually disagree.
+ */
+export function projectName(project: string): string {
+  const trimmed = project.replace(/\/+$/, '')
+  const cut = trimmed.lastIndexOf('/')
+  return (cut === -1 ? trimmed : trimmed.slice(cut + 1)) || project
 }

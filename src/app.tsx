@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
 
 import { ID } from '../manifest.ts'
+import { Button } from '@/components/ui/button'
+import type { Fetcher } from '@/live/ask.ts'
 import { collect, generatedAt } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
 import { EVERYTHING, narrowing, sift, type Sifting } from '@/live/sift.ts'
 import { useRoadmap, type GotoHandler } from '@/wire/use-roadmap.ts'
-import { Asking, Listening, NoEpic, NothingFound, NothingMatches, Refused, Unhosted, Unread } from '@/view/absence.tsx'
+import {
+  Asking,
+  Listening,
+  NoProject,
+  NothingFound,
+  NothingMatches,
+  Troubled,
+  Unhosted,
+  projectName,
+} from '@/view/absence.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { Toolbar } from '@/view/toolbar.tsx'
 
@@ -14,12 +26,13 @@ import { Toolbar } from '@/view/toolbar.tsx'
  * The composition, and only the composition.
  *
  * Every hard thing this app does is somewhere else: the wire in `wire/`, the
- * reading of a reading in `live/collect.ts`, the narrowing in `live/sift.ts`,
- * the words for each absence in `view/absence.tsx`. What is left here is the
- * one job nothing else can do — deciding which of them the reader is looking
- * at — and that decision is a single `switch` over `Sight`, which is the shape
- * it should be. If this file ever grows a second concern, the concern is in the
- * wrong file.
+ * running of `gh` in `tracker/`, the reading of a reading in
+ * `src/live/collect.ts`, the narrowing in `src/live/sift.ts`, the words for each
+ * absence in `src/view/absence.tsx`. What is left here is the one job nothing
+ * else can do — deciding which of them the reader is looking at — and that
+ * decision is a single run of `if`s over `Sight`, which is the shape it should
+ * be. If this file ever grows a second concern, the concern is in the wrong
+ * file.
  */
 
 /** One row, in CSS pixels. Stated once, because two places believe it: the row's height and the height we ask for. */
@@ -39,7 +52,15 @@ const ROW_HEIGHT = 36
  */
 const TALLEST = 720
 
-export function App() {
+/**
+ * The `fetch` this app reads its tracker with, handed in for tests.
+ *
+ * Defaulted, so nothing in the page or in `main.tsx` has to know it is a
+ * parameter, and present at all so that `test/app.test.tsx` can drive the whole
+ * composition — the read, the rows, the selection round trip through the real
+ * bridge — with no server, no subprocess and no network.
+ */
+export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   const [sifting, setSifting] = useState<Sifting>(EVERYTHING)
   const [ordering, setOrdering] = useState<Ordering>(DEFAULT_ORDER)
   const [landedOn, setLandedOn] = useState<string | null>(null)
@@ -65,10 +86,9 @@ export function App() {
    *    link they would have got for `found: false`.
    * 2. **`found` is answered from the whole reading, not from what is drawn.**
    *    What is drawn is a function of a filter the host knows nothing about.
-   * 3. **A `goto` naming another epic is refused rather than obeyed.** The
-   *    host re-points a module by sending context; a module that switched
-   *    epics on its own would be showing an epic nobody asked it for and
-   *    telling the host it succeeded.
+   * 3. **A `goto` naming a step rather than a reference is refused rather than
+   *    answered vaguely.** This app lists references and has never known
+   *    anything about steps.
    */
   const onGoto = useCallback<GotoHandler>(
     (message, answer) => {
@@ -98,7 +118,11 @@ export function App() {
     [rows],
   )
 
-  const { sight, epics, look, resize, selection, select, selectionRefused, kept, keep } = useRoadmap(ID, onGoto)
+  const { sight, busy, read, resize, selection, select, selectionRefused, kept, keep } = useRoadmap(
+    ID,
+    onGoto,
+    fetcher,
+  )
 
   /**
    * The kept string this page has already acted on.
@@ -211,8 +235,8 @@ export function App() {
   )
 
   /* One place turns a reading into rows, and it is an effect rather than a memo
-     because `sight` changing to a different epic has to REPLACE the rows
-     rather than leave the previous epic's on screen while the next arrives. */
+     because `sight` changing to a different project has to REPLACE the rows
+     rather than leave the previous project's on screen while the next arrives. */
   useEffect(() => {
     setRows(sight.at === 'read' ? collect(sight.live) : [])
     setLandedOn(null)
@@ -233,17 +257,16 @@ export function App() {
     resize(Math.min(96 + shown.length * ROW_HEIGHT, TALLEST))
   }, [shown.length, resize])
 
+  const again = useCallback(() => read(true), [read])
+
   if (sight.at === 'listening') return <Listening />
   if (sight.at === 'unhosted') return <Unhosted />
-  if (sight.at === 'no-epic') return <NoEpic epics={epics} look={look} />
-  if (sight.at === 'asking') return <Asking epic={sight.epic} />
-  if (sight.at === 'refused') {
-    return <Refused epic={sight.epic} refusal={sight.refusal} again={() => look(sight.epic)} />
-  }
-  if (sight.at === 'unread') return <Unread epic={sight.epic} />
+  if (sight.at === 'no-project') return <NoProject />
+  if (sight.at === 'asking') return <Asking project={sight.project} />
+  if (sight.at === 'trouble') return <Troubled project={sight.project} trouble={sight.trouble} again={again} />
 
   const generated = generatedAt(sight.live)
-  if (rows.length === 0) return <NothingFound epic={sight.epic} generated={generated} />
+  if (rows.length === 0 && !sight.trouble) return <NothingFound project={sight.project} generated={generated} />
 
   return (
     /* `@container` is the one thing this element does beyond stacking three
@@ -255,15 +278,64 @@ export function App() {
        toolbar ask this element how wide they are; a row asks itself, because a
        row's own width is what its columns have to divide. */
     <div ref={frame} className="@container flex h-full flex-col">
-      {/* It wraps, because the two things here are an epic's name and a
-          timestamp and neither of them shortens. In a narrow pane they take a
-          line each. The alternative was truncating an identifier, which is the
-          one kind of text on this page that has to be readable in full. */}
+      {/* It wraps, because the things here are a project name, a timestamp and a
+          control, and none of them shortens. In a narrow pane they take a line
+          each. The alternative was truncating a name, which is the one kind of
+          text on this page that has to be readable in full. */}
       <header className="flex flex-wrap items-baseline gap-x-2 border-b border-border px-3 py-1.5 text-xs break-words text-muted-foreground @md:py-2">
-        <span className="font-mono text-foreground">{sight.epic}</span>
-        {/* Said once, here, rather than on every row: freshness is a fact about
-            the reading and not about any one reference in it. */}
-        <span>{generated ? `read ${generated}` : 'the roadmap did not say when this was read'}</span>
+        {/* The short name, with the whole path on its `title`. A pane 220 pixels
+            wide cannot hold `/Users/somebody/Projects/roadmap` without pushing
+            the page sideways, and the segment is what people call the thing. */}
+        <span className="font-mono text-foreground" title={sight.project}>
+          {projectName(sight.project)}
+        </span>
+        {/*
+          Said once, here, rather than on every row: freshness is a fact about
+          the reading and not about any one reference in it. Three different
+          sentences, and the difference between them is the whole reason the
+          door reports `from` rather than leaving it to be inferred —
+
+            "reading GitHub…"  a call is out. The list below is still whatever
+                               was last read, and still usable, which is the
+                               point of not blanking the pane.
+            "read <when>"      this reading came off GitHub just now.
+            "last read <when>" this reading came out of the cache beside the
+                               project, and the button says how to change that.
+        */}
+        <span>
+          {busy
+            ? 'reading GitHub…'
+            : generated
+              ? `${sight.from === 'cache' ? 'last read' : 'read'} ${generated}`
+              : 'this reading is not dated'}
+        </span>
+        {/*
+          The deliberate refresh, and the only thing on this page that spends a
+          network call on purpose.
+
+          `ml-auto` rather than a fixed position, so that when the header wraps
+          in a narrow pane the button goes to the end of whichever line it lands
+          on rather than sitting alone. `h-6` because the rest of this bar is
+          `text-xs` and a default-height button doubles the header.
+
+          It is labelled with a glyph and named in its tooltip, which is the
+          same trade the tracker link on a row makes: a word here would cost the
+          project name most of a 220-pixel line, and this control is reached for
+          rarely enough that a recognisable glyph is fair. Disabled while a read
+          is in flight, because two reads racing is two subprocesses and one
+          answer that wins for no reason anybody could predict.
+        */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-6 px-1.5"
+          disabled={busy}
+          onClick={again}
+          title="Read this project’s tracker again, ignoring what was last read"
+          aria-label="Read this project’s tracker again"
+        >
+          <RefreshCw className={busy ? 'animate-spin' : undefined} />
+        </Button>
       </header>
       <Toolbar
         sifting={sifting}
@@ -273,6 +345,25 @@ export function App() {
         showing={shown.length}
         total={rows.length}
       />
+      {/*
+        A read that failed over rows that could still be shown.
+
+        This is the state the whole caching design exists to be able to draw, and
+        the sentence is what stops it being the quiet lie: the list below is
+        real, it is what was read at the time in the header, and the fresh read
+        did not happen for the reason given. Without this the pane would show a
+        perfectly ordinary list that happened to be hours old, which is exactly
+        how a stale list gets believed.
+
+        It is drawn between the toolbar and the list rather than over them,
+        because it is a fact about the rows underneath it and belongs against
+        them.
+      */}
+      {sight.trouble && (
+        <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
+          {sight.trouble.why} What is below is the last reading of this project, not a current one.
+        </p>
+      )}
       {/* A refused `selection.set` gets a sentence, because the symptom without
           one is a checkbox that will not tick and a page that looks broken. It
           is drawn between the toolbar and the list rather than over them: this
@@ -286,7 +377,9 @@ export function App() {
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {shown.length === 0 && narrowing(sifting) ? (
+        {rows.length === 0 ? (
+          <NothingFound project={sight.project} generated={generated} />
+        ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => setSifting(EVERYTHING)} />
         ) : (
           <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} />

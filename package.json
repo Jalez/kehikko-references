@@ -1,9 +1,9 @@
 {
   "name": "roadmap-references",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Every piece of work a journey names — issues, merge requests, pull requests — as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A roadmap may frame it, and then it has data.",
+  "description": "Every issue and pull request in a project, read from the project's own GitHub with the login gh already holds, as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A roadmap may frame it, and then it knows which project to read.",
   "scripts": {
     "build": "vite build",
     "dev": "vite",

@@ -83,6 +83,26 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Throw the backlog away. For tests, and named so that is obvious.
+ *
+ * A page never calls this: the whole point of the backlog is that nothing
+ * discards it before the application has had a chance to read it. A test file
+ * calls it between cases, and needs to, because this module is a singleton and
+ * one `window` is shared by every test in a file — so one case's greeting is
+ * replayed into the next case's freshly mounted app, which then reads a tracker
+ * nobody asked it to.
+ *
+ * That was found rather than anticipated: the counting assertions in
+ * `test/app.test.tsx` passed one at a time and failed together, which is the
+ * signature of exactly this. It is written here, beside the backlog, rather than
+ * worked around in the tests, because a test that avoided the problem by never
+ * counting would have stopped testing the thing worth counting.
+ */
+export function forget(): void {
+  backlog.length = 0
+}
+
+/**
  * The page's inbox, shaped like the thing it replaces.
  *
  * `connect` used to take the real `window` and add a listener to it. It takes
