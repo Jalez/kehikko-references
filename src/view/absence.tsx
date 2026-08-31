@@ -44,20 +44,20 @@ import type { Trouble, TroubleKind } from '@/live/sight.ts'
  * ## It scrolls itself, for the reason the list does
  *
  * These are the states with no rows, and it is easy to forget that one of them
- * is still the whole of a pane — a pane that is often 220 by 340. "Nothing has
+ * is still the whole of a container — a container that is often 220 by 340. "Nothing has
  * told me anything" is three paragraphs and wants about six hundred pixels of
  * height there. Without a scroller of its own the last of those paragraphs sat
  * below the bottom edge of the frame, and it is the one that says what to DO
  * about the situation. An honest sentence nobody can reach is worth no more
  * than one that was never written.
  *
- * So the panel is the pane and scrolls inside it, which is the same shape the
+ * So the panel is the container and scrolls inside it, which is the same shape the
  * list has — see the note about `h-full` in `main.tsx`.
  *
  * `@container` is declared here rather than inherited because a panel is drawn
  * INSTEAD of the frame in `app.tsx` rather than inside it, so there is nothing
  * above it to ask. What it asks about is the padding: ten rems of vertical air
- * is right on a screen and is a third of the height of a short pane.
+ * is right on a screen and is a third of the height of a short container.
  *
  * `break-words` is for the identifiers. Most of these paragraphs name a project
  * folder or quote a CLI's own error, and an absolute path is one long
@@ -121,7 +121,7 @@ export function Unhosted() {
  * read as a fault — there is nothing here for anybody to fix, and the previous
  * version of this page offered a picker in the equivalent state, which is a
  * thing this one deliberately does not do. Which project a canvas stands in is
- * the host's to decide, and a module offering to change it would be a pane
+ * the host's to decide, and a module offering to change it would be a container
  * steering the whole canvas from the corner.
  */
 export function NoProject() {
@@ -144,7 +144,7 @@ export function NoProject() {
 /**
  * The read is out and there is nothing on screen to keep somebody company.
  *
- * The one state on this page where a whole pane of waiting is honest, and the
+ * The one state on this page where a whole container of waiting is honest, and the
  * only one — a read that happens over rows that are already drawn leaves them
  * there and says what it is doing in the header instead. See `busy` in
  * `use-roadmap.ts`.
@@ -184,7 +184,7 @@ const WHAT_IT_MEANS: Record<TroubleKind, string> = {
   offline:
     'Nothing is wrong with the project, the login or this app. This is the failure worth simply trying again once there is a network.',
   'rate-limited':
-    'This is a limit rather than a refusal: the same read works later without anything being changed. Note that the limit is shared with every other program on this machine using the same login, so it may not have been this pane that spent it.',
+    'This is a limit rather than a refusal: the same read works later without anything being changed. Note that the limit is shared with every other program on this machine using the same login, so it may not have been this container that spent it.',
   refused:
     'This app has no specific sentence for this one, which means it is something neither this program nor its author has seen. The words above are the whole of what is known about it.',
   door:
@@ -229,7 +229,7 @@ export function Troubled({ project, trouble, again }: { project: string; trouble
  *
  * Written as statements of fact rather than as apologies, and each names the
  * thing that is actually wrong — because the heading is what somebody sees in a
- * 220-pixel pane before deciding whether to read the rest.
+ * 220-pixel container before deciding whether to read the rest.
  */
 const TITLES: Record<TroubleKind, string> = {
   'bad-project': 'That project folder is not one this app can read.',
@@ -287,7 +287,7 @@ export function NothingMatches({ total, clear }: { total: number; clear: () => v
 }
 
 /**
- * The short name for a project folder, for a heading in a 220px pane.
+ * The short name for a project folder, for a heading in a 220px container.
  *
  * The last segment, which is what a person calls their project. The full path is
  * never dropped from the page — `Troubled` prints it, and the header's tooltip

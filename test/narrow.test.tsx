@@ -7,19 +7,19 @@ import { ReferenceList } from '@/view/reference-list.tsx'
 import { Toolbar } from '@/view/toolbar.tsx'
 
 /**
- * What a narrow pane is allowed to take away, and what it is not.
+ * What a narrow container is allowed to take away, and what it is not.
  *
  * ## Why this file is assertions about class names, which is unusual
  *
  * Because the rule being kept is a rule about CSS, and the failure it guards
  * against is one nobody notices: a row drawn at four hundred pixels looks
- * finished, and the same row in a 220-pixel pane on somebody's canvas had
+ * finished, and the same row in a 220-pixel container on somebody's canvas had
  * twelve pixels of title. Nothing threw, nothing was missing from the document,
  * and the promise in `collect.ts` — every reference becomes exactly one row —
  * was technically kept by a row that could not be read.
  *
  * happy-dom does not do layout, so these tests cannot measure a title's width;
- * the browser probes that were run against a real pane did that, and the
+ * the browser probes that were run against a real container did that, and the
  * numbers are in this module's README. What a test CAN hold, and what breaks
  * quietly a year from now when somebody tidies a class list, is which pieces
  * are permitted to carry a hiding rule at all. `hidden @sm:block` on the people
@@ -27,7 +27,7 @@ import { Toolbar } from '@/view/toolbar.tsx'
  * title is the bug.
  *
  * The other half is reachability. The drop order in `reference-row.tsx` argues
- * that what a narrow pane hides is still reachable, and this asserts the
+ * that what a narrow container hides is still reachable, and this asserts the
  * mechanism that makes that true rather than the intention: the row carries the
  * whole of itself as a `title`, including the pieces no width is showing.
  */
@@ -39,7 +39,7 @@ const READING = {
   ghIssues: {
     'gh#131': {
       state: 'opened',
-      title: 'Until Journeys can be read from a module, a pane is a picture of one',
+      title: 'Until Journeys can be read from a module, a container is a picture of one',
       at: '2026-08-26T20:44:00Z',
       url: 'https://github.com/example/repo/issues/131',
       labels: ['area::modules', 'importance::P1'],
@@ -106,7 +106,7 @@ describe('the three things a row may never stop showing', () => {
   })
 
   test('the width thresholds are container queries and never viewport ones', () => {
-    /* The whole argument for `@` over `sm:` is that the pane's width and the
+    /* The whole argument for `@` over `sm:` is that the container's width and the
        window's width are different numbers. A stray `sm:` here would make the
        row decide out of the wrong one, and would look completely correct in
        every test and in a tab. */
@@ -117,7 +117,7 @@ describe('the three things a row may never stop showing', () => {
   })
 })
 
-describe('what a narrow pane hides is still reachable', () => {
+describe('what a narrow container hides is still reachable', () => {
   test('the row carries everything it can drop as its own tooltip', () => {
     const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const overview = rowBox(container).getAttribute("title") ?? ''
@@ -154,7 +154,7 @@ describe('the filter bar in a column narrower than it is', () => {
       const button = screen.getByRole('button', { name: label })
       expect(button.className).not.toContain('hidden')
     }
-    /* The point of the whole layout decision: whatever the pane does to this
+    /* The point of the whole layout decision: whatever the container does to this
        bar, the pressed button is in the document and is not hidden. A bar that
        scrolled its own overflow would pass the line above and still leave
        `Closed` off screen — which is why it wraps instead. */

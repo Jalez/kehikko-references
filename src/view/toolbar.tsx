@@ -30,13 +30,13 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * here deliberately. What changed is not the argument — it is which cost the
  * argument was being weighed against. It was written against a bar that would
  * have been one line either way, where opening a menu buys nothing; it is being
- * applied now to a pane where leaving the buttons in the open costs a third of
+ * applied now to a container where leaving the buttons in the open costs a third of
  * the reader's vertical space. The numbers are in the next section. Where the
  * whole set of affordances is affordable it stays in the open; where it is not,
  * the SETTING stays in the open and the set collapses behind it, which keeps the
  * half of the original argument that was load-bearing.
  *
- * ## What a narrow pane does to seven buttons, and the choice made about it
+ * ## What a narrow container does to seven buttons, and the choice made about it
  *
  * Measured at 220 pixels, the seven buttons and the count came to 226: six
  * pixels of horizontal overflow, which the browser resolved by giving the whole
@@ -46,9 +46,9 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * that says why the list is short.
  *
  * The first answer to that was to WRAP, and every group wraps within itself, so
- * no line can ever be wider than the pane. It stopped the sideways scroll and it
+ * no line can ever be wider than the container. It stopped the sideways scroll and it
  * did not stop the cost, which was always vertical. Measured across a sweep of
- * pane widths, on this list, with the reading of `modes-are-modules` in it:
+ * container widths, on this list, with the reading of `modes-are-modules` in it:
  *
  * ```
  *   200px  bar 149px   340px  bar 71px    580px  bar 73px
@@ -57,7 +57,7 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * ```
  *
  * The step between 320 and 340 is the one that matters: below it the bar is
- * three lines or more, above it two. And a pane on a canvas is short as well as
+ * three lines or more, above it two. And a container on a canvas is short as well as
  * narrow — at 220 by 300, the measured bar was 123 pixels and the list it was
  * filtering was 132. The filter had become the same size as the thing filtered,
  * which is the point at which a control has stopped being overhead and started
@@ -66,7 +66,7 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * So the threshold is **21rem (336 pixels)**, chosen because it sits inside the
  * measured step rather than because it is a round number: every width below it
  * measured 101 pixels of bar or more, every width at or above it measured 81 or
- * less. It is a container query against the pane, like everything else here.
+ * less. It is a container query against the container, like everything else here.
  *
  * There were three ways out of the vertical cost and the choice between them is
  * worth stating.
@@ -77,7 +77,7 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * its left edge hides `Closed` while the list goes on showing only closed
  * things. A filter you cannot see is a filter you have forgotten you set, which
  * is the failure the count exists to prevent — solving that in one place and
- * reintroducing it in another is not a solution. Nothing about a narrow pane
+ * reintroducing it in another is not a solution. Nothing about a narrow container
  * weakens that; it is the one option here that can hide a setting by accident.
  *
  * **Icon-only buttons with the active one labelled** were rejected on the
@@ -139,7 +139,7 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * everything drawn is real cannot carry a hidden second copy of its own filter.
  *
  * So the bar measures itself with a `ResizeObserver` and renders one form. The
- * observer watches the bar's own box, which is the pane's width, and the switch
+ * observer watches the bar's own box, which is the container's width, and the switch
  * cannot oscillate because changing form changes the bar's HEIGHT and never its
  * width. Where there is no `ResizeObserver` — a test in happy-dom, anything
  * without layout — it stays wide, which is the form that shows everything and is
@@ -147,7 +147,7 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  */
 
 /**
- * The pane width, in CSS pixels, below which the filter collapses.
+ * The container width, in CSS pixels, below which the filter collapses.
  *
  * 336 rather than 320 or 384: the sweep above measured 101 pixels of bar at 320
  * and 71 at 340, so the honest boundary is inside that step and this is the
@@ -174,7 +174,7 @@ const STATES: { value: StateFilter; label: string }[] = [
  *
  * It names only what has actually been narrowed, because the words that are
  * doing nothing are the words there is no room for: `Changes · Merged` is
- * sixteen characters and fits beside the count in a 220-pixel pane, and
+ * sixteen characters and fits beside the count in a 220-pixel container, and
  * `All · Any · Changes · Merged` does not. When nothing is narrowed at all it
  * says `All` rather than nothing, because a control with no label is a control
  * whose state a reader has to guess at — and "no filter" is a state as much as
@@ -222,17 +222,17 @@ function Group<T extends string>({
 }) {
   return (
     /* `flex-wrap` here and not only on the bar: a group is a flex line of its
-       own, and without this a group wider than the pane overflows the bar
+       own, and without this a group wider than the container overflows the bar
        rather than breaking inside it — which is exactly how six pixels of
        page-wide sideways scroll got in. It matters inside the popover too,
-       where the available width is the pane's minus the layer's own padding. */
+       where the available width is the container's minus the layer's own padding. */
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-0.5 @md:gap-1">
       {options.map((option) => (
         /* Two pixels off each side of each button below 28rem. It looks like
            fussing and it is worth a line: `Any Open Merged Closed` measures 193
-           at the roomier padding and the pane is 196, so a single letter of
+           at the roomier padding and the container is 196, so a single letter of
            drift breaks the group onto a second line — and a second line here is
-           24 pixels off the list in a pane that has 300 to divide. */
+           24 pixels off the list in a container that has 300 to divide. */
         <Button
           key={option.value}
           size="xs"
@@ -252,10 +252,10 @@ function Group<T extends string>({
  * The order control, and the label that keeps the current order on screen.
  *
  * One component used at both widths, because the argument for it does not change
- * with the pane: it is a labelled trigger in a laptop tab for the same reason it
+ * with the container: it is a labelled trigger in a laptop tab for the same reason it
  * is one in a 220-pixel column. What changes is where it sits — beside the
  * filter buttons when they are in the open, and inside the collapsed filter's
- * own layer when they are not, so that a narrow pane has one thing to press
+ * own layer when they are not, so that a narrow container has one thing to press
  * rather than two competing for the same strip.
  */
 function OrderGroup({ value, onChange }: { value: Ordering; onChange: (value: Ordering) => void }) {
@@ -329,9 +329,9 @@ export function Toolbar({
       className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-1.5 @md:gap-2 @md:py-2"
     >
       {/* `basis-40` rather than `min-w-40`: a minimum makes the input refuse to
-          be narrower than 10rem and push the bar wider than the pane, where a
+          be narrower than 10rem and push the bar wider than the container, where a
           basis is only a preference — the input takes a line of its own in a
-          narrow pane and stretches to whatever the pane is. */}
+          narrow container and stretches to whatever the container is. */}
       <Input
         value={sifting.query}
         onChange={(event) => onChange({ ...sifting, query: event.target.value })}
@@ -351,7 +351,7 @@ export function Toolbar({
 
                 `whitespace-normal` rather than `truncate`: at the widest
                 possible label — a kind, a state and an order all set — the text
-                is about 150 pixels against 196 of pane, so a truncation is
+                is about 150 pixels against 196 of container, so a truncation is
                 reachable, and a truncated setting is a setting that is not on
                 screen. It takes a second line instead, which costs 16 pixels in
                 the rare case rather than hiding a word in it. */}
@@ -369,8 +369,8 @@ export function Toolbar({
               <span className="min-w-0">{labelOf(sifting, ordering)}</span>
             </Button>
           </PopoverTrigger>
-          {/* Sized to what the pane leaves rather than to a fixed width: the
-              shadcn default is 288 pixels and the panes this form exists for are
+          {/* Sized to what the container leaves rather than to a fixed width: the
+              shadcn default is 288 pixels and the containers this form exists for are
               220. `p-2` rather than `p-4` for the same reason — sixteen pixels a
               side is a quarter of the room the state group needs. */}
           <PopoverContent

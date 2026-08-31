@@ -29,7 +29,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *
  * - `selection:set`, which is the one write on this list and is a shared one.
  *   The protocol spells it out and the wording matters: "every module on the
- *   canvas is told". Picking a row here changes what the reader's other panes
+ *   canvas is told". Picking a row here changes what the reader's other containers
  *   are looking at, and that is the point rather than a side effect — the
  *   argument is in `contextSchema`, and it is why the selection travels as
  *   context instead of as a message from this app to a named neighbour. It is

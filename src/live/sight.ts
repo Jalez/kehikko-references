@@ -71,9 +71,9 @@ export interface Trouble {
  *   no filesystem of its own knows a project's name and has no folder to point
  *   at. There is nothing for a list to be about; there is also nothing wrong.
  * - `asking` — the read is out, nothing has come back, AND there is nothing
- *   already on screen. The one state in which a whole pane of waiting is honest.
+ *   already on screen. The one state in which a whole container of waiting is honest.
  *   A read that happens while rows are already drawn is NOT this state — see
- *   `busy` on `Roadmap`, which is what keeps the pane usable in flight.
+ *   `busy` on `Roadmap`, which is what keeps the container usable in flight.
  * - `trouble` — the read did not happen, there is no cached reading either, and
  *   the reason is one of the kinds above. Each draws its own paragraph.
  * - `read` — a reading, which may itself contain no references, and that is the

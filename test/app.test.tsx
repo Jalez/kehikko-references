@@ -323,7 +323,7 @@ describe('when a read happens, and when it does not', () => {
   })
 
   test('the rows stay on screen while a refresh is in flight, and the header says what it is doing', async () => {
-    /* The pane has to be usable during a network call. A list that blanks for
+    /* The container has to be usable during a network call. A list that blanks for
        three seconds is a list that looks broken, and this is the assertion that
        keeps `busy` from being folded back into `Sight`. */
     let release: (() => void) | null = null
@@ -350,7 +350,7 @@ describe('when a read happens, and when it does not', () => {
     expect(document.body.textContent).not.toContain('reading GitHub…')
   })
 
-  test('nothing is read on a timer, so an unwatched pane spends no rate limit', async () => {
+  test('nothing is read on a timer, so an unwatched container spends no rate limit', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
     const roadmap = stubRoadmap()
     render(<App fetcher={door.fetcher} />)
@@ -395,7 +395,7 @@ describe('picking references out', () => {
   test('the ref that goes out is spelled exactly as it always was', async () => {
     /* Protocol-visible, and the single most important assertion in this file.
        The rows come from somewhere else now; what leaves this module for every
-       other pane on the canvas is unchanged. */
+       other container on the canvas is unchanged. */
     const roadmap = await listed(5)
     act(() => rowButton('gh#3')?.click())
     expect(roadmap.calls('selection.set')).toEqual([{ refs: ['gh#3'] }])

@@ -100,7 +100,7 @@ export async function ask(
       at: 'trouble',
       project,
       trouble: doorTrouble(
-        'This app’s own server did not answer. It serves the page you are reading, so it was there a moment ago — reloading this pane is what tells you whether it still is.',
+        'This app’s own server did not answer. It serves the page you are reading, so it was there a moment ago — reloading this container is what tells you whether it still is.',
         (error as Error)?.message ?? null,
       ),
     }

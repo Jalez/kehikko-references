@@ -11,12 +11,12 @@ import type { Reading } from './gh.ts'
  * Because reading is now a network call, and it is made every time somebody
  * moves between projects on a canvas. Without a cache, switching back and forth
  * between two projects is four calls to GitHub a minute for a list that has not
- * changed, and the reader watches a blank pane each time. With one, the pane is
+ * changed, and the reader watches a blank container each time. With one, the container is
  * full the instant it is drawn and the network call is a decision rather than a
  * consequence of looking.
  *
  * The rate limit is the other half of it. GitHub's is five thousand an hour for
- * an authenticated user, which sounds like plenty until a canvas has this pane
+ * an authenticated user, which sounds like plenty until a canvas has this container
  * on it and somebody spends an afternoon moving between four projects — and the
  * limit is shared with every other program on this machine using the same login,
  * including the roadmap's own refresher and Diff. A module that spends somebody
@@ -96,7 +96,7 @@ export const CACHE_FILE = 'tracker.json'
  * How old a reading may be before a context change fetches it again by itself.
  *
  * Ten minutes. Long enough that moving between two projects while working is
- * free, short enough that a pane left open over lunch is not describing the
+ * free, short enough that a container left open over lunch is not describing the
  * morning. It is not a promise of freshness — the header's timestamp is the only
  * promise made anywhere — it is the point past which this module thinks the
  * network call is worth making without being asked.

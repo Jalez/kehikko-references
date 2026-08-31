@@ -142,20 +142,20 @@ event whose correct response is to read the theme and the selection and leave th
 reading alone.
 
 There is no interval anywhere in this module. An interval is a program spending
-somebody's GitHub rate limit while nobody is looking at the pane, and it buys
+somebody's GitHub rate limit while nobody is looking at the container, and it buys
 freshness that a timestamp beside a button buys honestly.
 
-### The pane stays usable while a read is in flight
+### The container stays usable while a read is in flight
 
 `busy` is held beside `sight` rather than inside it, and that separation is the
 whole of it. A read over rows already on screen leaves them there: the list goes
 on scrolling, the filter goes on filtering, the selection goes on being the
 selection, and the header says `reading GitHub…` instead of a timestamp. Folded
-into the state machine, every refresh would blank the pane for as long as GitHub
+into the state machine, every refresh would blank the container for as long as GitHub
 took — and a list that shows nothing for three seconds is a list that looks
 broken.
 
-The whole-pane wait exists for exactly one case: busy **and** nothing to show.
+The whole-container wait exists for exactly one case: busy **and** nothing to show.
 
 ### Caching, and where it lives
 
@@ -203,7 +203,7 @@ are not the same fact:
 | **Waiting to be greeted.** | The page loaded under a second ago. A greeting may still come. |
 | **Nothing has told me anything.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. *An empty list would mean somebody went and looked and found no work. Nobody has looked.* |
 | **A roadmap is here, and it named no project folder.** | Framed, and `projectPath` was null. Not a fault: a host with no filesystem of its own knows the project's name and has no folder to point at, and the protocol says so. |
-| **Reading the tracker in \<project\>.** | `gh` is running. The one honest whole-pane wait, and only when there is nothing already drawn. |
+| **Reading the tracker in \<project\>.** | `gh` is running. The one honest whole-container wait, and only when there is nothing already drawn. |
 | **This project's tracker has nothing in it.** | A reading, containing nothing. The one genuinely empty list, and the only place the word *found* would be honest. |
 
 And one the reader caused: **Nothing here matches what you asked for**, which
@@ -312,7 +312,7 @@ not, so hovering a row says everything the row would say at full width.
 ### Two lines under 20rem, and the measurement that forced it
 
 "Never dropped" was a claim rather than a fact until it was measured. In a
-Chromium pane 220 pixels wide — an ordinary size on a grid canvas — the fixed
+Chromium container 220 pixels wide — an ordinary size on a grid canvas — the fixed
 5.5rem identifier column and 4.5rem state column left the title **twelve
 pixels**. The row was in the document and findable by Ctrl+F, and unreadable.
 
@@ -327,17 +327,17 @@ width to pay for them.
 The `@container` is the pressable middle of the row rather than the row, and the
 consequence is not what it looks like: a `@xx:` class is measured against the
 nearest container *ancestor*, and an element is not its own ancestor. So the
-stack-or-line decision, written on that box, is still measured against the pane;
+stack-or-line decision, written on that box, is still measured against the container;
 the labels, date and people columns, written on its children, are measured
 against the box, which is 58 pixels narrower. Which is right — "is there room for
-a second line" is a question about the pane, and "is there room for the people"
+a second line" is a question about the container, and "is there room for the people"
 is a question about what is left after the two controls have taken theirs.
 
 ### The filter bar wraps above 21rem and collapses below it
 
 At 220 pixels the seven buttons and the count came to 226 and the whole page got
 a sideways scrollbar. Wrapping fixed the scroll and did not fix the cost, which
-was always vertical. Measured across a sweep of pane widths with a real reading:
+was always vertical. Measured across a sweep of container widths with a real reading:
 
 ```
         before   after
@@ -374,7 +374,7 @@ browser's own find reaches and a test cannot disambiguate.
 ### The order is a labelled trigger at every width
 
 Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — and they live behind
-a press even in a wide pane, which is the shape the filter was refused. The
+a press even in a wide container, which is the shape the filter was refused. The
 difference is what the two controls can do: **a filter hides rows and an order
 does not.** The failure this bar exists to prevent is somebody reading a list of
 two and concluding the other twenty-two are not there, and only the filter can
@@ -389,9 +389,9 @@ same reason. Ties keep the order `collect` produced, which is recency.
 
 ### The header, and the one control on it
 
-A project name, a freshness line and a Refresh button, wrapping in a narrow pane
+A project name, a freshness line and a Refresh button, wrapping in a narrow container
 because none of the three shortens. The name is the last segment of the path with
-the whole path on its `title` — a 220-pixel pane cannot hold
+the whole path on its `title` — a 220-pixel container cannot hold
 `/Users/somebody/Projects/roadmap` without pushing the page sideways, and the
 segment is what people call the thing. The full path is never dropped from a
 failure panel, because a fix for one of those happens in a terminal.
@@ -415,7 +415,7 @@ schedule.
 
 ### The absences scroll too
 
-Every panel in `absence.tsx` is the whole of a pane when it is drawn, and one of
+Every panel in `absence.tsx` is the whole of a container when it is drawn, and one of
 them is three paragraphs long. At 220×340 the last of those paragraphs — the one
 that says what to do about the situation — was below the bottom edge with nothing
 to scroll. Each panel is now its own scroller inside the frame, which is the

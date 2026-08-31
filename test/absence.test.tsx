@@ -71,7 +71,7 @@ describe('the absences are different sentences', () => {
 
   test('a roadmap with no project folder says so, and does not offer to pick one', () => {
     /* The old page offered an epic picker in the equivalent state. Which project
-       a canvas stands in is the host's, and a pane offering to change it would
+       a canvas stands in is the host's, and a container offering to change it would
        be one corner steering the whole canvas. */
     render(<NoProject />)
     expect(screen.getByText('A roadmap is here, and it named no project folder.')).toBeTruthy()

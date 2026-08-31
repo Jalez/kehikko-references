@@ -50,7 +50,7 @@ import type { Ran, Runner } from './run.ts'
  * protocol-visible: it goes out on `selection.set`, the host relays it into the
  * context every framed module receives, and Diff reads it to decide which patch
  * to fetch. Changing what a ref LOOKS like would be changing a canvas-wide
- * vocabulary from inside one pane, so the one thing this rewrite was not allowed
+ * vocabulary from inside one container, so the one thing this rewrite was not allowed
  * to touch is the thing it did not touch.
  */
 

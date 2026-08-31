@@ -21,7 +21,7 @@ import { StateWord } from './state-word.tsx'
  * The plain click is now SELECTION, and the argument is about what the click is
  * for rather than about which is more important. Selecting is the cheap,
  * repeated, in-place act: it is done dozens of times while reading a list,
- * it changes what the panes beside this one are showing, and it costs nothing to
+ * it changes what the containers beside this one are showing, and it costs nothing to
  * undo. Opening the tracker is the rare, expensive, one-way act — a new tab, a
  * different application, the end of whatever scan was in progress. A surface
  * that gives its whole click area to the expensive one and asks for a modifier
@@ -51,20 +51,20 @@ import { StateWord } from './state-word.tsx'
  * hidden gestures this file has just argued against, so the accumulating gesture
  * gets a control that can be seen. It costs 24 pixels of the row's width at
  * every size, which is paid out of the title, and the title still has 172 of the
- * 196 available in a 220-pixel pane.
+ * 196 available in a 220-pixel container.
  *
  * The tick is drawn from the canvas's selection as the host last stated it, not
  * from anything this row remembers — see `selection` in `use-roadmap.ts`. A row
  * ticked here was ticked by the roadmap.
  *
- * ## One layout, sized by the pane and not by the window
+ * ## One layout, sized by the container and not by the window
  *
- * The same row is read across a laptop screen in its own tab and in a pane two
+ * The same row is read across a laptop screen in its own tab and in a container two
  * hundred and twenty pixels wide on somebody's canvas. That is one layout, not
  * three, and every threshold below is a CONTAINER query — the frame's width and
  * the window's width are not the same number, and it is the frame this row
  * lives in. A viewport breakpoint here would make the row's decisions out of a
- * number nobody who resizes the pane is changing.
+ * number nobody who resizes the container is changing.
  *
  * The container is now the pressable middle of the row rather than the row
  * itself, because that is the box the columns actually divide — and the
@@ -73,14 +73,14 @@ import { StateWord } from './state-word.tsx'
  * A `@xx:` class is measured against the nearest container ANCESTOR of the
  * element carrying it, and an element is not its own ancestor. So the thresholds
  * written on the pressable box — the stack-or-line decision — are still measured
- * against the pane, exactly as they were, while the thresholds written on its
+ * against the container, exactly as they were, while the thresholds written on its
  * children — the labels, the date, the people — are measured against the box
  * itself, which is 58 pixels narrower.
  *
  * That split is correct rather than accidental. "Is there room for a second
- * line" is a question about the pane; "is there room for the people column" is a
+ * line" is a question about the container; "is there room for the people column" is a
  * question about what is left after the checkbox and the tracker link have taken
- * theirs. The measured effect is that the columns drop 58 pixels of pane width
+ * theirs. The measured effect is that the columns drop 58 pixels of container width
  * earlier than they used to, which is the honest answer to a row that now has
  * two more things in it.
  *
@@ -107,12 +107,12 @@ import { StateWord } from './state-word.tsx'
  *
  * Nor is the checkbox ever dropped, and nor is the tracker link. They are the
  * row's two verbs, and a row you cannot act on at 220 pixels is a row somebody
- * has to widen a pane to use.
+ * has to widen a container to use.
  *
  * ## Two lines under 20rem, because one line stops holding three things
  *
  * That rule used to be a claim rather than a fact. At 220 pixels — an ordinary
- * pane on a grid canvas — the identifier column and the state column were fixed
+ * container on a grid canvas — the identifier column and the state column were fixed
  * at 5.5rem and 4.5rem, and what was left for the title, measured in a browser,
  * was **twelve pixels**. The title was on the row, in the document, findable by
  * Ctrl+F, and unreadable. "Never dropped" had quietly become "never deleted",
@@ -320,7 +320,7 @@ export function ReferenceRow({
          not always 36 pixels tall: it means the 36 is only a first guess, and
          once the browser has laid a row out for real it remembers that height
          for the next time it skips it. A bare `36px` would have made the
-         scrollbar lie by a third in a narrow pane, where every row is two
+         scrollbar lie by a third in a narrow container, where every row is two
          lines. */
       style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 36px' }}
     >

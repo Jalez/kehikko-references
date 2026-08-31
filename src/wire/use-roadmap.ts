@@ -36,15 +36,15 @@ export interface Roadmap {
    * Whether a read is in flight right now.
    *
    * Held beside `sight` rather than inside it, and that separation is the whole
-   * of "the pane stays usable while the network is being waited on". A read that
+   * of "the container stays usable while the network is being waited on". A read that
    * happens over rows already on screen must not throw them away: the list goes
    * on scrolling, the filter goes on filtering, the selection goes on being the
    * selection, and the only thing that changes is a word in the header. Folded
-   * into `sight` as a state, every refresh would blank the pane for as long as
+   * into `sight` as a state, every refresh would blank the container for as long as
    * GitHub took, which is the failure this flag exists to make impossible.
    *
    * `sight.at === 'asking'` is the other case — busy AND nothing to show — and
-   * that one is a whole pane, because there is genuinely nothing else to draw.
+   * that one is a whole container, because there is genuinely nothing else to draw.
    */
   busy: boolean
   /**
@@ -197,7 +197,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
    *
    * There is no interval anywhere in this module, deliberately. An interval is a
    * program spending somebody's GitHub rate limit while nobody is looking at the
-   * pane, and it buys freshness that a timestamp beside a button buys honestly.
+   * container, and it buys freshness that a timestamp beside a button buys honestly.
    * The cache decides whether a project change costs a call at all; see
    * `tracker/cache.ts`.
    */
@@ -366,7 +366,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       clearTimeout(grace)
       /* The read goes with the listener. A page being torn down has no use for
          an answer, and leaving the fetch running would leave a subprocess being
-         waited on for a pane that no longer exists. */
+         waited on for a container that no longer exists. */
       inFlight.current?.abort()
       inFlight.current = null
       host.current?.stop()

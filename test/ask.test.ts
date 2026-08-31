@@ -11,7 +11,7 @@ import { ask, askUrl, type Fetcher } from '@/live/ask.ts'
  * talking to a door that has moved on is the ORDINARY state of a dev server
  * mid-edit rather than a contrived one. Every shape below has been on somebody's
  * screen at some point, and each of them has to read as a sentence rather than
- * as a blank pane.
+ * as a blank container.
  */
 
 const answering = (body: unknown, init: { status?: number; text?: string } = {}): Fetcher =>
@@ -67,7 +67,7 @@ describe('reading the answer', () => {
     expect(got?.at === 'read' && got.trouble).toMatchObject({ kind: 'offline', why: 'no network', said: 'dial tcp' })
   })
 
-  test('a trouble with no reading is the whole pane', async () => {
+  test('a trouble with no reading is the whole container', async () => {
     const got = await ask(
       '/p',
       false,
@@ -85,7 +85,7 @@ describe('reading the answer', () => {
 })
 
 describe('when the door is the thing that failed', () => {
-  test('a fetch that rejects is a sentence rather than a blank pane', async () => {
+  test('a fetch that rejects is a sentence rather than a blank container', async () => {
     const got = await ask('/p', false, live(), () => Promise.reject(new Error('Failed to fetch')))
     expect(got).toMatchObject({ at: 'trouble' })
     expect(got?.at === 'trouble' && got.trouble.kind).toBe('door')

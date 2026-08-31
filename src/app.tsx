@@ -207,7 +207,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    *
    * It reads `selection` rather than any local memory, so "is this the only one
    * selected" is a question about what the host said, not about what was last
-   * clicked here. Two panes disagreeing about that is exactly the failure the
+   * clicked here. Two containers disagreeing about that is exactly the failure the
    * round trip exists to prevent.
    */
   const pick = useCallback(
@@ -271,7 +271,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   return (
     /* `@container` is the one thing this element does beyond stacking three
        boxes, and it is what every size decision below it is measured against. A
-       module's width is its pane's width, and a reader changes that by dragging
+       module's width is its container's width, and a reader changes that by dragging
        a corner on somebody else's canvas: the window is never resized, no
        viewport breakpoint fires, and a layout keyed to `md:` would sit at its
        widest inside a column two hundred pixels across. So the header and the
@@ -279,11 +279,11 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
        row's own width is what its columns have to divide. */
     <div ref={frame} className="@container flex h-full flex-col">
       {/* It wraps, because the things here are a project name, a timestamp and a
-          control, and none of them shortens. In a narrow pane they take a line
+          control, and none of them shortens. In a narrow container they take a line
           each. The alternative was truncating a name, which is the one kind of
           text on this page that has to be readable in full. */}
       <header className="flex flex-wrap items-baseline gap-x-2 border-b border-border px-3 py-1.5 text-xs break-words text-muted-foreground @md:py-2">
-        {/* The short name, with the whole path on its `title`. A pane 220 pixels
+        {/* The short name, with the whole path on its `title`. A container 220 pixels
             wide cannot hold `/Users/somebody/Projects/roadmap` without pushing
             the page sideways, and the segment is what people call the thing. */}
         <span className="font-mono text-foreground" title={sight.project}>
@@ -297,7 +297,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
 
             "reading GitHub…"  a call is out. The list below is still whatever
                                was last read, and still usable, which is the
-                               point of not blanking the pane.
+                               point of not blanking the container.
             "read <when>"      this reading came off GitHub just now.
             "last read <when>" this reading came out of the cache beside the
                                project, and the button says how to change that.
@@ -314,7 +314,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
           network call on purpose.
 
           `ml-auto` rather than a fixed position, so that when the header wraps
-          in a narrow pane the button goes to the end of whichever line it lands
+          in a narrow container the button goes to the end of whichever line it lands
           on rather than sitting alone. `h-6` because the rest of this bar is
           `text-xs` and a default-height button doubles the header.
 
@@ -351,7 +351,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
         This is the state the whole caching design exists to be able to draw, and
         the sentence is what stops it being the quiet lie: the list below is
         real, it is what was read at the time in the header, and the fresh read
-        did not happen for the reason given. Without this the pane would show a
+        did not happen for the reason given. Without this the container would show a
         perfectly ordinary list that happened to be hours old, which is exactly
         how a stale list gets believed.
 
