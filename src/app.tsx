@@ -7,8 +7,8 @@ import type { Fetcher } from '@/live/ask.ts'
 import { collect, generatedAt } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
-import { EVERYTHING, narrowing, sift, type Sifting } from '@/live/sift.ts'
-import { useRoadmap, type GotoHandler } from '@/wire/use-roadmap.ts'
+import { hides, hostNarrowing, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
+import { useRoadmap, type GotoHandler, type Settled } from '@/wire/use-roadmap.ts'
 import {
   Asking,
   Listening,
@@ -61,9 +61,30 @@ const TALLEST = 720
  * bridge — with no server, no subprocess and no network.
  */
 export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
-  const [sifting, setSifting] = useState<Sifting>(EVERYTHING)
+  /**
+   * The typed query, which is the only part of the narrowing this page still
+   * holds.
+   *
+   * `kind` and `state` are the host's now — offered as `roadmap.filters`, drawn
+   * in the container header, and sent back in `context.filters`. There is no
+   * local copy of them for the same reason there is no local copy of the
+   * selection: a second answer would go stale on its own schedule, and a page
+   * that drew what it asked for rather than what the host settled on would
+   * disagree with the header in exactly the cases that matter.
+   */
+  const [query, setQuery] = useState('')
   const [ordering, setOrdering] = useState<Ordering>(DEFAULT_ORDER)
   const [landedOn, setLandedOn] = useState<string | null>(null)
+  /**
+   * Why the last `filters.set` did not take, if it did not.
+   *
+   * The host may decline — the container is pinned, or is not on the kehikko
+   * that is open — and a `Clear` that then cleared only the query would be a
+   * button quietly doing two thirds of what it says. Held so that the page can
+   * say which third it could not do, in the host's own words, beside the list.
+   * Null the moment anything is asked again.
+   */
+  const [filterRefused, setFilterRefused] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
 
   /**
@@ -76,70 +97,166 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   const [rows, setRows] = useState<ReturnType<typeof collect>>([])
 
   /**
+   * The `goto` handler, reached through a ref so that the bridge can be
+   * connected before the handler exists.
+   *
+   * Answering a walk now needs `setFilters`, which comes out of `useRoadmap`,
+   * which is handed the handler — so one of the two has to be indirect. It is
+   * this one, because `use-roadmap.ts` already reads the newest handler out of a
+   * ref on every `goto` for its own reason (a listener rebuilt on every render
+   * would be a torn-down listener during the millisecond a host chose to greet
+   * in). This trampoline is stable and the thing it calls is not, which is
+   * exactly the arrangement that file expects.
+   */
+  const walk = useRef<GotoHandler>(() => {})
+  const onGoto = useCallback<GotoHandler>((message, answer) => walk.current(message, answer), [])
+
+  const {
+    sight,
+    busy,
+    read,
+    resize,
+    selection,
+    select,
+    selectionRefused,
+    chosen,
+    offerFilters,
+    setFilters,
+    kept,
+    keep,
+  } = useRoadmap(ID, onGoto, fetcher)
+
+  /**
+   * The whole narrowing: this page's query, and the two groups the host holds.
+   *
+   * Composed on every render rather than stored, because storing it would be the
+   * local copy of the host's choice that `chosen` exists to avoid. Everything
+   * downstream — `sift`, the count, `narrowing`, `Clear` — takes the composed
+   * value and cannot tell which half came from where, which is right: a reader
+   * looking at four rows of four hundred does not care which control did it.
+   */
+  const sifting = useMemo(() => siftingOf(query, chosen), [query, chosen])
+
+  /**
+   * What this module can be narrowed by, announced whenever the words change.
+   *
+   * The words carry counts — `Issues 17` — so "whenever the words change" is
+   * "whenever a reading changes", which is what this effect depends on. The
+   * counts are over the whole reading and ignore the query, deliberately;
+   * otherwise this would re-send the whole offer on every keystroke to keep a
+   * number current in a menu that is usually closed. See `offer` in `sift.ts`.
+   *
+   * `null` is "nothing to say yet" and is NOT sent. An empty offer is a claim
+   * the host acts on by pruning this container's stored choice, and making that
+   * claim before a reading has arrived would erase the remembered filter on
+   * every single load — the setting would appear to work perfectly and be
+   * forgotten every time the page was reloaded. An empty ARRAY is a different
+   * message and is sent: a project whose tracker holds nothing has genuinely
+   * nothing to be narrowed by, and the control should go away rather than sit
+   * there offering `Issues 0`.
+   */
+  useEffect(() => {
+    const groups = offer(rows, sight.at === 'read')
+    if (groups) offerFilters(groups)
+  }, [rows, sight.at, offerFilters])
+
+  /**
+   * One press puts everything back — including the two thirds this page does not
+   * hold.
+   *
+   * The query is cleared here and the container's filters are asked to go back
+   * to their resting options, in one call, because `filters.set` takes a whole
+   * choice and `{}` is exactly "clear the narrowing". Per-group clearing would
+   * produce a context per group and a page seen part-way through its own reset.
+   *
+   * The host may decline, and then this says so rather than pretending. That is
+   * the honest half of a request: a `Clear` that silently cleared the query and
+   * left the header narrowing the list would teach a reader that the button does
+   * not work, on the one control whose entire promise is that it does.
+   */
+  const clearAll = useCallback(async (): Promise<Settled> => {
+    setQuery('')
+    setFilterRefused(null)
+    const settled = await setFilters({})
+    if (!settled.ok) setFilterRefused(settled.why)
+    return settled
+  }, [setFilters])
+
+  /**
    * Answering a host that says "go to this reference".
    *
-   * Three things happen here that are easy to get wrong and all three matter:
+   * Four things happen here that are easy to get wrong and all four matter:
    *
-   * 1. **The filter is cleared when it is hiding the target.** Answering
+   * 1. **What is hiding the target is cleared, wherever it is held.** Answering
    *    `found: true` while the row is filtered out walks the reader to a page
-   *    where their reference is invisible, which is worse than the fallback
-   *    link they would have got for `found: false`.
-   * 2. **`found` is answered from the whole reading, not from what is drawn.**
-   *    What is drawn is a function of a filter the host knows nothing about.
-   * 3. **A `goto` naming a step rather than a reference is refused rather than
-   *    answered vaguely.** This app lists references and has never known
-   *    anything about steps.
+   *    where their reference is invisible, which is worse than the fallback link
+   *    they would have got for `found: false`. The query is cleared here; the
+   *    kind and the state are the host's, so they are ASKED for.
+   * 2. **The answer is read rather than assumed.** What comes back from
+   *    `filters.set` is what the host SETTLED on, which is deliberately not what
+   *    was asked for. So the settled choice is put back through the same `hides`
+   *    the list uses, against the actual row — and only a row that survives that
+   *    is answered `found: true`.
+   * 3. **A host that declines gets the honest answer, which is the old one.**
+   *    `found: false` with the host's own sentence, so a reader gets the
+   *    fallback link instead of a page where their reference is not drawn. This
+   *    is the behaviour the essay in `sift.ts` used to protect by refusing to
+   *    move the control at all; it is protected now by reading a refusal.
+   * 4. **`found` is answered from the whole reading, not from what is drawn.**
+   *    What is drawn is a function of a narrowing; what exists is not.
+   *
+   * And a `goto` naming a step rather than a reference is refused rather than
+   * answered vaguely. This app lists references and has never known anything
+   * about steps.
    */
-  const onGoto = useCallback<GotoHandler>(
-    (message, answer) => {
-      if (!message.ref) {
-        answer(false, 'This app lists references and knows nothing about steps.')
-        return
-      }
-      const row = rows.find((candidate) => candidate.ref === message.ref)
-      if (!row) {
+  walk.current = (message, answer) => {
+    if (!message.ref) {
+      answer(false, 'This app lists references and knows nothing about steps.')
+      return
+    }
+    const row = rows.find((candidate) => candidate.ref === message.ref)
+    if (!row) {
+      answer(
+        false,
+        rows.length
+          ? `Nothing in the reading this app is showing names ${message.ref}.`
+          : `This app has no reading yet, so it cannot say where ${message.ref} is.`,
+      )
+      return
+    }
+
+    setQuery('')
+    setLandedOn(row.ref)
+
+    /* Nothing the host is holding is hiding anything, so there is nothing to
+       ask for and nothing to wait on. The common case, and it answers in the
+       same breath it always did. */
+    if (!hostNarrowing(sifting)) {
+      answer(true, '')
+      return
+    }
+
+    setFilterRefused(null)
+    void setFilters({}).then((settled) => {
+      if (!settled.ok) {
+        setFilterRefused(settled.why)
         answer(
           false,
-          rows.length
-            ? `Nothing in the reading this app is showing names ${message.ref}.`
-            : `This app has no reading yet, so it cannot say where ${message.ref} is.`,
+          `${message.ref} is in this list, and the roadmap would not move this container’s filters off it: ${settled.why}`,
         )
         return
       }
-      setSifting(EVERYTHING)
-      setLandedOn(row.ref)
-      /* After paint, because the row may have been hidden by the filter a
-         moment ago and cannot be scrolled to before it exists. */
-      requestAnimationFrame(() => {
-        frame.current?.querySelector(`[data-ref="${CSS.escape(row.ref)}"]`)?.scrollIntoView({ block: 'center' })
-        answer(true, '')
-      })
-    },
-    [rows],
-  )
-
-  const { sight, busy, read, resize, selection, select, selectionRefused, kept, keep } = useRoadmap(
-    ID,
-    onGoto,
-    fetcher,
-  )
-
-  /*
-   * No `roadmap.filters` offer is sent, and `onGoto` above is one of the two
-   * reasons why.
-   *
-   * The host will draw a filter control in the container header for any module that
-   * offers one, and `kind` and `state` would fit it exactly. The typed query
-   * would not — there is no shape for free text in that message, deliberately —
-   * so offering the two would put this app's filtering in two places, and a
-   * module cannot set its own choice, so the `setSifting(EVERYTHING)` in
-   * `onGoto` and the `Clear` button in the toolbar would both stop being able to
-   * undo two thirds of what is hiding a row. The argument in full, including the third cost and the
-   * condition under which it reverses, is at the top of `live/sift.ts`.
-   *
-   * Nothing is sent rather than an empty offer: an empty one means "withdraw
-   * the control I gave you", and this module has never given one.
-   */
+      /* What the host settled on, against this row, through the same function
+         the list uses. A settled choice that still hides it is not a success
+         with a caveat — it is a walk to an invisible row, which is the one thing
+         this handler exists to refuse. */
+      if (hides(siftingOf('', settled.filters), row)) {
+        answer(false, `${message.ref} is in this list, but this container’s filters are still hiding it.`)
+        return
+      }
+      answer(true, '')
+    })
+  }
 
   /**
    * The kept string this page has already acted on.
@@ -174,8 +291,8 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
        those are the same thing and the line looks redundant; on a re-greeting
        they are not, and the alternative is a filter that survives the host
        explicitly saying it has forgotten one. */
-    const remembered = reading(kept) ?? { sifting: EVERYTHING, ordering: DEFAULT_ORDER }
-    setSifting(remembered.sifting)
+    const remembered = reading(kept) ?? { query: '', ordering: DEFAULT_ORDER }
+    setQuery(remembered.query)
     setOrdering(remembered.ordering)
   }, [kept])
 
@@ -194,11 +311,15 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * is that it is typed again, and the cost of keeping a half-typed one is a
    * page that comes back showing two rows of twenty-four for a reason nobody
    * remembers.
+   *
+   * Only the query and the order are in it. The kind and the state are kept by
+   * the HOST now, per container, and a copy of them here would be a second
+   * memory of one setting — see the essay in `live/keep.ts`.
    */
   useEffect(() => {
     if (restored.current === undefined) return
     const timer = setTimeout(() => {
-      const now = writing({ sifting, ordering })
+      const now = writing({ query, ordering })
       /* Nothing is sent when the settings are still exactly what the host handed
          back. Restoring them sets state, which runs this effect, which would
          otherwise write the same string back on every single load — a call whose
@@ -209,7 +330,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       keep(now)
     }, 400)
     return () => clearTimeout(timer)
-  }, [sifting, ordering, keep])
+  }, [query, ordering, keep])
 
   /**
    * The plain click: this row becomes the whole selection.
@@ -266,6 +387,33 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
      — a filter does not care about position and an order does not remove
      anything — so the cheaper arrangement is simply the right one. */
   const shown = useMemo(() => order(sift(rows, sifting), ordering), [rows, sifting, ordering])
+
+  /**
+   * Scrolling to the row a `goto` landed on, once it is actually drawn.
+   *
+   * This used to be a `requestAnimationFrame` inside the handler, which was
+   * right when everything hiding the row was cleared by a `setState` in the same
+   * tick. It is not right any more: clearing the host's two groups is a round
+   * trip, and the rows do not change until the context comes back a few
+   * milliseconds after the answer. A scroll in the next frame would look for a
+   * row that is still filtered out and quietly do nothing.
+   *
+   * So the scroll waits for the list instead of for a frame. It fires once per
+   * landing — the ref holds which one — because scrolling again on every later
+   * render would drag a reader who had scrolled away back to the row they left.
+   */
+  const scrolledTo = useRef<string | null>(null)
+  useEffect(() => {
+    if (!landedOn) {
+      scrolledTo.current = null
+      return
+    }
+    if (scrolledTo.current === landedOn) return
+    const row = frame.current?.querySelector(`[data-ref="${CSS.escape(landedOn)}"]`)
+    if (!row) return
+    scrolledTo.current = landedOn
+    row.scrollIntoView({ block: 'center' })
+  }, [landedOn, shown])
 
   /* What we would like to be, recomputed when the length of the list changes.
      Fire and forget: the host may ignore it, and this page is laid out to be
@@ -356,7 +504,8 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       </header>
       <Toolbar
         sifting={sifting}
-        onChange={setSifting}
+        onQuery={setQuery}
+        onClear={() => void clearAll()}
         ordering={ordering}
         onOrder={setOrdering}
         showing={shown.length}
@@ -387,6 +536,20 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
           is a fact about what just happened to a click, and it belongs where the
           click was, not in a corner. It disappears the moment the next set is
           asked for — see `selectionRefused` in `use-roadmap.ts`. */}
+      {/* A refused `filters.set` gets a sentence for the same reason a refused
+          `selection.set` does, and a sharper one: the symptom without it is a
+          `Clear` that empties the query box and leaves the list exactly as short
+          as it was, which reads as a broken button. The host's own words are
+          used because they are the only ones that say what to do — "pinned" and
+          "not on the kehikko that is open" send a person to two different
+          places, and neither is something this page could work out. It goes
+          between the toolbar and the list, where the press was. */}
+      {filterRefused && (
+        <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
+          The roadmap would not put this container’s filters back ({filterRefused}) The typed filter has been
+          cleared; whatever the header is narrowing by is still narrowing this list.
+        </p>
+      )}
       {selectionRefused && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
           The roadmap would not record that selection ({selectionRefused.reason}). Nothing on this list has
@@ -397,7 +560,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
         {rows.length === 0 ? (
           <NothingFound project={sight.project} generated={generated} />
         ) : shown.length === 0 && narrowing(sifting) ? (
-          <NothingMatches total={rows.length} clear={() => setSifting(EVERYTHING)} />
+          <NothingMatches total={rows.length} clear={() => void clearAll()} />
         ) : (
           <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} />
         )}

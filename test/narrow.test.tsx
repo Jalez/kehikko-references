@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { EVERYTHING } from '@/live/sift.ts'
@@ -148,36 +148,59 @@ describe('what a narrow container hides is still reachable', () => {
 })
 
 describe('the filter bar in a column narrower than it is', () => {
-  test('every option is drawn, and the current one is marked, with no width to hide behind', () => {
-    render(<Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={1} total={24} />)
+  test('the kind and the state are not drawn here any more, because the header draws them', () => {
+    /* The move, asserted from this side. Seven buttons used to live in this bar
+       and the whole of its layout argument was about fitting them into 220
+       pixels; they are offered to the host now and drawn in the container's own
+       header. A copy left behind would be two controls for one setting, one of
+       which the reader could press without the other ever hearing about it. */
+    render(
+      <Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={1} total={24} />,
+    )
     for (const label of ['All', 'Issues', 'Changes', 'Any', 'Open', 'Merged', 'Closed']) {
-      const button = screen.getByRole('button', { name: label })
-      expect(button.className).not.toContain('hidden')
+      expect(screen.queryByRole('button', { name: label })).toBeNull()
     }
-    /* The point of the whole layout decision: whatever the container does to this
-       bar, the pressed button is in the document and is not hidden. A bar that
-       scrolled its own overflow would pass the line above and still leave
-       `Closed` off screen — which is why it wraps instead. */
-    expect(screen.getByRole('button', { name: 'Closed' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true')
+    /* And what stayed: the query, the order and the count. */
+    expect(screen.getByLabelText('Filter references')).toBeDefined()
+    expect(screen.getByRole('button', { name: /Order the list/ })).toBeDefined()
   })
 
   test('no part of the bar may overflow instead of wrapping', () => {
     /* Six pixels of a button past the right edge gave the whole page a sideways
        scrollbar, and the fix is that every flex line in here is allowed to
-       break. Asserted on the two groups, because they are what overflowed. */
-    const { container } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
-    const groups = [...container.querySelectorAll('[role="group"]')]
-    expect(groups).toHaveLength(2)
-    for (const group of groups) expect(group.className).toContain('flex-wrap')
-    const bar = groups[0]!.parentElement!
+       break. Fewer things wrap now than did, and the rule is the same one. */
+    const { container } = render(
+      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
+    )
+    const bar = container.querySelector('[data-toolbar]')!
     expect(bar.className).toContain('flex-wrap')
   })
 
   test('the count names both numbers whatever the width, because a short list and a filtered one look the same', () => {
-    const { rerender } = render(<Toolbar sifting={EVERYTHING} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
+    const { rerender } = render(
+      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
+    )
     expect(screen.getByText('24 references')).toBeDefined()
-    rerender(<Toolbar sifting={{ ...EVERYTHING, kind: 'issue' }} onChange={() => {}} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
+    rerender(
+      <Toolbar sifting={{ ...EVERYTHING, kind: 'issue' }} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={7} total={24} />,
+    )
     expect(screen.getByText('7 of 24 shown')).toBeDefined()
+  })
+
+  test('Clear is offered for what the HOST is hiding, not only for what was typed here', () => {
+    /* The failure this guards: a reader looking at four rows of twenty-four,
+       with the reason in a header they have not looked at, and no button on the
+       list to put it back. `narrowing` is asked about the composed setting for
+       exactly this reason. */
+    const pressed: string[] = []
+    const { rerender } = render(
+      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => pressed.push('clear')} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
+    )
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
+    rerender(
+      <Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onQuery={() => {}} onClear={() => pressed.push('clear')} ordering="moved" onOrder={() => {}} showing={4} total={24} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(pressed).toEqual(['clear'])
   })
 })

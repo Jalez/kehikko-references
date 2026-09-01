@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
+import { filterGroupSchema } from 'roadmap-module-protocol'
+
 import type { Reference } from '@/live/reference.ts'
-import { EVERYTHING, narrowing, sift } from '@/live/sift.ts'
+import { EVERYTHING, hides, hostNarrowing, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
 
 /**
  * The filter, which is the only thing in this app permitted to hide a row.
@@ -85,6 +87,92 @@ describe('kind and state', () => {
 
   test('the filters compose', () => {
     expect(sift(rows, { query: 'a', kind: 'change', state: 'merged' }).map((r) => r.ref)).toEqual(['!1848'])
+  })
+})
+
+describe('what is offered to the host, which is two thirds of the above', () => {
+  test('nothing at all until a reading has arrived, which is not the same as nothing to offer', () => {
+    /* The distinction the whole feature turns on. An empty offer is a CLAIM the
+       host acts on by pruning this container's stored choice; `null` is "I have
+       nothing to say yet" and is not sent. Making the claim on mount, before a
+       reading, erased the remembered filter on every load in the module this was
+       found in. */
+    expect(offer(rows, false)).toBeNull()
+    expect(offer([], false)).toBeNull()
+    /* And a project whose tracker genuinely holds nothing HAS nothing to be
+       narrowed by, so the control goes away rather than offering `Issues 0`. */
+    expect(offer([], true)).toEqual([])
+  })
+
+  test('the counts are in the labels, because the protocol has no count field', () => {
+    const groups = offer(rows, true)!
+    expect(groups.map((group) => group.id)).toEqual(['kind', 'state'])
+    expect(groups[0]?.options).toEqual([
+      { id: 'all', label: 'All 4' },
+      { id: 'issue', label: 'Issues 2' },
+      { id: 'change', label: 'Changes 2' },
+    ])
+    /* `Any` counts the row whose state nobody could read; nothing else does. The
+       same rule `sift` keeps below, kept in the words as well. */
+    expect(groups[1]?.options).toEqual([
+      { id: 'all', label: 'Any 4' },
+      { id: 'opened', label: 'Open 1' },
+      { id: 'merged', label: 'Merged 1' },
+      { id: 'closed', label: 'Closed 1' },
+    ])
+  })
+
+  test('an option nothing matches is not offered, and the fallback never goes', () => {
+    const only = [rows[0]!]
+    const groups = offer(only, true)!
+    expect(groups[0]?.options.map((option) => option.id)).toEqual(['all', 'issue'])
+    expect(groups[1]?.options.map((option) => option.id)).toEqual(['all', 'opened'])
+    for (const group of groups) {
+      expect(group.options.some((option) => option.id === group.fallback)).toBe(true)
+    }
+  })
+
+  test('every group is one the protocol would accept, checked against its own schema', () => {
+    /* The cheapest possible way to find out that this module has written an
+       offer no host will take — a label over the bound, a fallback naming an
+       option that was dropped — and to find it here rather than in somebody
+       else's log. */
+    for (const group of offer(rows, true)!) {
+      expect(filterGroupSchema.safeParse(group).success).toBe(true)
+    }
+  })
+})
+
+describe('reading back what the host chose', () => {
+  test('a choice this app recognises is applied', () => {
+    expect(siftingOf('x', { kind: 'change', state: 'merged' })).toEqual({
+      query: 'x',
+      kind: 'change',
+      state: 'merged',
+    })
+  })
+
+  test('anything else is the resting option rather than a page narrowed by a rule nobody can see', () => {
+    /* The host reconciles a stored choice against what a module offers, and it
+       cannot do that before the module has offered anything — the greeting goes
+       first. So the first choice this page ever receives may name an option from
+       a version of itself that no longer exists. */
+    expect(siftingOf('', { kind: 'epics', state: 'abandoned' })).toEqual(EVERYTHING)
+    expect(siftingOf('', {})).toEqual(EVERYTHING)
+  })
+
+  test('what the host is hiding is distinguishable from what was typed here', () => {
+    /* `goto` asks the difference: with nothing host-held hiding the row there is
+       nothing to request and nothing to wait on. */
+    expect(hostNarrowing({ ...EVERYTHING, query: 'rbac' })).toBe(false)
+    expect(hostNarrowing({ ...EVERYTHING, state: 'closed' })).toBe(true)
+    expect(narrowing({ ...EVERYTHING, query: 'rbac' })).toBe(true)
+  })
+
+  test('one row is asked about with the same function the list is', () => {
+    const closed = rows.find((row) => row.state === 'closed')!
+    expect(hides({ ...EVERYTHING, state: 'opened' }, closed)).toBe(true)
+    expect(hides(EVERYTHING, closed)).toBe(false)
   })
 })
 

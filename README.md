@@ -68,10 +68,12 @@ by the whole change. One function, `refOf`, spells a ref, and one test holds it.
 **The selection round trip is untouched.** A click asks; the host answers by
 sending a context; the tick appears when that comes back. See below.
 
-**The filter and the order still travel by `state:keep`.** `localStorage` would
+**The query and the order still travel by `state:keep`.** `localStorage` would
 work now that the page has a real origin, and it is still not used. The host
 holding one opaque string it cannot read was never a workaround for the sandbox;
-it was the right shape.
+it was the right shape. The kind and the state used to travel that way too and no
+longer do — the host holds those per container now, and the string went to
+version 2 rather than carrying a second copy of them. See below.
 
 ### GitLab, and the decision not to pretend
 
@@ -82,9 +84,20 @@ longer says "merge request", the two GitLab bags are present and empty, and the
 row, the filter and the `!41` spelling are all still in place waiting for the day
 somebody has a GitLab project to prove one call to `glab mr list` against.
 
-## Two capabilities, where there were four
+## Three capabilities, where there were four
 
-`selection:set` and `state:keep`. `live:read` came out because nothing calls it:
+`selection:set`, `filters:set` and `state:keep`.
+
+`filters:set` is the newest and arrived with the kind and state filters moving
+into the container header. Offering filters costs nothing — an offer is fire and
+forget — but two promises on this page need to be able to ask for the choice
+BACK: `view.goto`, which answers "go to `gh#105`" by clearing whatever is hiding
+that row, and the `Clear` beside the count, whose whole promise is that one press
+puts everything back. Without the declaration both calls are refused and both
+promises become two thirds true. It is a request rather than a permission: a host
+may decline, and the page draws the host's own sentence when it does.
+
+`live:read` came out because nothing calls it:
 there is no `live.get` anywhere in this program. `epics:read` came out with it,
 and that one was a capability that WORKED — it existed so a page with no epic
 open could offer a picker instead of a blank, and there is now no such state to
@@ -333,45 +346,52 @@ against the box, which is 58 pixels narrower. Which is right — "is there room 
 a second line" is a question about the container, and "is there room for the people"
 is a question about what is left after the two controls have taken theirs.
 
-### The filter bar wraps above 21rem and collapses below it
+### The kind and the state are in the container's header, and the query is not
 
-At 220 pixels the seven buttons and the count came to 226 and the whole page got
-a sideways scrollbar. Wrapping fixed the scroll and did not fix the cost, which
-was always vertical. Measured across a sweep of container widths with a real reading:
+They used to be seven buttons in this app's own bar — `All · Issues · Changes`
+and `Any · Open · Merged · Closed` — with a whole essay about fitting them into
+220 pixels, and a `ResizeObserver` collapsing them behind one labelled trigger
+below 21rem. They are offered to the host as two `roadmap.filters` groups now,
+and drawn in the container header beside every other module's. The counts ride in
+the labels because the protocol has no count field: `Issues 17`, `Open 9`. An
+option nothing matches — `Merged 0`, on a GitHub-only reading — is not offered at
+all.
 
-```
-        before   after
-200px    149px    71px
-220px    123px    71px
-320px    101px    63px
-340px     71px    71px
-400px     71px    71px
-900px     49px    49px
-```
+**The query stays here.** `filterGroupSchema` cannot express free text, and says
+so rather than leaving it out: a text box in a 220-pixel container header needs
+room, focus and a keyboard, and a host cannot debounce or interpret somebody
+else's search. The same schema says a module that keeps some of its filtering is
+conforming.
 
-At 220×300 the bar was **123 pixels and the list it filtered was 132** — the
-filter had become the same size as the thing filtered. So below **21rem (336
-pixels)** the two groups collapse into one control, and the threshold sits inside
-the measured step: every width below it was 101 pixels of bar or more, every
-width at or above it was 81 or less. At 220×300 the list goes from 132 pixels to
-184.
+Two behaviours had to keep working across the move, and both did, because the
+protocol grew `filters.set` — a module asking for a WHOLE choice, where `{}` is
+"clear the narrowing":
 
-Scrolling the bar inside its own container is still rejected at every width, for
-the reason the count exists: the pressed button *is* the current filter, and a
-strip scrolled back to its left edge hides `Closed` while the list goes on showing
-only closed things. Icon-only buttons were rejected on the vocabulary — `Any`,
-`Open`, `Merged` and `Closed` have no honest glyphs.
+- **`goto` still clears what is hiding its target.** It clears the query here and
+  asks the host for the two groups. It then reads what the host *settled* on,
+  which is deliberately not what was asked for, and only answers `found: true`
+  about a row that survives it.
+- **`Clear` still puts everything back.** One press, both halves.
 
-What survives the collapse is the requirement rather than the form: the trigger's
-label is the setting, never the word "Filters". It reads `All`, or `Closed`, or
-`Changes · Merged · Oldest`. The set is one press away; the current state is not.
+A host may decline — the container is pinned, or is not on the kehikko that is
+open — and neither promise is allowed to be two thirds true. A declined `Clear`
+draws the host's own sentence above the list; a declined `goto` answers
+`found: false` with it, so the reader gets the fallback link instead of a page
+where their reference is not drawn.
 
-The bar renders one form and not two, and measures itself with a `ResizeObserver`
-to decide which. A CSS-only version left both in the document at every width, and
-two buttons called `Closed` — one of them unpressable — is something the
-browser's own find reaches and a test cannot disambiguate.
+The honest note, kept from the essay this replaces rather than dropped with it:
+**this bought no vertical room.** At 220 pixels the bar was two lines with the
+seven collapsed behind one trigger, and it is two lines now — a query, an order
+trigger, a count and a `Clear`. The move was made for consistency across the
+canvas, which is a reason; it was not made for pixels, which would not have been
+one.
 
-### The order is a labelled trigger at every width
+What the move DID take away is the `ResizeObserver` and the two forms it chose
+between. With one form at every width, nothing measures itself, and the CSS-only
+version's hazard — two buttons called `Closed`, one of them unpressable, both
+reachable by the browser's own find — is not a thing this bar can have.
+
+### The order is a labelled trigger at every width, and did not move
 
 Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — and they live behind
 a press even in a wide container, which is the shape the filter was refused. The
@@ -380,6 +400,11 @@ does not.** The failure this bar exists to prevent is somebody reading a list of
 two and concluding the other twenty-two are not there, and only the filter can
 cause it. So the filter has to be *readable* and the order only has to be
 *visible*, which a trigger labelled `Oldest` satisfies.
+
+That is also why the order did not go into the header with the kind and the
+state. `filterGroupSchema` would express it perfectly well — five options, a
+fallback of `Recent` — and it is not a filter: it hides nothing, so it has no
+business in a control a reader has learned to check when the list looks short.
 
 A row with no date sorts **last in `Recent` and last in `Oldest`**, which looks
 inconsistent and is the point: an empty date is not a small date, and floating
@@ -402,16 +427,22 @@ and this control is reached for rarely. It is disabled while a read is in flight
 because two reads racing is two subprocesses and one answer that wins for no
 reason anybody could predict.
 
-### The filter and the order survive a reload, and the host holds them
+### The query and the order survive a reload, and the host holds them
 
 The format lives entirely in `src/live/keep.ts` and is read as defensively as
-anything else off the wire — a version that no longer matches, a field naming a
-filter that no longer exists, or a string that is not JSON all read as "nothing
+anything else off the wire — a version that no longer matches, a field naming an
+order that no longer exists, or a string that is not JSON all read as "nothing
 kept" rather than half-applying.
 
-The selection is *not* in it. That is the host's, it is a fact about the canvas
-rather than about this module, and a copy here would go stale on its own
-schedule.
+The kind and the state are *not* in it any more, and the version went to 2 for
+exactly that. The host holds those per container now, so a copy in this string
+would be two memories of one setting, written at different moments by different
+programs. A string in the old shape is dropped whole rather than read in part: a
+remembered filter two thirds applied is a page in a state nobody chose.
+
+The selection is *not* in it either, for the same family of reason. That is the
+host's, it is a fact about the canvas rather than about this module, and a copy
+here would go stale on its own schedule.
 
 ### The absences scroll too
 
@@ -482,7 +513,7 @@ src/wire/host.ts        the bridge: the greeting, one question at a time, goto/w
 src/wire/use-roadmap.ts the only place messages become state, and the only place a read is decided
 src/live/ask.ts         one relative fetch, and every way its answer can disappoint
 src/live/collect.ts     a reading -> rows, and the promise that none is dropped
-src/live/sift.ts        the only place a row may be hidden, and only on request
+src/live/sift.ts        the only place a row may be hidden, what is offered to the header, and why
 src/live/order.ts       five orders, and where a value the reading lacks belongs
 src/live/keep.ts        what the host is asked to remember, and how it is distrusted
 src/live/sight.ts       the states of knowing
@@ -493,7 +524,7 @@ dev/measure.tsx         the numbers in this file
 
 ## Tests
 
-`bun test` — 206 of them, and none shells out, needs a login, or notices whether
+`bun test` — 210 of them, and none shells out, needs a login, or notices whether
 the machine is online. Two seams make that true and they are the same seam the
 host uses: `Runner` in `tracker/run.ts` for the subprocess, and `Fetcher` in
 `src/live/ask.ts` for the page's own call.
@@ -520,7 +551,11 @@ host uses: `Runner` in `tracker/run.ts` for the subprocess, and `Fetcher` in
   context which changes only the selection reads nothing, that a context naming
   a different epic reads nothing either, that nothing is read on a timer, and
   that the rows stay on screen with `reading GitHub…` in the header while a
-  refresh is in flight.
+  refresh is in flight. It also holds the filter round trip: that nothing is
+  offered before there is a reading, that the counts are in the labels, that
+  `Clear` asks for the container's filters back and clears the query, and that a
+  `goto` over a row the header is hiding asks — and answers `found: false` with
+  the host's own sentence when the host says no.
 - `test/order.test.ts` holds every order to being a permutation and holds the two
   judgement calls. `test/keep.test.ts` throws nine kinds of rubbish at what the
   host hands back. `test/narrow.test.tsx` holds which pieces of a row are allowed

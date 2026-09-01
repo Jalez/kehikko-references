@@ -25,7 +25,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * `gh pr list` in it. So two declarations came out and one went in, and each of
  * those three is a decision worth its paragraph.
  *
- * ## Two capabilities, and the two that left
+ * ## Three capabilities, one of them new, and the two that left
  *
  * - `selection:set`, which is the one write on this list and is a shared one.
  *   The protocol spells it out and the wording matters: "every module on the
@@ -38,12 +38,27 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   Nothing about it changed with the data source, deliberately: a ref is still
  *   the string `gh#105`, spelled in one function in `tracker/gh.ts`, and other
  *   modules go on recognising it.
- * - `state:keep`, which is how the filter and the order survive a reload. The
+ * - `filters:set`, which is the newest and the one worth a paragraph of its own.
+ *   The kind and the state filters are no longer drawn in this app's own bar;
+ *   they are offered as `roadmap.filters` and drawn in the container's header
+ *   beside every other module's, which is what the owner asked for twice and is
+ *   how the rest of this family already behaves. Offering costs no capability —
+ *   an offer is fire and forget — but two things this page promises need it to
+ *   be able to ASK for the choice back: `view.goto`, which answers "go to
+ *   `!1848`" by clearing whatever is hiding that row, and the `Clear` beside the
+ *   count, whose whole promise is that one press puts EVERYTHING back. Without
+ *   this declaration both calls are refused by the host and both promises become
+ *   two thirds true, which is worse than either of them being absent. It is a
+ *   REQUEST rather than a permission: the host may decline — the container is
+ *   pinned, or is not on the kehikko that is open — and `src/app.tsx` draws the
+ *   host's own sentence when it does. The argument for the whole move, and the
+ *   one thing it did not buy, are at the top of `src/live/sift.ts`.
+ * - `state:keep`, which is how the query and the order survive a reload. The
  *   host keeps one opaque string for this module and never reads it — the
  *   sentence in the protocol is "the roadmap does not read it", and the format
- *   lives entirely in `src/live/keep.ts`. It survives this rewrite untouched,
- *   because what a person filtered for is a fact about them rather than about
- *   where the rows came from.
+ *   lives entirely in `src/live/keep.ts`. It used to carry the kind and the
+ *   state as well, and no longer does: the host holds those per container now,
+ *   so a copy here would be a second memory of one setting.
  *
  * `live:read` came out because nothing calls it any more. There is no
  * `live.get` anywhere in this program: the rows come from a subprocess this
@@ -151,14 +166,22 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
 export const ID = 'roadmap.references'
 
 /**
- * Two, because the data source moved.
+ * Two, because the data source moved; and then a minor, because the filter did.
  *
  * A version is for whoever is reading two copies of this program and wondering
  * why they disagree, and "the rows come from somewhere else now" is the largest
- * possible answer to that. The page, the refs and the selection are unchanged;
- * everything behind them is not.
+ * possible answer to that. The page, the refs and the selection were unchanged
+ * by it; everything behind them was not.
+ *
+ * `2.1.0` is the kind and state filters moving into the container header, which
+ * is a change a person SEES — two controls are not where they were — without
+ * anything this module answers or asks for changing shape. A new capability is
+ * declared, which is why this is a minor rather than a patch, and no promise is
+ * withdrawn, which is why it is not a major. The one thing a reader of two
+ * copies has to know is that the string kept under `state:keep` went to version
+ * 2 with it and the old one is dropped whole; `src/live/keep.ts` says why.
  */
-export const VERSION = '2.0.0'
+export const VERSION = '2.1.0'
 
 /**
  * The port this app would rather have.
@@ -235,7 +258,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   modes: [{ id: 'references', label: 'References', scope: 'epic' }],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['selection:set', 'state:keep'],
+    uses: ['selection:set', 'filters:set', 'state:keep'],
     storage: true,
   },
 })

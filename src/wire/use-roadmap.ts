@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ask, type Fetcher } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
+import { filterChoiceSchema, type FilterChoice, type FilterGroup } from 'roadmap-module-protocol'
 import {
   HostRefused,
   connect,
@@ -54,6 +55,18 @@ import {
  * It is not a spinner. It says what it is waiting for.
  */
 const GREETING_GRACE_MS = 700
+
+/**
+ * What came of asking the host to move this container's filters.
+ *
+ * Two branches and not a boolean, because both halves are read. On success the
+ * caller compares the SETTLED choice against the row it is trying to walk
+ * somebody to; on a refusal it puts the host's own sentence on screen, which is
+ * the only sentence anybody can act on — "the container is pinned" and "the
+ * container is not on the kehikko that is open" send a person to two different
+ * places, and neither is a thing this module could work out for itself.
+ */
+export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: string }
 
 export interface Roadmap {
   sight: Sight
@@ -122,6 +135,56 @@ export interface Roadmap {
    */
   selectionRefused: Refusal | null
   /**
+   * Which of the options this module offered are chosen for THIS container.
+   *
+   * `{}` before any host has said anything, and `{}` from a host that has never
+   * heard of filters — the true answer in both cases, which is that nothing is
+   * narrowed. `live/sift.ts` reads it, and reads it leniently, because the
+   * greeting carries a remembered choice before this page has said what it
+   * offers.
+   *
+   * Compared key by key before it is written. The host builds a fresh record on
+   * every context whatever happened, and a new identity here would re-narrow the
+   * whole list on every context — which arrives after every click on the canvas,
+   * including ours.
+   */
+  chosen: FilterChoice
+  /**
+   * Say what this page can be narrowed by, so the host can draw the control.
+   *
+   * Fire and forget, like `resize`: the host may draw it, may draw part of it,
+   * or may never have heard of the idea. What comes back is not an answer but a
+   * `roadmap.context` with `filters` in it, which is where `chosen` above comes
+   * from — including the first time, out of the greeting.
+   *
+   * Sent unconditionally. A page with no host posts into nothing, which costs
+   * nothing, and a page that checked first would have to know whether the
+   * greeting had arrived — which is exactly the race the client's own replay of
+   * the last offer exists to end.
+   */
+  offerFilters: (groups: FilterGroup[]) => void
+  /**
+   * Ask the host to move this container's filters, and find out what it did.
+   *
+   * The counterpart of the offer, and the message that made moving these two
+   * groups into the header possible at all — the essay at the top of
+   * `live/sift.ts` is the whole story. `{}` is the meaningful empty value and is
+   * exactly "clear the narrowing".
+   *
+   * Unlike `select`, this is awaited, and the two are asymmetric on purpose. A
+   * refused `selection.set` has a visible symptom and gets a sentence beside the
+   * list afterwards. A `filters.set` is asked in the middle of doing something
+   * else — answering a `goto`, clearing everything with one press — and the
+   * caller has to know what happened before it can decide what to say. So the
+   * answer comes back as a value rather than as a side effect.
+   *
+   * What comes back is what the host SETTLED on rather than what was asked for:
+   * a group on its resting option is not written down, and a group this module
+   * is no longer offering is dropped. A caller that assumed otherwise would draw
+   * one thing and be told another on the next context.
+   */
+  setFilters: (filters: FilterChoice) => Promise<Settled>
+  /**
    * Whatever this module last asked the host to keep, exactly as it was written.
    *
    * Three values again, and again the third is doing real work: a string is what
@@ -156,6 +219,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
   const [busy, setBusy] = useState(false)
   const [selection, setSelection] = useState<string[]>([])
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
+  const [chosen, setChosen] = useState<FilterChoice>({})
   const [kept, setKept] = useState<string | null | undefined>(undefined)
   const host = useRef<Connection | null>(null)
 
@@ -263,7 +327,12 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
      * dark actually gets it — see the media query in `index.css`.
      */
     const arrived = (
-      context: { projectPath?: string | null; theme: 'light' | 'dark'; selection: string[] },
+      context: {
+        projectPath?: string | null
+        theme: 'light' | 'dark'
+        selection: string[]
+        filters?: FilterChoice
+      },
       /**
        * Whether this was a greeting rather than a later context, which decides
        * whether the tracker is read again.
@@ -317,6 +386,20 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
        * that collision is the expected case rather than a contrived one.
        */
       setSelection(context.selection)
+
+      /*
+       * And the choice the host is holding for this container, taken from every
+       * context for the same reason: it is a fact about the container that this
+       * page draws rather than owns, and the greeting carries it before this
+       * page has offered anything.
+       *
+       * Compared key by key before it is written. The host builds a fresh record
+       * on every context whatever happened, and a fresh identity here would
+       * re-narrow and re-order the whole list on every click anybody makes on
+       * the canvas — including every one of ours, because the host sends a
+       * context back after each `selection.set`.
+       */
+      setChosen((was) => (agrees(was, context.filters ?? {}) ? was : (context.filters ?? {})))
 
       /* Read once, defensively, and treated as absent unless it is a non-empty
          string. The protocol says the host vouches for it being absolute; this
@@ -391,6 +474,44 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
 
   const resize = useCallback((height: number) => host.current?.resize(height), [])
 
+  /* Sent whether or not anybody is listening. See `offerFilters` on `Roadmap`. */
+  const offerFilters = useCallback((groups: FilterGroup[]) => host.current?.filters(groups), [])
+
+  /**
+   * Ask, then read the answer rather than assuming it.
+   *
+   * Three things are answered here and each is a real state:
+   *
+   * - **No host.** Standalone, nothing is held for us, so `{}` is not a
+   *   consolation prize — it is the truth about what this container is narrowed
+   *   by, and the caller's next step (put the row on screen) is correct.
+   * - **A refusal.** The host said no and said why; the sentence is handed back
+   *   whole. `HostRefused` is what `request` rejects with, always, and anything
+   *   else coming out of that promise is this page failing rather than the host
+   *   declining — so it gets its own sentence rather than being reported as the
+   *   roadmap's answer.
+   * - **A success.** Parsed, because `request` resolves `unknown` by design:
+   *   the protocol is explicit that a client asserting a shape here would be
+   *   asserting something no host promised. An answer that does not carry a
+   *   readable choice is treated as a refusal, because a caller that believed it
+   *   would go on to claim it had cleared something it knows nothing about.
+   */
+  const setFilters = useCallback(async (filters: FilterChoice): Promise<Settled> => {
+    const current = host.current
+    if (!current) return { ok: true, filters: {} }
+    try {
+      const answer = await current.request('filters.set', { filters })
+      const held = filterChoiceSchema.safeParse((answer as { filters?: unknown } | null)?.filters)
+      if (!held.success) {
+        return { ok: false, why: 'The roadmap answered that request in a shape this app could not read.' }
+      }
+      return { ok: true, filters: held.data }
+    } catch (error) {
+      if (error instanceof HostRefused) return { ok: false, why: error.refusal.error }
+      return { ok: false, why: 'This app failed while reading the roadmap’s answer.' }
+    }
+  }, [])
+
   /**
    * Ask the host to make this the selection, and say nothing about it here.
    *
@@ -452,7 +573,48 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
   }, [])
 
   return useMemo(
-    () => ({ sight, busy, read, resize, selection, select, selectionRefused, kept, keep }),
-    [sight, busy, read, resize, selection, select, selectionRefused, kept, keep],
+    () => ({
+      sight,
+      busy,
+      read,
+      resize,
+      selection,
+      select,
+      selectionRefused,
+      chosen,
+      offerFilters,
+      setFilters,
+      kept,
+      keep,
+    }),
+    [
+      sight,
+      busy,
+      read,
+      resize,
+      selection,
+      select,
+      selectionRefused,
+      chosen,
+      offerFilters,
+      setFilters,
+      kept,
+      keep,
+    ],
   )
+}
+
+/**
+ * Whether two choices say the same thing, key by key.
+ *
+ * Written here rather than reached for from a library because it is three lines
+ * and because what it is for is specific: the host rebuilds this record on every
+ * context, so identity is worthless and only the contents mean anything. A
+ * `JSON.stringify` comparison would have depended on key order, which nothing
+ * promises.
+ */
+function agrees(one: FilterChoice, other: FilterChoice): boolean {
+  const mine = Object.keys(one)
+  const theirs = Object.keys(other)
+  return mine.length === theirs.length && mine.every((key) => one[key] === other[key])
 }

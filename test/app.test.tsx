@@ -58,12 +58,17 @@ function stubRoadmap() {
 
   return {
     said,
-    greet: (projectPath: string | null, kept: string | null = null, selection: string[] = []) =>
+    greet: (
+      projectPath: string | null,
+      kept: string | null = null,
+      selection: string[] = [],
+      filters: Record<string, string> = {},
+    ) =>
       post({
         type: MESSAGE.HELLO,
         protocol: PROTOCOL,
         session: 'test-1',
-        context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection },
+        context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection, filters },
         state: kept,
       }),
     /**
@@ -72,7 +77,12 @@ function stubRoadmap() {
      * string travels in the greeting only, because context is broadcast to every
      * framed module and this belongs to one of them.
      */
-    context: (projectPath: string | null, selection: string[] = [], epic = 'an-epic') =>
+    context: (
+      projectPath: string | null,
+      selection: string[] = [],
+      epic = 'an-epic',
+      filters: Record<string, string> = {},
+    ) =>
       post({
         type: MESSAGE.CONTEXT,
         protocol: PROTOCOL,
@@ -81,8 +91,32 @@ function stubRoadmap() {
         projectPath,
         theme: 'light',
         selection,
+        filters,
       }),
     goto: (ref: string) => post({ type: MESSAGE.GOTO, id: 'walk-1', ref }),
+    /**
+     * Answer the most recent request of one method, the way a host does.
+     *
+     * Needed the moment a page started AWAITING an answer rather than firing and
+     * forgetting: `filters.set` is a request whose result the page reads, so a
+     * stand-in host that never answered would leave every `Clear` and every
+     * `goto` over a narrowed list waiting for a timeout. The two shapes are the
+     * two the protocol has — a `data` payload, or a reason and a sentence.
+     */
+    answer: (method: string, outcome: { ok: true; data: unknown } | { ok: false; error: string }) => {
+      const asked = said.findLast(
+        (message) => message.type === MESSAGE.REQUEST && message.method === method,
+      ) as { id: string } | undefined
+      if (!asked) throw new Error(`nothing asked ${method}`)
+      post(
+        outcome.ok
+          ? { type: MESSAGE.RESPONSE, id: asked.id, ok: true, data: outcome.data }
+          : { type: MESSAGE.RESPONSE, id: asked.id, ok: false, reason: 'failed', error: outcome.error },
+      )
+    },
+    /** The last groups this page offered to be narrowed by. */
+    offered: () =>
+      (said.findLast((message) => message.type === MESSAGE.FILTERS) as { groups?: unknown[] } | undefined)?.groups,
     asked: () => said.filter((message) => message.type === MESSAGE.REQUEST).map((message) => message.method),
     /** Every call of one method, in order, with the params it carried. */
     calls: (method: string) =>
@@ -486,10 +520,20 @@ describe('remembering the filter and the order', () => {
   }
 
   test('what the greeting kept is on screen before anything else happens', async () => {
-    await shown('{"v":1,"q":"","k":"issue","s":"closed","o":"ref"}')
-    /* Two of the eight are closed. The count is the assertion because it is the
-       thing that proves the filter was applied rather than merely stored. */
-    expect(document.body.textContent).toContain('2 of 8 shown')
+    await shown('{"v":2,"q":"number 3","o":"ref"}')
+    /* One of the eight has `number 3` in its title. The count is the assertion
+       because it is the thing that proves the query was applied rather than
+       merely stored. */
+    expect(document.body.textContent).toContain('1 of 8 shown')
+  })
+
+  test('a string from before the filters moved is dropped whole rather than half-applied', async () => {
+    /* Version 1 held a kind and a state this page no longer applies — the host
+       holds those per container now. Reading it in part would restore the query
+       and the order and silently drop the rest, which is a page in a state
+       nobody chose. It opens in its defaults instead. */
+    await shown('{"v":1,"q":"number 3","k":"issue","s":"closed","o":"ref"}')
+    expect(document.body.textContent).toContain('8 references')
   })
 
   test('a host keeping nothing leaves the page in its defaults, which is a state it is correct in', async () => {
@@ -527,11 +571,93 @@ describe('remembering the filter and the order', () => {
   })
 })
 
-describe('being walked to a reference', () => {
-  const listed = async (count: number) => {
+/**
+ * The two thirds of the filter that the container's header draws.
+ *
+ * `kind` and `state` are offered as `roadmap.filters`, the choice comes back in
+ * `context.filters`, and the page asks for it back with `filters.set` when
+ * somebody presses `Clear` or a host walks it to a reference. The essay is at
+ * the top of `live/sift.ts`; these are the four things that would break quietly.
+ */
+describe('the filters the header holds', () => {
+  const listed = async (count: number, filters: Record<string, string> = {}) => {
     const roadmap = stubRoadmap()
     render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
+    act(() => roadmap.greet(PROJECT, null, [], filters))
+    await settle()
+    return roadmap
+  }
+
+  test('nothing is offered before there is a reading, and then the counts are in the labels', async () => {
+    const roadmap = stubRoadmap()
+    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    /* An empty offer is a CLAIM the host acts on by pruning this container's
+       stored choice. Making it before a reading has arrived erases the
+       remembered filter on every load, which is a bug that looks like the
+       feature working perfectly and then forgetting. */
+    expect(roadmap.offered()).toBeUndefined()
+
     act(() => roadmap.greet(PROJECT))
+    await settle()
+
+    const groups = roadmap.offered() as { id: string; options: { id: string; label: string }[] }[]
+    expect(groups.map((group) => group.id)).toEqual(['kind', 'state'])
+    /* Eight issues, two of them closed. The number is in the words because the
+       protocol has no count field — see `filterOptionSchema`. */
+    expect(groups[0]?.options.map((option) => option.label)).toEqual(['All 8', 'Issues 8'])
+    expect(groups[1]?.options.map((option) => option.label)).toEqual(['Any 8', 'Open 6', 'Closed 2'])
+    /* And nothing nobody can press: `Changes 0` and `Merged 0` would be menu
+       entries whose only outcome is an empty list. */
+    expect(JSON.stringify(groups)).not.toContain(' 0')
+  })
+
+  test('a choice in the greeting narrows the list before anything else happens', async () => {
+    await listed(8, { state: 'closed' })
+    expect(document.body.textContent).toContain('2 of 8 shown')
+  })
+
+  test('Clear asks for the container’s filters back AND clears the query', async () => {
+    const roadmap = await listed(8, { state: 'closed' })
+    fireEvent.change(document.querySelector('input') as HTMLInputElement, { target: { value: 'number 4' } })
+    await settle()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await settle()
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: {} }])
+
+    /* The host settles, says so, and sends the context that actually clears the
+       header's half. The page's half — the query — went the moment it was
+       pressed, which is why one press is one promise. */
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: {} } }))
+    act(() => roadmap.context(PROJECT))
+    await settle()
+    expect(document.body.textContent).toContain('8 references')
+    expect((document.querySelector('input') as HTMLInputElement).value).toBe('')
+  })
+
+  test('a host that declines is quoted, rather than the button quietly doing two thirds of it', async () => {
+    const roadmap = await listed(8, { state: 'closed' })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await settle()
+    act(() =>
+      roadmap.answer('filters.set', {
+        ok: false,
+        error: 'roadmap.references is pinned, so it would not be told about the change it is asking for.',
+      }),
+    )
+    await settle()
+    /* The symptom without this sentence is a `Clear` that empties the query box
+       and leaves the list exactly as short as it was. */
+    expect(document.body.textContent).toContain('is pinned')
+    expect(document.body.textContent).toContain('2 of 8 shown')
+  })
+})
+
+describe('being walked to a reference', () => {
+  const listed = async (count: number, filters: Record<string, string> = {}) => {
+    const roadmap = stubRoadmap()
+    render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
+    act(() => roadmap.greet(PROJECT, null, [], filters))
     await settle()
     return roadmap
   }
@@ -552,5 +678,55 @@ describe('being walked to a reference', () => {
     const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ found: false })
     expect(String(went?.why)).toContain('gh#999')
+  })
+
+  test('a row the header is hiding is asked for, and answered found once the host has settled', async () => {
+    /* `gh#7` is open; the container is narrowed to closed, so the row exists and
+       is not drawn. This is the case the whole move had to not break: a module
+       that could not clear a host-held filter would have to answer `found: true`
+       about a row nobody can see, or refuse a reference it is looking at. */
+    const roadmap = await listed(20, { state: 'closed' })
+    act(() => roadmap.goto('gh#7'))
+    await settle()
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: {} }])
+    /* Nothing is answered yet: the walk is not over until it is known whether
+       the host did it. */
+    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toBeUndefined()
+
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: {} } }))
+    await settle()
+    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
+  })
+
+  test('a host that declines the filter gets the honest refusal, not a walk to an invisible row', async () => {
+    const roadmap = await listed(20, { state: 'closed' })
+    act(() => roadmap.goto('gh#7'))
+    await settle()
+    act(() =>
+      roadmap.answer('filters.set', {
+        ok: false,
+        error: 'roadmap.references is not on the kehikko that is open, so it has no filters here to move.',
+      }),
+    )
+    await settle()
+    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    expect(went).toMatchObject({ found: false })
+    expect(String(went?.why)).toContain('gh#7')
+    expect(String(went?.why)).toContain('not on the kehikko that is open')
+  })
+
+  test('a host that settles on something that still hides the row does not get a found either', async () => {
+    /* What comes back is what the host SETTLED on, which is deliberately not
+       what was asked for. A page that assumed otherwise would draw one thing and
+       be told another on the next context — so the settled choice is put back
+       through the same narrowing the list uses, against the actual row. */
+    const roadmap = await listed(20, { state: 'closed' })
+    act(() => roadmap.goto('gh#7'))
+    await settle()
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { state: 'closed' } } }))
+    await settle()
+    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    expect(went).toMatchObject({ found: false })
+    expect(String(went?.why)).toContain('still hiding it')
   })
 })
