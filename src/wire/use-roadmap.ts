@@ -164,6 +164,23 @@ export interface Roadmap {
    */
   offerFilters: (groups: FilterGroup[]) => void
   /**
+   * Say that this page can read its tracker again, and when it last did.
+   *
+   * Fire and forget like the filter offer, and remembered by the client so that
+   * a frame which reloads is not left with the host drawing a "last read" time
+   * from a conversation that no longer exists.
+   *
+   * `at` is this module's fact about its own data and the host never guesses
+   * one, which is the whole reason the message exists. This app is the case that
+   * proves it: a reading can come out of the cache beside the project minutes or
+   * hours after it was taken, and a failed read leaves the previous reading on
+   * screen with its own older timestamp. A host dating the list from the moment
+   * it asked would be wrong in both, silently, in the one place this page is
+   * most careful to be honest — see the caching essay in `tracker/cache.ts`, and
+   * the three sentences the header used to draw.
+   */
+  refreshable: (state: { can?: boolean; at?: string | null; busy?: boolean }) => void
+  /**
    * Ask the host to move this container's filters, and find out what it did.
    *
    * The counterpart of the offer, and the message that made moving these two
@@ -450,6 +467,24 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       onHello: (context, state) => arrived(context, true, state),
       onContext: (context) => arrived(context, false, null),
       onGoto: (message, answer) => goto.current(message, answer),
+      /**
+       * The host's refresh control, or the interval somebody set for this
+       * container. Both arrive here and neither says which it was.
+       *
+       * `read(true)` — the same thing the deliberate Refresh in this app's own
+       * header used to do, which is the only honest reading of the request. The
+       * protocol is explicit that a module must not be told whether a tick was
+       * automatic, precisely so that it cannot take the cache on one and not on
+       * the other; and taking the cache on either would make this control a
+       * button that sometimes does nothing, which is the failure the whole
+       * caching essay in `tracker/cache.ts` is arranged around. Somebody asking
+       * for a fresh reading gets one.
+       *
+       * Handled here rather than passed in like `onGoto`, because everything it
+       * needs is already in this file: `read` is defined above, and the decision
+       * about WHEN a read happens has always lived here rather than in the view.
+       */
+      onRefresh: () => read(true),
     })
     host.current = live
     live.listen()
@@ -476,6 +511,13 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
 
   /* Sent whether or not anybody is listening. See `offerFilters` on `Roadmap`. */
   const offerFilters = useCallback((groups: FilterGroup[]) => host.current?.filters(groups), [])
+
+  /* And the same, for the state that makes the host's refresh control possible.
+     Silent standalone, where there is nobody to draw one. */
+  const refreshable = useCallback(
+    (state: { can?: boolean; at?: string | null; busy?: boolean }) => host.current?.refreshable(state),
+    [],
+  )
 
   /**
    * Ask, then read the answer rather than assuming it.
@@ -583,6 +625,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       selectionRefused,
       chosen,
       offerFilters,
+      refreshable,
       setFilters,
       kept,
       keep,
@@ -597,6 +640,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       selectionRefused,
       chosen,
       offerFilters,
+      refreshable,
       setFilters,
       kept,
       keep,

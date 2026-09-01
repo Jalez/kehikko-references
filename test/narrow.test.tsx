@@ -2,9 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
-import { EVERYTHING } from '@/live/sift.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
-import { Toolbar } from '@/view/toolbar.tsx'
+import { Heading } from '@/view/heading.tsx'
+
+const PROJECT = '/Users/somebody/Projects/roadmap'
 
 /**
  * What a narrow container is allowed to take away, and what it is not.
@@ -147,60 +148,86 @@ describe('what a narrow container hides is still reachable', () => {
   })
 })
 
-describe('the filter bar in a column narrower than it is', () => {
-  test('the kind and the state are not drawn here any more, because the header draws them', () => {
-    /* The move, asserted from this side. Seven buttons used to live in this bar
-       and the whole of its layout argument was about fitting them into 220
-       pixels; they are offered to the host now and drawn in the container's own
-       header. A copy left behind would be two controls for one setting, one of
-       which the reader could press without the other ever hearing about it. */
-    render(
-      <Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={1} total={24} />,
-    )
-    for (const label of ['All', 'Issues', 'Changes', 'Any', 'Open', 'Merged', 'Closed']) {
-      expect(screen.queryByRole('button', { name: label })).toBeNull()
-    }
-    /* And what stayed: the query, the order and the count. */
-    expect(screen.getByLabelText('Filter references')).toBeDefined()
-    expect(screen.getByRole('button', { name: /Order the list/ })).toBeDefined()
-  })
-
-  test('no part of the bar may overflow instead of wrapping', () => {
-    /* Six pixels of a button past the right edge gave the whole page a sideways
-       scrollbar, and the fix is that every flex line in here is allowed to
-       break. Fewer things wrap now than did, and the rule is the same one. */
-    const { container } = render(
-      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
-    )
-    const bar = container.querySelector('[data-toolbar]')!
-    expect(bar.className).toContain('flex-wrap')
-  })
-
-  test('the count names both numbers whatever the width, because a short list and a filtered one look the same', () => {
-    const { rerender } = render(
-      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
-    )
+/**
+ * The heading that replaced two rows of chrome.
+ *
+ * Everything the toolbar drew is somewhere else — the filters and the query in
+ * the container's own header, the refresh and the freshness line as
+ * `roadmap.refreshable`, the order on the columns it orders — except the count,
+ * which could not move because the host cannot count rows it does not render.
+ *
+ * So what is worth holding here is what the old bar's tests held, translated:
+ * that the count always names both numbers, that nothing overflows instead of
+ * wrapping, and that every ORDER stays reachable even at widths where its
+ * column is not drawn.
+ */
+describe('the table’s heading, at every width', () => {
+  test('the count is always drawn, and always names both numbers', () => {
+    /* A filtered list looks exactly like a short list. This is the sentence
+       that tells them apart, and it is the one thing on this surface a host
+       could not have drawn. */
+    const { rerender } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
     expect(screen.getByText('24 references')).toBeDefined()
-    rerender(
-      <Toolbar sifting={{ ...EVERYTHING, kind: 'issue' }} onQuery={() => {}} onClear={() => {}} ordering="moved" onOrder={() => {}} showing={7} total={24} />,
-    )
+    rerender(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
     expect(screen.getByText('7 of 24 shown')).toBeDefined()
+    /* And the short form for a narrow container, which is a shortening rather
+       than a dropping: `7/24` is still both numbers. */
+    expect(screen.getByText('7/24')).toBeDefined()
   })
 
-  test('Clear is offered for what the HOST is hiding, not only for what was typed here', () => {
-    /* The failure this guards: a reader looking at four rows of twenty-four,
-       with the reason in a header they have not looked at, and no button on the
-       list to put it back. `narrowing` is asked about the composed setting for
-       exactly this reason. */
-    const pressed: string[] = []
-    const { rerender } = render(
-      <Toolbar sifting={EVERYTHING} onQuery={() => {}} onClear={() => pressed.push('clear')} ordering="moved" onOrder={() => {}} showing={24} total={24} />,
-    )
-    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull()
-    rerender(
-      <Toolbar sifting={{ ...EVERYTHING, state: 'closed' }} onQuery={() => {}} onClear={() => pressed.push('clear')} ordering="moved" onOrder={() => {}} showing={4} total={24} />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(pressed).toEqual(['clear'])
+  test('the whole of it is on the element’s own title, path and all', () => {
+    /* The same rule every row keeps: what a narrow container takes away is
+       still on the tooltip, in the order the wide layout would have drawn it. */
+    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
+    const heading = container.querySelector('[data-heading]')!
+    expect(heading.getAttribute('title')).toContain(PROJECT)
+    expect(heading.getAttribute('title')).toContain('7 of 24 shown')
+  })
+
+  test('every order is reachable, including the two whose column a narrow row drops', () => {
+    /* The date, the labels and the people drop out of a narrow row. A sort
+       control that dropped with its column would make "oldest first"
+       unreachable in a 220-pixel container, which is most of them — so the date
+       control loses its WORD and keeps its place. */
+    const asked: string[] = []
+    render(<Heading project={PROJECT} ordering="moved" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
+    for (const control of screen.getAllByRole('button')) {
+      expect(control.className).not.toContain('hidden')
+    }
+    expect(screen.getAllByRole('button')).toHaveLength(4)
+  })
+
+  test('the date heading toggles between the two questions it answers', () => {
+    /* `moved` is "what is happening" and `stale` is "what has been sitting",
+       which are two questions rather than one read backwards. */
+    const asked: string[] = []
+    const press = (ordering: 'moved' | 'stale') => {
+      cleanup()
+      render(<Heading project={PROJECT} ordering={ordering} onOrder={(o) => asked.push(o)} showing={24} total={24} />)
+      fireEvent.click(screen.getByRole('button', { name: /oldest|newest|last moved/i }))
+    }
+    press('moved')
+    press('stale')
+    expect(asked).toEqual(['stale', 'moved'])
+  })
+
+  test('a one-direction heading sets its order and says which one is in force', () => {
+    const asked: string[] = []
+    render(<Heading project={PROJECT} ordering="ref" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
+    const ref = screen.getByRole('button', { name: /identifier/i })
+    expect(ref.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: /by state/i }))
+    expect(asked).toEqual(['state'])
+  })
+
+  test('the kind order has a control even though the kind has no column', () => {
+    /* A glyph on two rows out of twenty-four is those two rows standing out; a
+       column would be noise on all of them. So the mark stays inside the
+       identifier cell and its ORDER gets the leading cell, named in a tooltip —
+       the trade the tracker link on every row already makes. */
+    const asked: string[] = []
+    render(<Heading project={PROJECT} ordering="moved" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
+    fireEvent.click(screen.getByRole('button', { name: /by kind/i }))
+    expect(asked).toEqual(['kind'])
   })
 })

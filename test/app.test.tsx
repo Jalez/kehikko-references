@@ -114,6 +114,17 @@ function stubRoadmap() {
           : { type: MESSAGE.RESPONSE, id: asked.id, ok: false, reason: 'failed', error: outcome.error },
       )
     },
+    /**
+     * The host's refresh control, or an interval it is running. Neither says
+     * which it was — the protocol forbids it, so this stub cannot offer the
+     * distinction either.
+     */
+    refresh: () => post({ type: MESSAGE.REFRESH, protocol: PROTOCOL }),
+    /** The last thing this page said about being read again. */
+    refreshable: () =>
+      said.findLast((message) => message.type === MESSAGE.REFRESHABLE) as
+        | { can: boolean; at: string | null; busy: boolean }
+        | undefined,
     /** The last groups this page offered to be narrowed by. */
     offered: () =>
       (said.findLast((message) => message.type === MESSAGE.FILTERS) as { groups?: unknown[] } | undefined)?.groups,
@@ -228,17 +239,26 @@ describe('with a roadmap answering', () => {
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li')).toHaveLength(400)
+    /* The count is the one thing on this surface a host could not have drawn,
+       and it is now the whole of the module's own chrome. */
     expect(document.body.textContent).toContain('400 references')
-    expect(document.body.textContent).toContain('read 2026-08-27T09:12:00Z')
   })
 
-  test('a cached reading says it is the last one rather than the current one', async () => {
+  test('when the reading was taken is announced to the host, not left for it to guess', async () => {
+    /* The three sentences the old header drew — `read <when>`, `last read
+       <when>`, `this reading is not dated` — are this one field plus the host's
+       formatting. It has to come from here, because only this side knows the
+       reading came out of the cache beside the project rather than off GitHub
+       just now. */
     const door = stubDoor({ [PROJECT]: answered(3, 'cache') })
     const roadmap = stubRoadmap()
     render(<App fetcher={door.fetcher} />)
     act(() => roadmap.greet(PROJECT))
     await settle()
-    expect(document.body.textContent).toContain('last read 2026-08-27T09:12:00Z')
+    const said = roadmap.refreshable()
+    expect(said?.can).toBe(true)
+    expect(said?.busy).toBe(false)
+    expect(Date.parse(String(said?.at))).toBe(Date.parse('2026-08-27T09:12:00Z'))
   })
 
   test('a context with no project folder says so rather than drawing an empty list', async () => {
@@ -349,7 +369,12 @@ describe('when a read happens, and when it does not', () => {
     expect(door.reads()).toBe(1)
   })
 
-  test('the Refresh press is the only thing that asks for a fresh read', async () => {
+  test('the host’s refresh is the only thing that asks for a fresh read', async () => {
+    /* The button used to be in this page's own header and is the host's now.
+       What did not change is what it MEANS: `fresh=1`, past the cache, because
+       somebody asking for a fresh reading gets one. The protocol forbids
+       telling this page whether the press was a person or an interval, so
+       taking the cache on one and not the other is not available to it. */
     const door = stubDoor({ [PROJECT]: answered(3) })
     const roadmap = stubRoadmap()
     render(<App fetcher={door.fetcher} />)
@@ -357,13 +382,12 @@ describe('when a read happens, and when it does not', () => {
     await settle()
     expect(door.seen).toEqual([{ project: PROJECT, fresh: false }])
 
-    const refresh = screen.getByRole('button', { name: 'Read this project’s tracker again' })
-    act(() => refresh.click())
+    act(() => roadmap.refresh())
     await settle()
     expect(door.seen.at(-1)).toEqual({ project: PROJECT, fresh: true })
   })
 
-  test('the rows stay on screen while a refresh is in flight, and the header says what it is doing', async () => {
+  test('the rows stay on screen while a refresh is in flight, and the host is told it is reading', async () => {
     /* The container has to be usable during a network call. A list that blanks for
        three seconds is a list that looks broken, and this is the assertion that
        keeps `busy` from being folded back into `Sight`. */
@@ -381,14 +405,18 @@ describe('when a read happens, and when it does not', () => {
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
 
-    act(() => screen.getByRole('button', { name: 'Read this project’s tracker again' }).click())
+    act(() => roadmap.refresh())
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
-    expect(document.body.textContent).toContain('reading GitHub…')
+    /* `busy` is what the host spins its own icon on and disables its own button
+       with. This page is the only side that knows a read is in flight — the
+       host posted a message into a frame and has no idea what happened next. */
+    expect(roadmap.refreshable()?.busy).toBe(true)
 
     act(() => release?.())
     await settle()
-    expect(document.body.textContent).not.toContain('reading GitHub…')
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
+    expect(roadmap.refreshable()?.busy).toBe(false)
   })
 
   test('nothing is read on a timer, so an unwatched container spends no rate limit', async () => {
@@ -509,7 +537,7 @@ describe('picking references out', () => {
   })
 })
 
-describe('remembering the filter and the order', () => {
+describe('remembering the order, which is all this module keeps for itself', () => {
   const shown = async (kept: string | null, rows = 8) => {
     const door = stubDoor({ [PROJECT]: answered(rows) })
     const roadmap = stubRoadmap()
@@ -519,43 +547,49 @@ describe('remembering the filter and the order', () => {
     return roadmap
   }
 
+  /** Which column heading is currently carrying the sort. */
+  const sortedBy = () =>
+    [...document.querySelectorAll('[data-heading] button[aria-pressed="true"]')].map((one) =>
+      one.getAttribute('aria-label'),
+    )
+
   test('what the greeting kept is on screen before anything else happens', async () => {
-    await shown('{"v":2,"q":"number 3","o":"ref"}')
-    /* One of the eight has `number 3` in its title. The count is the assertion
-       because it is the thing that proves the query was applied rather than
-       merely stored. */
-    expect(document.body.textContent).toContain('1 of 8 shown')
+    await shown('{"v":3,"o":"ref"}')
+    /* The identifier heading carries the sort, which is the thing that proves
+       the order was applied rather than merely stored. */
+    expect(sortedBy().join(' ')).toContain('identifier')
   })
 
-  test('a string from before the filters moved is dropped whole rather than half-applied', async () => {
-    /* Version 1 held a kind and a state this page no longer applies — the host
-       holds those per container now. Reading it in part would restore the query
-       and the order and silently drop the rest, which is a page in a state
-       nobody chose. It opens in its defaults instead. */
+  test('every shape written before the filters moved is dropped whole rather than half-applied', async () => {
+    /* Version 1 held a kind, a state and a query; version 2 held a query. The
+       host holds all three per container now, and reading either string in part
+       would restore an order and silently drop a filter somebody set. Both open
+       in the defaults instead, and `moved` is the default. */
     await shown('{"v":1,"q":"number 3","k":"issue","s":"closed","o":"ref"}')
-    expect(document.body.textContent).toContain('8 references')
+    expect(sortedBy().join(' ')).toContain('last moved')
+    cleanup()
+    await shown('{"v":2,"q":"number 3","o":"ref"}')
+    expect(sortedBy().join(' ')).toContain('last moved')
   })
 
   test('a host keeping nothing leaves the page in its defaults, which is a state it is correct in', async () => {
     await shown(null)
     expect(document.body.textContent).toContain('8 references')
+    expect(sortedBy().join(' ')).toContain('last moved')
   })
 
-  test('a change to the filter is handed to the host to keep, once it settles', async () => {
+  test('a change to the order is handed to the host to keep, once it settles', async () => {
     const roadmap = await shown(null)
-    const input = document.querySelector('input') as HTMLInputElement
-    /* `fireEvent` rather than setting `.value` and dispatching by hand: React
-       keeps a tracker on the node and an assignment updates it too, so the
-       hand-rolled version fires an event React decides is a no-op. */
-    fireEvent.change(input, { target: { value: 'number 3' } })
-    /* Nothing yet — a write per keystroke is thirteen records of a filter
-       nobody had. */
+    fireEvent.click(screen.getByRole('button', { name: /identifier/i }))
+    /* Nothing yet. The delay was chosen for a query that changed on every
+       keystroke and is kept for a smaller reason: two orders tried in a row
+       should be one write, and nothing is waiting on it. */
     expect(roadmap.calls('state.set')).toHaveLength(0)
     await act(async () => {
       await new Promise((done) => setTimeout(done, 500))
     })
     const written = roadmap.calls('state.set').at(-1) as { state: string }
-    expect(JSON.parse(written.state).q).toBe('number 3')
+    expect(JSON.parse(written.state)).toEqual({ v: 3, o: 'ref' })
   })
 
   test('nothing is written before the greeting has been read, or the memory erases itself', async () => {
@@ -600,8 +634,12 @@ describe('the filters the header holds', () => {
     act(() => roadmap.greet(PROJECT))
     await settle()
 
-    const groups = roadmap.offered() as { id: string; options: { id: string; label: string }[] }[]
-    expect(groups.map((group) => group.id)).toEqual(['kind', 'state'])
+    const groups = roadmap.offered() as {
+      id: string
+      kind?: string
+      options: { id: string; label: string }[]
+    }[]
+    expect(groups.map((group) => group.id)).toEqual(['kind', 'state', 'search'])
     /* Eight issues, two of them closed. The number is in the words because the
        protocol has no count field — see `filterOptionSchema`. */
     expect(groups[0]?.options.map((option) => option.label)).toEqual(['All 8', 'Issues 8'])
@@ -609,6 +647,9 @@ describe('the filters the header holds', () => {
     /* And nothing nobody can press: `Changes 0` and `Merged 0` would be menu
        entries whose only outcome is an empty list. */
     expect(JSON.stringify(groups)).not.toContain(' 0')
+    /* The third group is the typed query, which is why this module draws no
+       chrome of its own any more. */
+    expect(groups[2]?.kind).toBe('text')
   })
 
   test('a choice in the greeting narrows the list before anything else happens', async () => {
@@ -616,28 +657,28 @@ describe('the filters the header holds', () => {
     expect(document.body.textContent).toContain('2 of 8 shown')
   })
 
-  test('Clear asks for the container’s filters back AND clears the query', async () => {
-    const roadmap = await listed(8, { state: 'closed' })
-    fireEvent.change(document.querySelector('input') as HTMLInputElement, { target: { value: 'number 4' } })
-    await settle()
+  test('a narrowing that matches nothing offers one press that puts ALL of it back', async () => {
+    /* The last affordance in this module that undoes a filter, and it reaches
+       every group including the typed query — `{}` is a whole choice, and an
+       empty string is how a text group says it is at rest. The Clear beside the
+       count is gone with the toolbar; the host's own "Show everything" is the
+       other way to the same call. */
+    const roadmap = await listed(8, { state: 'closed', search: 'nothing matches this' })
+    expect(document.body.textContent).toContain('Nothing here matches what you asked for')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
     expect(roadmap.calls('filters.set')).toEqual([{ filters: {} }])
 
-    /* The host settles, says so, and sends the context that actually clears the
-       header's half. The page's half — the query — went the moment it was
-       pressed, which is why one press is one promise. */
     act(() => roadmap.answer('filters.set', { ok: true, data: { filters: {} } }))
     act(() => roadmap.context(PROJECT))
     await settle()
     expect(document.body.textContent).toContain('8 references')
-    expect((document.querySelector('input') as HTMLInputElement).value).toBe('')
   })
 
-  test('a host that declines is quoted, rather than the button quietly doing two thirds of it', async () => {
-    const roadmap = await listed(8, { state: 'closed' })
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+  test('a host that declines is quoted, rather than the press quietly doing nothing', async () => {
+    const roadmap = await listed(8, { state: 'closed', search: 'nothing matches this' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
     act(() =>
       roadmap.answer('filters.set', {
@@ -646,10 +687,9 @@ describe('the filters the header holds', () => {
       }),
     )
     await settle()
-    /* The symptom without this sentence is a `Clear` that empties the query box
-       and leaves the list exactly as short as it was. */
+    /* The symptom without this sentence is a press that changes nothing at all,
+       which reads as a broken button rather than as a host saying no. */
     expect(document.body.textContent).toContain('is pinned')
-    expect(document.body.textContent).toContain('2 of 8 shown')
   })
 })
 

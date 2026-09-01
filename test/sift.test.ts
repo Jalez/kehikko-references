@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { filterGroupSchema } from 'roadmap-module-protocol'
+import { LIMITS, filterGroupSchema } from 'roadmap-module-protocol'
 
 import type { Reference } from '@/live/reference.ts'
-import { EVERYTHING, hides, hostNarrowing, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
+import { EVERYTHING, hides, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
 
 /**
  * The filter, which is the only thing in this app permitted to hide a row.
@@ -90,7 +90,7 @@ describe('kind and state', () => {
   })
 })
 
-describe('what is offered to the host, which is two thirds of the above', () => {
+describe('what is offered to the host, which is all of the narrowing now', () => {
   test('nothing at all until a reading has arrived, which is not the same as nothing to offer', () => {
     /* The distinction the whole feature turns on. An empty offer is a CLAIM the
        host acts on by pruning this container's stored choice; `null` is "I have
@@ -106,7 +106,7 @@ describe('what is offered to the host, which is two thirds of the above', () => 
 
   test('the counts are in the labels, because the protocol has no count field', () => {
     const groups = offer(rows, true)!
-    expect(groups.map((group) => group.id)).toEqual(['kind', 'state'])
+    expect(groups.map((group) => group.id)).toEqual(['kind', 'state', 'search'])
     expect(groups[0]?.options).toEqual([
       { id: 'all', label: 'All 4' },
       { id: 'issue', label: 'Issues 2' },
@@ -127,9 +127,26 @@ describe('what is offered to the host, which is two thirds of the above', () => 
     const groups = offer(only, true)!
     expect(groups[0]?.options.map((option) => option.id)).toEqual(['all', 'issue'])
     expect(groups[1]?.options.map((option) => option.id)).toEqual(['all', 'opened'])
-    for (const group of groups) {
+    /* The typed group is exempt, and the protocol is the reason: it has no
+       options to be missing and no fallback to fall to. Its resting state is
+       the empty string, which is spelled by being absent from the choice. */
+    for (const group of groups.filter((one) => one.kind !== 'text')) {
       expect(group.options.some((option) => option.id === group.fallback)).toBe(true)
     }
+  })
+
+  test('the third group is the query, and it says what this search looks at', () => {
+    /* The label is the input's placeholder AND its accessible name, so it has
+       to name the fields — which is the one thing no host could have written.
+       And it carries no count: the number a reader wants about a query changes
+       on every keystroke, and the count is drawn in the page instead. */
+    const search = offer(rows, true)!.find((group) => group.id === 'search')!
+    expect(search.kind).toBe('text')
+    expect(search.options).toEqual([])
+    expect(search.fallback).toBeUndefined()
+    expect(search.label).toContain('number')
+    expect(search.label).toContain('person')
+    expect(search.label.length).toBeLessThanOrEqual(LIMITS.FILTER_LABEL)
   })
 
   test('every group is one the protocol would accept, checked against its own schema', () => {
@@ -144,9 +161,11 @@ describe('what is offered to the host, which is two thirds of the above', () => 
 })
 
 describe('reading back what the host chose', () => {
-  test('a choice this app recognises is applied', () => {
-    expect(siftingOf('x', { kind: 'change', state: 'merged' })).toEqual({
-      query: 'x',
+  test('all three groups are read out of one record', () => {
+    /* The query among them, which is the change: this page holds no part of its
+       own narrowing any more. */
+    expect(siftingOf({ kind: 'change', state: 'merged', search: 'rbac jaakko' })).toEqual({
+      query: 'rbac jaakko',
       kind: 'change',
       state: 'merged',
     })
@@ -157,16 +176,23 @@ describe('reading back what the host chose', () => {
        cannot do that before the module has offered anything — the greeting goes
        first. So the first choice this page ever receives may name an option from
        a version of itself that no longer exists. */
-    expect(siftingOf('', { kind: 'epics', state: 'abandoned' })).toEqual(EVERYTHING)
-    expect(siftingOf('', {})).toEqual(EVERYTHING)
+    expect(siftingOf({ kind: 'epics', state: 'abandoned' })).toEqual(EVERYTHING)
+    expect(siftingOf({})).toEqual(EVERYTHING)
   })
 
-  test('what the host is hiding is distinguishable from what was typed here', () => {
-    /* `goto` asks the difference: with nothing host-held hiding the row there is
-       nothing to request and nothing to wait on. */
-    expect(hostNarrowing({ ...EVERYTHING, query: 'rbac' })).toBe(false)
-    expect(hostNarrowing({ ...EVERYTHING, state: 'closed' })).toBe(true)
+  test('a query longer than the protocol allows is clipped rather than dropped', () => {
+    /* A clipped query is still a query. A dropped one is a filter that silently
+       stops working the first time somebody pastes something long. */
+    const long = 'x'.repeat(LIMITS.FILTER_TEXT + 100)
+    expect(siftingOf({ search: long }).query).toHaveLength(LIMITS.FILTER_TEXT)
+  })
+
+  test('anything narrowed at all is narrowed, whichever group did it', () => {
+    /* `goto` asks this to decide whether it has to ask the host for anything at
+       all before it can honestly answer `found: true`. */
     expect(narrowing({ ...EVERYTHING, query: 'rbac' })).toBe(true)
+    expect(narrowing({ ...EVERYTHING, state: 'closed' })).toBe(true)
+    expect(narrowing(EVERYTHING)).toBe(false)
   })
 
   test('one row is asked about with the same function the list is', () => {

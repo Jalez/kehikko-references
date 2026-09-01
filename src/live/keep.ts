@@ -34,47 +34,45 @@ import { DEFAULT_ORDER, ORDER_LABELS, type Ordering } from './order.ts'
  * up, and every string written before that is dropped whole rather than being
  * half-read into the new shape.
  *
- * ## What is kept, which is now two things and used to be four
+ * ## What is kept, which is now one thing and used to be four
  *
- * The order, and the text query. The kind and the state are no longer here, and
- * their absence is the point rather than an omission: they are held by the HOST
- * now, per container, in the control it draws in the container header and sends
- * back in `context.filters`. The essay at the top of `live/sift.ts` is why they
- * moved. Keeping a copy of them in this string as well would be two memories of
- * one setting, written at different moments by different programs, and the day
- * they disagreed the page would restore one over the other for reasons nobody
- * could reconstruct.
+ * The order, and nothing else. The kind, the state and the typed query have all
+ * left, and their absence is the point rather than an omission: all three are
+ * held by the HOST now, per container, in the control it draws in the container
+ * header and sends back in `context.filters`. The essay at the top of
+ * `live/sift.ts` is the whole argument. Keeping a copy of any of them in this
+ * string as well would be two memories of one setting, written at different
+ * moments by different programs, and the day they disagreed the page would
+ * restore one over the other for reasons nobody could reconstruct.
  *
- * `VERSION` went to 2 for exactly that. A string written by the old shape names
- * a kind and a state this app no longer applies, and reading it as a partial
- * match would leave a reader's remembered filter half-restored — the query and
- * the order back, the kind and the state silently dropped. The version check
- * drops it whole instead, and the page opens in its defaults, which is a state
- * it is already correct in and which the host's own memory of the two groups
- * then narrows again on its own.
+ * The version has gone up twice for exactly that, and the second time is the
+ * instructive one. Version 2 dropped the kind and the state; version 3 drops
+ * the query. Neither read the older shape in part, and reading it in part is
+ * the failure both were avoiding — a remembered filter two thirds applied is a
+ * page in a state no code path meant to produce, and it looks exactly like a
+ * page that was working.
  *
- * The query is the arguable one to keep, because it is the strongest filter here
- * and this string is kept per MODULE rather than per epic: a phrase typed while
- * reading one epic comes back over another, where it may match nothing, and the
- * reader sees a project that looks empty. It is kept anyway, and the reason is
- * that this page already carries the two things that make that survivable and
- * carries them for exactly this failure — the count that always names both
- * numbers, and the paragraph that says the filter is hiding all of them and
- * offers to clear it. Dropping the query would be dropping the one filter people
- * most often want back, in order to avoid a situation the page already explains
- * in its own words.
+ * ## So why is this file still here at all
  *
- * Nothing about the SELECTION is kept here either, and for the same family of
- * reason as the kind and the state: it is the host's, it is a fact about the
- * canvas rather than about this module, and a copy of it in here would be a
- * second answer going stale on its own schedule.
+ * Because the ORDER is not a filter. It hides nothing, so it is not something
+ * the host draws or remembers, and something has to remember it or a person who
+ * sorted by identifier gets recency back on every reload. It is small, it is
+ * this module's own, and `state:keep` is exactly the facility for that: the
+ * host keeps one opaque string and never looks inside it.
+ *
+ * ## And what is kept where, in one place
+ *
+ * The order is here. The kind, the state and the query are the container's,
+ * stored by the host per placement. The selection is the canvas's. The
+ * auto-refresh interval is the container's too — see `roadmap.refreshable`. The
+ * only thing in this list that is a fact about the MODULE rather than about a
+ * container or a canvas is the order, which is why it is the only thing left.
  */
 
 /** The shape written today. Bumped when the fields change, never reused. */
-const VERSION = 2
+const VERSION = 3
 
 export interface Kept {
-  query: string
   ordering: Ordering
 }
 
@@ -83,18 +81,13 @@ export interface Kept {
  *
  * Short field names because the protocol bounds this at four kilobytes and, more
  * to the point, because a person reading a host's database should be able to see
- * at a glance that this is a filter and not a document. The query is clipped
- * rather than refused: a query is not an identifier, a clipped one is still a
- * query, and nobody types four thousand characters into a filter by accident —
- * but a page that could be made unable to save its settings by a paste is a page
- * with a strange bug in it.
+ * at a glance that this is a setting and not a document. Two fields now, one of
+ * which is the version, which is about as small as this facility gets used —
+ * and small is the right size for it: the moment this needed a kilobyte it
+ * would be keeping something that belongs in this app's own store.
  */
 export function writing(kept: Kept): string {
-  return JSON.stringify({
-    v: VERSION,
-    q: kept.query.slice(0, 500),
-    o: kept.ordering,
-  })
+  return JSON.stringify({ v: VERSION, o: kept.ordering })
 }
 
 /**
@@ -121,8 +114,5 @@ export function reading(state: string | null | undefined): Kept | null {
   if (held.v !== VERSION) return null
 
   const ordering = (Object.keys(ORDER_LABELS) as Ordering[]).find((value) => value === held.o) ?? DEFAULT_ORDER
-  return {
-    query: typeof held.q === 'string' ? held.q.slice(0, 500) : '',
-    ordering,
-  }
+  return { ordering }
 }

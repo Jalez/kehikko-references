@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
 
 import { ID } from '../manifest.ts'
-import { Button } from '@/components/ui/button'
 import type { Fetcher } from '@/live/ask.ts'
 import { collect, generatedAt } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
-import { hides, hostNarrowing, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
+import { hides, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
 import { useRoadmap, type GotoHandler, type Settled } from '@/wire/use-roadmap.ts'
 import {
   Asking,
@@ -17,10 +15,9 @@ import {
   NothingMatches,
   Troubled,
   Unhosted,
-  projectName,
 } from '@/view/absence.tsx'
+import { Heading } from '@/view/heading.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
-import { Toolbar } from '@/view/toolbar.tsx'
 
 /**
  * The composition, and only the composition.
@@ -44,10 +41,10 @@ const ROW_HEIGHT = 36
  * A module can ask for its full content height, and with four hundred rows that
  * is fourteen thousand pixels — a host page with a scrollbar the length of a
  * street, inside which this list has no scrollbar of its own, so the reader
- * scrolls the roadmap to read the module and loses the toolbar off the top on
- * the way. Asking for a height the list is worth reading in, and scrolling
- * inside it, keeps the filter and the count on screen while somebody works
- * through four hundred rows. The host clamps whatever we ask for regardless;
+ * scrolls the roadmap to read the module and loses the container's own header —
+ * and its filter control — off the top on the way. Asking for a height the list
+ * is worth reading in, and scrolling inside it, keeps the count and the column
+ * headings on screen while somebody works through four hundred rows. The host clamps whatever we ask for regardless;
  * this is the number we mean.
  */
 const TALLEST = 720
@@ -62,27 +59,30 @@ const TALLEST = 720
  */
 export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   /**
-   * The typed query, which is the only part of the narrowing this page still
-   * holds.
+   * The order, which is the only setting this page still holds.
    *
-   * `kind` and `state` are the host's now — offered as `roadmap.filters`, drawn
-   * in the container header, and sent back in `context.filters`. There is no
-   * local copy of them for the same reason there is no local copy of the
-   * selection: a second answer would go stale on its own schedule, and a page
-   * that drew what it asked for rather than what the host settled on would
-   * disagree with the header in exactly the cases that matter.
+   * The kind, the state and the typed query are all the host's now — offered as
+   * `roadmap.filters`, drawn in the container's own header, and sent back in
+   * `context.filters`. There is no local copy of any of them, for the same
+   * reason there is no local copy of the selection: a second answer would go
+   * stale on its own schedule, and a page that drew what it asked for rather
+   * than what the host settled on would disagree with the header in exactly the
+   * cases that matter.
+   *
+   * The order stays because it is not a filter. It hides nothing, so the host
+   * neither draws it nor remembers it, and it lives on the column headings —
+   * see `view/heading.tsx`.
    */
-  const [query, setQuery] = useState('')
   const [ordering, setOrdering] = useState<Ordering>(DEFAULT_ORDER)
   const [landedOn, setLandedOn] = useState<string | null>(null)
   /**
    * Why the last `filters.set` did not take, if it did not.
    *
    * The host may decline — the container is pinned, or is not on the kehikko
-   * that is open — and a `Clear` that then cleared only the query would be a
-   * button quietly doing two thirds of what it says. Held so that the page can
-   * say which third it could not do, in the host's own words, beside the list.
-   * Null the moment anything is asked again.
+   * that is open — and every way this page has of putting the narrowing back
+   * goes through that one call now. Held so the page can say what did not
+   * happen, in the host's own words, beside the list. Null the moment anything
+   * is asked again.
    */
   const [filterRefused, setFilterRefused] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
@@ -121,21 +121,22 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     selectionRefused,
     chosen,
     offerFilters,
+    refreshable,
     setFilters,
     kept,
     keep,
   } = useRoadmap(ID, onGoto, fetcher)
 
   /**
-   * The whole narrowing: this page's query, and the two groups the host holds.
+   * The whole narrowing, which is entirely the host's now.
    *
-   * Composed on every render rather than stored, because storing it would be the
-   * local copy of the host's choice that `chosen` exists to avoid. Everything
-   * downstream — `sift`, the count, `narrowing`, `Clear` — takes the composed
-   * value and cannot tell which half came from where, which is right: a reader
-   * looking at four rows of four hundred does not care which control did it.
+   * Read on every render rather than stored, because storing it would be the
+   * local copy `chosen` exists to avoid. Everything downstream — `sift`, the
+   * count, `narrowing`, `goto` — takes this and cannot tell one group from
+   * another, which is right: a reader looking at four rows of four hundred does
+   * not care which of the three controls did it.
    */
-  const sifting = useMemo(() => siftingOf(query, chosen), [query, chosen])
+  const sifting = useMemo(() => siftingOf(chosen), [chosen])
 
   /**
    * What this module can be narrowed by, announced whenever the words change.
@@ -161,21 +162,66 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   }, [rows, sight.at, offerFilters])
 
   /**
+   * What this page says about being read again, which is the whole of the
+   * host's refresh control.
+   *
+   * Three facts, re-announced whenever any of them changes, and the middle one
+   * is why this message exists at all.
+   *
+   * **`can`** — there is something to read. False when no project has been
+   * named, because a read needs a folder to run `gh` in, and a refresh button
+   * over a page that says "a roadmap is here and it named no project folder"
+   * is a button that cannot work. It is also false while nothing has greeted us
+   * yet, which is silent anyway.
+   *
+   * **`at`** — when this reading was taken, and NOT when the host last asked.
+   * This app is the case that proves the difference is not academic: `from` on
+   * the door's answer says whether a reading came off GitHub or out of the
+   * cache beside the project, and a cached one can be ten minutes old at the
+   * moment it arrives. A failed read over a cache is worse again — the rows
+   * stay, the reading behind them keeps its own older date, and a host that
+   * stamped the moment it asked would print a fresh time over a stale list. The
+   * three sentences the old header drew — `read <when>`, `last read <when>`,
+   * `this reading is not dated` — are exactly this field plus the host's
+   * formatting.
+   *
+   * Validated before it goes, because the protocol wants an instant and this
+   * one arrives from a subprocess's JSON. Anything unparseable is sent as
+   * `null`, which is the honest "I cannot say" — better than a message the host
+   * refuses whole, which would take the control away rather than the timestamp.
+   *
+   * **`busy`** — a read is in flight. The host disables its own button and
+   * spins its own icon on this; two reads racing is two subprocesses and one
+   * answer that wins for no reason anybody could predict, and this page is the
+   * only side that knows.
+   */
+  useEffect(() => {
+    const generated = sight.at === 'read' ? generatedAt(sight.live) : null
+    const at = generated && !Number.isNaN(Date.parse(generated)) ? new Date(generated).toISOString() : null
+    refreshable({ can: sight.at === 'read' || sight.at === 'trouble' || sight.at === 'asking', at, busy })
+  }, [sight, busy, refreshable])
+
+  /**
    * One press puts everything back — including the two thirds this page does not
    * hold.
    *
-   * The query is cleared here and the container's filters are asked to go back
-   * to their resting options, in one call, because `filters.set` takes a whole
-   * choice and `{}` is exactly "clear the narrowing". Per-group clearing would
-   * produce a context per group and a page seen part-way through its own reset.
+   * One call, because `filters.set` takes a whole choice and `{}` is exactly
+   * "clear the narrowing" — every group back to its resting option, the typed
+   * query included, since an empty string is how a text group says it is at
+   * rest. Per-group clearing would produce a context per group and a page seen
+   * part-way through its own reset.
+   *
+   * This is now the only way this page can undo anything it is showing, and
+   * that is the shape of the whole change: nothing here holds a filter, so
+   * nothing here can clear one on its own. It reaches all three where it used
+   * to reach one, which is why the promise is stronger than it was rather than
+   * weaker.
    *
    * The host may decline, and then this says so rather than pretending. That is
-   * the honest half of a request: a `Clear` that silently cleared the query and
-   * left the header narrowing the list would teach a reader that the button does
-   * not work, on the one control whose entire promise is that it does.
+   * the honest half of a request: silently doing nothing would teach a reader
+   * that the control does not work.
    */
   const clearAll = useCallback(async (): Promise<Settled> => {
-    setQuery('')
     setFilterRefused(null)
     const settled = await setFilters({})
     if (!settled.ok) setFilterRefused(settled.why)
@@ -187,11 +233,12 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    *
    * Four things happen here that are easy to get wrong and all four matter:
    *
-   * 1. **What is hiding the target is cleared, wherever it is held.** Answering
-   *    `found: true` while the row is filtered out walks the reader to a page
-   *    where their reference is invisible, which is worse than the fallback link
-   *    they would have got for `found: false`. The query is cleared here; the
-   *    kind and the state are the host's, so they are ASKED for.
+   * 1. **What is hiding the target is cleared.** Answering `found: true` while
+   *    the row is filtered out walks the reader to a page where their reference
+   *    is invisible, which is worse than the fallback link they would have got
+   *    for `found: false`. All three groups are the host's now, so all of it is
+   *    ASKED for — there is nothing left here to clear locally, which makes this
+   *    simpler than it was rather than more fragile.
    * 2. **The answer is read rather than assumed.** What comes back from
    *    `filters.set` is what the host SETTLED on, which is deliberately not what
    *    was asked for. So the settled choice is put back through the same `hides`
@@ -225,13 +272,11 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       return
     }
 
-    setQuery('')
     setLandedOn(row.ref)
 
-    /* Nothing the host is holding is hiding anything, so there is nothing to
-       ask for and nothing to wait on. The common case, and it answers in the
-       same breath it always did. */
-    if (!hostNarrowing(sifting)) {
+    /* Nothing is narrowed, so there is nothing to ask for and nothing to wait
+       on. The common case, and it answers in the same breath it always did. */
+    if (!narrowing(sifting)) {
       answer(true, '')
       return
     }
@@ -250,7 +295,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
          the list uses. A settled choice that still hides it is not a success
          with a caveat — it is a walk to an invisible row, which is the one thing
          this handler exists to refuse. */
-      if (hides(siftingOf('', settled.filters), row)) {
+      if (hides(siftingOf(settled.filters), row)) {
         answer(false, `${message.ref} is in this list, but this container’s filters are still hiding it.`)
         return
       }
@@ -291,35 +336,27 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
        those are the same thing and the line looks redundant; on a re-greeting
        they are not, and the alternative is a filter that survives the host
        explicitly saying it has forgotten one. */
-    const remembered = reading(kept) ?? { query: '', ordering: DEFAULT_ORDER }
-    setQuery(remembered.query)
+    const remembered = reading(kept) ?? { ordering: DEFAULT_ORDER }
     setOrdering(remembered.ordering)
   }, [kept])
 
   /**
-   * Write the settings back, a moment after they stop changing.
+   * Write the order back, a moment after it stops changing.
    *
-   * The delay is for the query, which changes on every keystroke: without it,
-   * typing `notifications` is fourteen `state.set` calls, thirteen of which
-   * describe a filter nobody ever had. Four hundred milliseconds is longer than
-   * the gap between two keystrokes and shorter than the gap between typing and
-   * doing anything else, so what gets kept is what somebody stopped on.
+   * The delay used to be for the query, which changed on every keystroke; the
+   * query is the host's now and an order changes on a press, so the four
+   * hundred milliseconds are doing much less work than they were. They are kept
+   * anyway, because the reason they were chosen has not gone: a person trying
+   * two orders in a row should produce one write and not two, and nothing here
+   * is waiting on the write.
    *
    * The cleanup cancels the pending write on every change, so a page torn down
-   * mid-word writes nothing rather than writing half a word — which is the right
-   * way round: the cost of losing the last four hundred milliseconds of a filter
-   * is that it is typed again, and the cost of keeping a half-typed one is a
-   * page that comes back showing two rows of twenty-four for a reason nobody
-   * remembers.
-   *
-   * Only the query and the order are in it. The kind and the state are kept by
-   * the HOST now, per container, and a copy of them here would be a second
-   * memory of one setting — see the essay in `live/keep.ts`.
+   * mid-press writes nothing rather than something nobody settled on.
    */
   useEffect(() => {
     if (restored.current === undefined) return
     const timer = setTimeout(() => {
-      const now = writing({ query, ordering })
+      const now = writing({ ordering })
       /* Nothing is sent when the settings are still exactly what the host handed
          back. Restoring them sets state, which runs this effect, which would
          otherwise write the same string back on every single load — a call whose
@@ -330,7 +367,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       keep(now)
     }, 400)
     return () => clearTimeout(timer)
-  }, [query, ordering, keep])
+  }, [ordering, keep])
 
   /**
    * The plain click: this row becomes the whole selection.
@@ -341,7 +378,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * explicitly, an empty `refs` is a real call rather than an absence — and the
    * gesture people already reach for is pressing the thing again. A dedicated
    * button would be a control that is useless in the state it is most often
-   * seen in, sitting in a toolbar this file is otherwise busy making smaller.
+   * seen in, in a strip of chrome this module no longer has at all.
    *
    * It reads `selection` rather than any local memory, so "is this the only one
    * selected" is a question about what the host said, not about what was last
@@ -439,73 +476,27 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
        module's width is its container's width, and a reader changes that by dragging
        a corner on somebody else's canvas: the window is never resized, no
        viewport breakpoint fires, and a layout keyed to `md:` would sit at its
-       widest inside a column two hundred pixels across. So the header and the
-       toolbar ask this element how wide they are; a row asks itself, because a
-       row's own width is what its columns have to divide. */
+       widest inside a column two hundred pixels across. So the heading asks
+       this element how wide it is — and asks it through the same `@container`
+       the row's own middle is, so the heading's columns and the row's cannot
+       part company at any width. */
     <div ref={frame} className="@container flex h-full flex-col">
-      {/* It wraps, because the things here are a project name, a timestamp and a
-          control, and none of them shortens. In a narrow container they take a line
-          each. The alternative was truncating a name, which is the one kind of
-          text on this page that has to be readable in full. */}
-      <header className="flex flex-wrap items-baseline gap-x-2 border-b border-border px-3 py-1.5 text-xs break-words text-muted-foreground @md:py-2">
-        {/* The short name, with the whole path on its `title`. A container 220 pixels
-            wide cannot hold `/Users/somebody/Projects/roadmap` without pushing
-            the page sideways, and the segment is what people call the thing. */}
-        <span className="font-mono text-foreground" title={sight.project}>
-          {projectName(sight.project)}
-        </span>
-        {/*
-          Said once, here, rather than on every row: freshness is a fact about
-          the reading and not about any one reference in it. Three different
-          sentences, and the difference between them is the whole reason the
-          door reports `from` rather than leaving it to be inferred —
+      {/*
+        The table's heading, which is the only chrome left.
 
-            "reading GitHub…"  a call is out. The list below is still whatever
-                               was last read, and still usable, which is the
-                               point of not blanking the container.
-            "read <when>"      this reading came off GitHub just now.
-            "last read <when>" this reading came out of the cache beside the
-                               project, and the button says how to change that.
-        */}
-        <span>
-          {busy
-            ? 'reading GitHub…'
-            : generated
-              ? `${sight.from === 'cache' ? 'last read' : 'read'} ${generated}`
-              : 'this reading is not dated'}
-        </span>
-        {/*
-          The deliberate refresh, and the only thing on this page that spends a
-          network call on purpose.
-
-          `ml-auto` rather than a fixed position, so that when the header wraps
-          in a narrow container the button goes to the end of whichever line it lands
-          on rather than sitting alone. `h-6` because the rest of this bar is
-          `text-xs` and a default-height button doubles the header.
-
-          It is labelled with a glyph and named in its tooltip, which is the
-          same trade the tracker link on a row makes: a word here would cost the
-          project name most of a 220-pixel line, and this control is reached for
-          rarely enough that a recognisable glyph is fair. Disabled while a read
-          is in flight, because two reads racing is two subprocesses and one
-          answer that wins for no reason anybody could predict.
-        */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto h-6 px-1.5"
-          disabled={busy}
-          onClick={again}
-          title="Read this project’s tracker again, ignoring what was last read"
-          aria-label="Read this project’s tracker again"
-        >
-          <RefreshCw className={busy ? 'animate-spin' : undefined} />
-        </Button>
-      </header>
-      <Toolbar
-        sifting={sifting}
-        onQuery={setQuery}
-        onClear={() => void clearAll()}
+        Two rows stood here: a header with the project name, the freshness line
+        and a Refresh button, and a toolbar with the query, the seven filter
+        buttons, the order trigger, the count and Clear. At 220 pixels they came
+        to about a hundred pixels over a list that had three hundred to divide.
+        Every one of those things is somewhere better now — the filters and the
+        query in the container's own header as `roadmap.filters`, the refresh
+        and the freshness line as `roadmap.refreshable`, the order on the
+        columns it orders — except the count, which could not go, because the
+        host cannot count rows it does not render. `view/heading.tsx` has the
+        whole argument.
+      */}
+      <Heading
+        project={sight.project}
         ordering={ordering}
         onOrder={setOrdering}
         showing={shown.length}
@@ -521,7 +512,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
         perfectly ordinary list that happened to be hours old, which is exactly
         how a stale list gets believed.
 
-        It is drawn between the toolbar and the list rather than over them,
+        It is drawn between the heading and the list rather than over them,
         because it is a fact about the rows underneath it and belongs against
         them.
       */}
@@ -532,7 +523,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       )}
       {/* A refused `selection.set` gets a sentence, because the symptom without
           one is a checkbox that will not tick and a page that looks broken. It
-          is drawn between the toolbar and the list rather than over them: this
+          is drawn between the heading and the list rather than over them: this
           is a fact about what just happened to a click, and it belongs where the
           click was, not in a corner. It disappears the moment the next set is
           asked for — see `selectionRefused` in `use-roadmap.ts`. */}
@@ -543,7 +534,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
           used because they are the only ones that say what to do — "pinned" and
           "not on the kehikko that is open" send a person to two different
           places, and neither is something this page could work out. It goes
-          between the toolbar and the list, where the press was. */}
+          above the list, against the rows it is about. */}
       {filterRefused && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
           The roadmap would not put this container’s filters back ({filterRefused}) The typed filter has been

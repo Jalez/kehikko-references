@@ -75,6 +75,7 @@ const page = `<!doctype html>
     <button id="walk">goto gh#7</button>
     <span id="picked"></span>
     <span id="filters"></span>
+    <span id="refresh"></span>
   </header>
   <iframe id="frame" sandbox="allow-scripts allow-forms allow-popups allow-same-origin" src="${MODULE}"></iframe>
 <script>
@@ -89,6 +90,14 @@ const page = `<!doctype html>
      long enough to see every behaviour that depends on it. */
   var offered = [];
   var chosen = {};
+  /* What the module last said about being read again, and how often this
+     container reads on its own. The split is the whole shape of the feature: the
+     state is the MODULE's and the interval is the CONTAINER's. A real host keeps
+     the interval per placement in its database; this one keeps it for as long as
+     the page is open, which is long enough to watch it fire. */
+  var reading = null;
+  var every = null;
+  var asked = 0;
   document.getElementById('what').textContent = 'projectPath: ' + (project ? project : '(null)');
   if (q.get('narrow')) document.getElementById('frame').id = 'narrow', document.getElementById('narrow').style.height = '80vh';
 
@@ -119,6 +128,15 @@ const page = `<!doctype html>
     offered.forEach(function (group) {
       var want = asked[group.id];
       var known = group.options.some(function (option) { return option.id === want; });
+      if (group.kind === 'text') {
+        /* No options to reconcile against and no fallback to fall to: empty is
+           how a typed group says it is at rest, and anything else is kept
+           whatever the module now offers. A stored query is right there in the
+           input to be edited, where a stored option id in no menu would be
+           unreachable. */
+        if (typeof want === 'string' && want !== '') kept[group.id] = want.slice(0, 200);
+        return;
+      }
       if (known && want !== group.fallback) kept[group.id] = want;
     });
     return kept;
@@ -126,12 +144,90 @@ const page = `<!doctype html>
 
   /* The control a real host draws in the container's header. Rebuilt whenever the
      module re-announces, which it does whenever its counts change. */
+  /* The control a real host draws in the container's header, and the sentence
+     it draws is formatted from the module's own 'at' — never from when this
+     stub last asked. See the essay on MESSAGE.REFRESHABLE. */
+  function drawRefresh() {
+    var box = document.getElementById('refresh');
+    box.textContent = '';
+    if (!reading || !reading.can) return;
+
+    var now = document.createElement('button');
+    now.textContent = reading.busy ? 'reading…' : 'refresh now';
+    now.disabled = !!reading.busy;
+    now.addEventListener('click', function () { ask(); });
+    box.appendChild(now);
+
+    var when = document.createElement('span');
+    when.style.marginLeft = '6px';
+    when.textContent = reading.at ? 'last read ' + reading.at : 'has not said when it last read';
+    box.appendChild(when);
+
+    var on = document.createElement('input');
+    on.type = 'checkbox';
+    on.checked = every !== null;
+    on.style.marginLeft = '8px';
+    on.addEventListener('change', function () { every = on.checked ? 1 : null; drawRefresh(); });
+    box.appendChild(on);
+
+    var mins = document.createElement('input');
+    mins.type = 'number';
+    mins.min = '1';
+    mins.value = String(every === null ? 1 : every);
+    mins.style.width = '48px';
+    mins.disabled = every === null;
+    mins.addEventListener('change', function () { if (every !== null) every = Math.max(1, Number(mins.value) || 1); });
+    box.appendChild(mins);
+
+    var label = document.createElement('span');
+    label.textContent = ' min';
+    box.appendChild(label);
+  }
+
+  function ask() {
+    asked = Date.now();
+    frame.contentWindow.postMessage({ type: '${MESSAGE.REFRESH}', protocol: ${PROTOCOL} }, '*');
+  }
+
+  /* One ticker rather than a timer per setting, and it counts from when this
+     host last ASKED rather than from the module's own 'at' — a module whose
+     reads keep failing would otherwise be asked on every tick forever. Ten
+     seconds here against thirty in the real host, because this exists to be
+     watched. */
+  setInterval(function () {
+    if (every === null || !reading || !reading.can || reading.busy) return;
+    if (Date.now() - asked < every * 60000) return;
+    ask();
+  }, 10000);
+
   function drawFilters() {
     var box = document.getElementById('filters');
     box.textContent = '';
     offered.forEach(function (group) {
       var select = document.createElement('select');
       select.title = group.label;
+      if (group.kind === 'text') return;
+      if (group.kind === 'text') {
+        /* One input, inside the menu the filter control already opens. The
+           argument for why that is allowable here and was refused in a header
+           STRIP is on LIMITS.FILTER_TEXT in the protocol. Reported on change
+           rather than per keystroke, which is the crudest version of what the
+           real host debounces. */
+        var typed = document.createElement('input');
+        typed.type = 'search';
+        typed.placeholder = group.label;
+        typed.title = group.label;
+        typed.value = chosen[group.id] || '';
+        typed.addEventListener('change', function () {
+          var asking = Object.assign({}, chosen);
+          asking[group.id] = typed.value;
+          chosen = settle(asking);
+          drawFilters();
+          tell();
+        });
+        box.appendChild(typed);
+        return;
+      }
       group.options.forEach(function (option) {
         var item = document.createElement('option');
         item.value = option.id;
@@ -173,6 +269,17 @@ const page = `<!doctype html>
     /* Fire and forget on the module's side, so there is nothing to answer — the
        whole reply is the control appearing, and the choice coming back in the
        next context. */
+    if (d.type === '${MESSAGE.REFRESHABLE}') {
+      /* Fire and forget, like the two offers. Nothing is answered and nothing
+         is checked: 'at' is the module's statement about its own data, and a
+         host that second-guessed it would be inventing the one fact it cannot
+         have. */
+      reading = { can: d.can !== false, at: d.at === undefined ? null : d.at, busy: !!d.busy };
+      if (asked === 0) asked = Date.now();
+      drawRefresh();
+      return;
+    }
+
     if (d.type === '${MESSAGE.FILTERS}') {
       offered = d.groups || [];
       chosen = settle(chosen);

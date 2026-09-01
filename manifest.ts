@@ -39,26 +39,42 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   the string `gh#105`, spelled in one function in `tracker/gh.ts`, and other
  *   modules go on recognising it.
  * - `filters:set`, which is the newest and the one worth a paragraph of its own.
- *   The kind and the state filters are no longer drawn in this app's own bar;
- *   they are offered as `roadmap.filters` and drawn in the container's header
- *   beside every other module's, which is what the owner asked for twice and is
- *   how the rest of this family already behaves. Offering costs no capability —
- *   an offer is fire and forget — but two things this page promises need it to
- *   be able to ASK for the choice back: `view.goto`, which answers "go to
- *   `!1848`" by clearing whatever is hiding that row, and the `Clear` beside the
- *   count, whose whole promise is that one press puts EVERYTHING back. Without
- *   this declaration both calls are refused by the host and both promises become
- *   two thirds true, which is worse than either of them being absent. It is a
- *   REQUEST rather than a permission: the host may decline — the container is
- *   pinned, or is not on the kehikko that is open — and `src/app.tsx` draws the
- *   host's own sentence when it does. The argument for the whole move, and the
- *   one thing it did not buy, are at the top of `src/live/sift.ts`.
- * - `state:keep`, which is how the query and the order survive a reload. The
- *   host keeps one opaque string for this module and never reads it — the
- *   sentence in the protocol is "the roadmap does not read it", and the format
- *   lives entirely in `src/live/keep.ts`. It used to carry the kind and the
- *   state as well, and no longer does: the host holds those per container now,
- *   so a copy here would be a second memory of one setting.
+ *   None of this app's filtering is drawn in this app any more. The kind, the
+ *   state AND the typed query are offered as `roadmap.filters` — the last of
+ *   them as a `text` group, which the protocol grew for exactly this module —
+ *   and all three are drawn in the container's own header beside every other
+ *   module's. That is what the owner asked for, twice, and it is how the rest of
+ *   this family already behaves.
+ *
+ *   Offering costs no capability, because an offer is fire and forget. This
+ *   declaration is for the other direction: two things this page promises need
+ *   to be able to ASK for the choice back. `view.goto` answers "go to `gh#105`"
+ *   by clearing whatever is hiding that row, and the one press offered when the
+ *   narrowing has hidden everything promises to put all of it back. Without this
+ *   declaration both calls are refused by the host and both promises become
+ *   partly true, which is worse than either being absent.
+ *
+ *   It is a REQUEST rather than a permission: the host may decline — the
+ *   container is pinned, or is not on the kehikko that is open — and
+ *   `src/app.tsx` draws the host's own sentence when it does. The argument for
+ *   the whole move is at the top of `src/live/sift.ts`.
+ * - `state:keep`, which is how the ORDER survives a reload, and nothing else any
+ *   more. The host keeps one opaque string for this module and never reads it —
+ *   the sentence in the protocol is "the roadmap does not read it", and the
+ *   format lives entirely in `src/live/keep.ts`. It used to carry the kind, the
+ *   state and the query; the host holds all three per container now, so a copy
+ *   here would be a second memory of one setting. What is left is the order,
+ *   which is not a filter, hides nothing, and is therefore nothing the host
+ *   draws or remembers.
+ *
+ * Nothing new is declared for the refresh control, and that is worth a line
+ * rather than a silence. `roadmap.refreshable` is an offer, in the same family
+ * as `roadmap.filters`: this app says it can be read again and when it last
+ * read, the host draws the button, the freshness line and an auto-refresh
+ * interval it stores per container, and the press comes back as
+ * `roadmap.refresh`. No request leaves this page for any of it, so there is no
+ * permission for anybody to read about. What a person SHOULD know is what the
+ * refresh spends, and that is what `/api/references` already documents below.
  *
  * `live:read` came out because nothing calls it any more. There is no
  * `live.get` anywhere in this program: the rows come from a subprocess this
@@ -166,22 +182,34 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
 export const ID = 'roadmap.references'
 
 /**
- * Two, because the data source moved; and then a minor, because the filter did.
+ * Two, because the data source moved; and then a minor, because every control
+ * did.
  *
  * A version is for whoever is reading two copies of this program and wondering
  * why they disagree, and "the rows come from somewhere else now" is the largest
  * possible answer to that. The page, the refs and the selection were unchanged
  * by it; everything behind them was not.
  *
- * `2.1.0` is the kind and state filters moving into the container header, which
- * is a change a person SEES — two controls are not where they were — without
- * anything this module answers or asks for changing shape. A new capability is
- * declared, which is why this is a minor rather than a patch, and no promise is
- * withdrawn, which is why it is not a major. The one thing a reader of two
- * copies has to know is that the string kept under `state:keep` went to version
- * 2 with it and the old one is dropped whole; `src/live/keep.ts` says why.
+ * `2.2.0` is the largest change a person SEES since: this app draws no chrome of
+ * its own any more. The header and the toolbar are gone, and with them the
+ * project line, the freshness line, the Refresh button, the query box, the seven
+ * filter buttons, the order trigger and the Clear. What is left is the table and
+ * one heading row carrying the column sorts and the count. Every one of those
+ * things is somewhere better — the three filters and the query in the
+ * container's own header, the refresh and the freshness line as
+ * `roadmap.refreshable`, the order on the columns it orders — except the count,
+ * which could not move, because the host cannot count rows it does not render.
+ *
+ * Still a minor rather than a major, because nothing this module answers or
+ * promises has been withdrawn: the refs are spelled the same, `view.goto` still
+ * clears what is hiding its target, and one press still puts everything back. It
+ * needs a host that speaks `roadmap.refreshable` and `text` filter groups to
+ * have a refresh control or a search box at all, which is the one thing a reader
+ * of two copies has to know — along with the string kept under `state:keep`
+ * going to version 3, dropping everything but the order. `src/live/keep.ts` says
+ * why.
  */
-export const VERSION = '2.1.0'
+export const VERSION = '2.2.0'
 
 /**
  * The port this app would rather have.

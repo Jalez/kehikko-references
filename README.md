@@ -142,8 +142,15 @@ left is a socket that anything already running as this user could reach anyway.
 
 ## When a read happens
 
-On the project **changing**, and on the **Refresh** control. Not on a context
-arriving, not on a timer, and never on a render.
+On the project **changing**, and when the **host asks**. Not on a context
+arriving, not on a timer of this module's own, and never on a render.
+
+The host asks in two ways and this module cannot tell them apart: somebody
+pressed the refresh control in the container's header, or an interval they set
+on that container elapsed. The protocol forbids saying which — a module told the
+difference would take the cache on one and not the other, which is a module
+setting policy from a fact about somebody else's timer — so both mean the same
+thing here, which is a read past the cache.
 
 Context stopped being a message that only means "the reader moved" — it carries
 the canvas's selection, so the host sends one after every `selection.set`,
@@ -154,9 +161,15 @@ the project changing, and a repeated context about the same project is a normal
 event whose correct response is to read the theme and the selection and leave the
 reading alone.
 
-There is no interval anywhere in this module. An interval is a program spending
-somebody's GitHub rate limit while nobody is looking at the container, and it buys
-freshness that a timestamp beside a button buys honestly.
+There is no interval anywhere in this module, and there is one available to a
+person now — the difference is who owns the clock. An interval belongs to one
+container on one kehikko, it has to survive this program being stopped and
+started, and only the host knows whether the container is folded, pinned, or on a
+canvas nobody has open. So the host stores it beside the filter choice and runs
+it, and this module answers a press it cannot distinguish from a tick. What the
+old sentence was protecting against — a program spending somebody's rate limit
+while nobody is looking — is protected by the host skipping folded containers and
+containers that are not on the open kehikko.
 
 ### The container stays usable while a read is in flight
 
@@ -346,103 +359,144 @@ against the box, which is 58 pixels narrower. Which is right — "is there room 
 a second line" is a question about the container, and "is there room for the people"
 is a question about what is left after the two controls have taken theirs.
 
-### The kind and the state are in the container's header, and the query is not
+### All three filters are in the container's header, and the toolbar is gone
 
-They used to be seven buttons in this app's own bar — `All · Issues · Changes`
-and `Any · Open · Merged · Closed` — with a whole essay about fitting them into
-220 pixels, and a `ResizeObserver` collapsing them behind one labelled trigger
-below 21rem. They are offered to the host as two `roadmap.filters` groups now,
-and drawn in the container header beside every other module's. The counts ride in
-the labels because the protocol has no count field: `Issues 17`, `Open 9`. An
-option nothing matches — `Merged 0`, on a GitHub-only reading — is not offered at
-all.
+They used to be seven buttons and a text box in this app's own bar — `All ·
+Issues · Changes`, `Any · Open · Merged · Closed`, and a query input — with a
+whole essay about fitting them into 220 pixels and a `ResizeObserver` collapsing
+them behind one labelled trigger below 21rem. All three are `roadmap.filters`
+groups now, drawn in the container's own header beside every other module's.
 
-**The query stays here.** `filterGroupSchema` cannot express free text, and says
-so rather than leaving it out: a text box in a 220-pixel container header needs
-room, focus and a keyboard, and a host cannot debounce or interpret somebody
-else's search. The same schema says a module that keeps some of its filtering is
-conforming.
+The kind and the state are lists of options, and the counts ride in the labels
+because the protocol has no count field: `Issues 17`, `Open 9`. An option nothing
+matches — `Merged 0`, on a GitHub-only reading — is not offered at all.
+
+**The query is a `text` group**, which the protocol grew for this module. It had
+refused free text twice, on the grounds that a text box in a container header
+needs room a 220-pixel header does not have, needs focus and needs a keyboard.
+Every clause of that is true of the header STRIP and none of it is true of the
+control, which is a twenty-four-pixel button that opens a MENU — a floating layer
+with its own width and its own focus scope. The refusal was right about the strip
+and wrong about the feature. The label doubles as the input's placeholder and its
+accessible name, so it says what this search looks at: `Filter by number, title,
+label or person`.
 
 Two behaviours had to keep working across the move, and both did, because the
-protocol grew `filters.set` — a module asking for a WHOLE choice, where `{}` is
-"clear the narrowing":
+protocol also grew `filters.set` — a module asking for a WHOLE choice, where `{}`
+is "clear the narrowing":
 
-- **`goto` still clears what is hiding its target.** It clears the query here and
-  asks the host for the two groups. It then reads what the host *settled* on,
-  which is deliberately not what was asked for, and only answers `found: true`
-  about a row that survives it.
-- **`Clear` still puts everything back.** One press, both halves.
+- **`goto` still clears what is hiding its target.** There is nothing left here
+  to clear locally, so all of it is asked for. It then reads what the host
+  *settled* on, which is deliberately not what was asked for, and only answers
+  `found: true` about a row that survives it.
+- **One press still puts everything back.** `{}` reaches all three groups,
+  including the query — an empty string is how a text group says it is at rest.
+  The host's own "Show everything" makes the same call; so does the button on the
+  panel this app draws when the narrowing has hidden every row.
 
 A host may decline — the container is pinned, or is not on the kehikko that is
-open — and neither promise is allowed to be two thirds true. A declined `Clear`
-draws the host's own sentence above the list; a declined `goto` answers
-`found: false` with it, so the reader gets the fallback link instead of a page
-where their reference is not drawn.
+open — and neither promise is allowed to be partly true. A declined clear draws
+the host's own sentence above the list; a declined `goto` answers `found: false`
+with it, so the reader gets the fallback link instead of a page where their
+reference is not drawn.
 
-The honest note, kept from the essay this replaces rather than dropped with it:
-**this bought no vertical room.** At 220 pixels the bar was two lines with the
-seven collapsed behind one trigger, and it is two lines now — a query, an order
-trigger, a count and a `Clear`. The move was made for consistency across the
-canvas, which is a reason; it was not made for pixels, which would not have been
-one.
+**And this is the move that bought the room.** Moving the kind and the state
+alone bought nothing at 220 pixels, which the previous version of this section
+said plainly: the bar was two lines with the seven collapsed behind one trigger,
+and two lines afterwards with the query, the order trigger, the count and Clear.
+Moving the query is what let the bar go, and the header went with it. The reason
+the owner gave was consistency, twice; the hundred pixels came as a consequence.
 
-What the move DID take away is the `ResizeObserver` and the two forms it chose
-between. With one form at every width, nothing measures itself, and the CSS-only
-version's hazard — two buttons called `Closed`, one of them unpressable, both
-reachable by the browser's own find — is not a thing this bar can have.
+What went with the bar is the `ResizeObserver` and the two forms it chose
+between. Nothing measures itself any more, and the CSS-only version's hazard —
+two buttons called `Closed`, one of them unpressable, both reachable by the
+browser's own find — is not a thing this module can have.
 
-### The order is a labelled trigger at every width, and did not move
+### The order is on the columns it orders
 
-Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — and they live behind
-a press even in a wide container, which is the shape the filter was refused. The
-difference is what the two controls can do: **a filter hides rows and an order
-does not.** The failure this bar exists to prevent is somebody reading a list of
-two and concluding the other twenty-two are not there, and only the filter can
-cause it. So the filter has to be *readable* and the order only has to be
-*visible*, which a trigger labelled `Oldest` satisfies.
+Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — and they are the
+column headings now, in shadcn's shape: a quiet button with the label and an
+arrow saying which column is in force.
 
-That is also why the order did not go into the header with the kind and the
-state. `filterGroupSchema` would express it perfectly well — five options, a
-fallback of `Recent` — and it is not a filter: it hides nothing, so it has no
-business in a control a reader has learned to check when the list looks short.
+It did not go to the header with the filters, and the reason is the one this
+module has always given: **a filter hides rows and an order does not.** The
+failure the count exists to prevent is somebody reading a list of two and
+concluding the other twenty-two are not there, and only a filter can cause it. So
+a filter has to be *readable* without pressing anything and an order only has to
+be *visible*. `filterGroupSchema` would express an order perfectly well — five
+options, a fallback of `Recent` — and it would put a control that hides nothing
+in the place a reader has learned to check when a list looks short.
 
-A row with no date sorts **last in `Recent` and last in `Oldest`**, which looks
-inconsistent and is the point: an empty date is not a small date, and floating
-undated rows to the head of "oldest first" would read as a claim that they have
-been sitting longest. A state nobody could read sorts after `closed`, for the
-same reason. Ties keep the order `collect` produced, which is recency.
+Four of the five have an obvious column. The fifth is `kind`, which has no column
+because the mark that says a row is a change lives inside the identifier cell — a
+glyph on two rows out of twenty-four is those two rows standing out, where a
+column would be noise on all of them. So its control is the leading cell above
+the checkboxes, drawn as the same glyph and named in its tooltip.
 
-### The header, and the one control on it
+**Every order stays reachable at every width, which the columns do not.** The
+date, the labels and the people drop out of a narrow row, and a sort control that
+dropped with its column would make "oldest first" unreachable in a 220-pixel
+container. So the date control keeps its place and loses its word instead. The
+arithmetic: at 220 pixels the checkbox cell takes 28 and the tracker cell 30,
+leaving 162; kind (16) plus `Ref` (36) plus `State` (46) plus the date arrow (16)
+is 114, leaving 48 for a count that measures about 40 as `37/412`.
 
-A project name, a freshness line and a Refresh button, wrapping in a narrow container
-because none of the three shortens. The name is the last segment of the path with
-the whole path on its `title` — a 220-pixel container cannot hold
-`/Users/somebody/Projects/roadmap` without pushing the page sideways, and the
-segment is what people call the thing. The full path is never dropped from a
-failure panel, because a fix for one of those happens in a terminal.
+### What is left, at 220 pixels
 
-The button is a glyph named in its tooltip, which is the same trade the tracker
-link on a row makes: a word would cost the project name most of a narrow line,
-and this control is reached for rarely. It is disabled while a read is in flight,
-because two reads racing is two subprocesses and one answer that wins for no
-reason anybody could predict.
+The table, and one heading row of about twenty-four pixels carrying four sort
+controls and the count. Where there were two rows of chrome and a header — about
+a hundred pixels over a list that had three hundred to divide — there is now one
+line, and it is the table's heading rather than a strip of controls above it.
 
-### The query and the order survive a reload, and the host holds them
+The count could not move and did not: `37 of 412 shown` is drawn by this module,
+from numbers only this module can count, because the host sees rows it does not
+render in a document it cannot read. A host can say THAT something is narrowed —
+it fills in its funnel icon — and it cannot say how much. Hiding rows without
+saying how many is the exact thing `live/sift.ts` exists to prevent, so the count
+sits in the title column, the one cell no width drops, and shortens to `37/412`
+below 24rem rather than disappearing.
+
+### The header is gone, and the freshness line went with it
+
+A project name, a freshness line and a Refresh button used to wrap across a row
+of their own here, because none of the three shortens. All three moved.
+
+The refresh and the freshness are `roadmap.refreshable` now: this module says it
+can be read again and **when its reading was taken**, and the host draws the
+button, the sentence and an auto-refresh interval it stores per container. The
+timestamp has to come from here, and that is the whole reason the message
+exists — a host that dated the list from the moment it asked would be wrong in
+the two cases this app is built around. A cached reading can be ten minutes old
+when it arrives; a failed read leaves the previous reading on screen with its own
+older date. The three sentences this header drew — `read <when>`, `last read
+<when>`, `this reading is not dated` — are that one field plus the host's
+formatting.
+
+The project name is a prefix on the count in the table's heading, shown from
+24rem up, with the full path on the heading's own `title` at every width. That is
+the rule every row already keeps: what a narrow container takes away is still on
+the tooltip. The full path is never dropped from a failure panel, because a fix
+for one of those happens in a terminal.
+
+### The order survives a reload, and it is the only thing this module keeps
 
 The format lives entirely in `src/live/keep.ts` and is read as defensively as
 anything else off the wire — a version that no longer matches, a field naming an
 order that no longer exists, or a string that is not JSON all read as "nothing
 kept" rather than half-applying.
 
-The kind and the state are *not* in it any more, and the version went to 2 for
-exactly that. The host holds those per container now, so a copy in this string
-would be two memories of one setting, written at different moments by different
-programs. A string in the old shape is dropped whole rather than read in part: a
-remembered filter two thirds applied is a page in a state nobody chose.
+The kind, the state and the query are *not* in it, and the version has gone up
+twice for that: to 2 when the kind and the state moved, to 3 when the query did.
+The host holds all three per container now, so a copy in this string would be two
+memories of one setting, written at different moments by different programs. A
+string in an older shape is dropped whole rather than read in part — a remembered
+narrowing partly applied is a page in a state nobody chose, and it looks exactly
+like a page that is working.
 
-The selection is *not* in it either, for the same family of reason. That is the
-host's, it is a fact about the canvas rather than about this module, and a copy
-here would go stale on its own schedule.
+The selection is *not* in it either, for the same family of reason, and neither
+is the auto-refresh interval. Both are facts about a container or a canvas rather
+than about this module. What is left is the order, which is not a filter, hides
+nothing, and is therefore nothing the host draws or remembers.
 
 ### The absences scroll too
 
@@ -513,18 +567,18 @@ src/wire/host.ts        the bridge: the greeting, one question at a time, goto/w
 src/wire/use-roadmap.ts the only place messages become state, and the only place a read is decided
 src/live/ask.ts         one relative fetch, and every way its answer can disappoint
 src/live/collect.ts     a reading -> rows, and the promise that none is dropped
-src/live/sift.ts        the only place a row may be hidden, what is offered to the header, and why
+src/live/sift.ts        the only place a row may be hidden, all three groups offered to the header, and why
 src/live/order.ts       five orders, and where a value the reading lacks belongs
-src/live/keep.ts        what the host is asked to remember, and how it is distrusted
+src/live/keep.ts        the one setting this module still owns, and how it is distrusted
 src/live/sight.ts       the states of knowing
-src/view/               the row, the list, the toolbar, and the words for absence
+src/view/               the row, the list, the table's heading, and the words for absence
 dev/stub-host.ts        a roadmap that is not one, for looking at all of the above
 dev/measure.tsx         the numbers in this file
 ```
 
 ## Tests
 
-`bun test` — 210 of them, and none shells out, needs a login, or notices whether
+`bun test` — 214 of them, and none shells out, needs a login, or notices whether
 the machine is online. Two seams make that true and they are the same seam the
 host uses: `Runner` in `tracker/run.ts` for the subprocess, and `Fetcher` in
 `src/live/ask.ts` for the page's own call.
@@ -551,13 +605,18 @@ host uses: `Runner` in `tracker/run.ts` for the subprocess, and `Fetcher` in
   context which changes only the selection reads nothing, that a context naming
   a different epic reads nothing either, that nothing is read on a timer, and
   that the rows stay on screen with `reading GitHub…` in the header while a
-  refresh is in flight. It also holds the filter round trip: that nothing is
-  offered before there is a reading, that the counts are in the labels, that
-  `Clear` asks for the container's filters back and clears the query, and that a
-  `goto` over a row the header is hiding asks — and answers `found: false` with
-  the host's own sentence when the host says no.
+  refresh is in flight. It also holds both round trips with the host: that
+  nothing is offered before there is a reading, that the counts are in the
+  labels and the third group is the typed query, that one press asks for all
+  three back, that a `goto` over a row the header is hiding asks — and answers
+  `found: false` with the host's own sentence when the host says no — and that
+  when the reading was taken is ANNOUNCED rather than left for the host to guess
+  from when it last asked.
 - `test/order.test.ts` holds every order to being a permutation and holds the two
   judgement calls. `test/keep.test.ts` throws nine kinds of rubbish at what the
   host hands back. `test/narrow.test.tsx` holds which pieces of a row are allowed
   to carry a hiding rule at all — none of the three that may never be dropped —
-  and that every threshold is a container query and never a viewport one.
+  and that every threshold is a container query and never a viewport one. Its
+  second half is the table's heading: that the count always names both numbers,
+  that the whole of it is on the heading's own `title`, and that every order —
+  including the two whose column a narrow row drops — stays reachable.
