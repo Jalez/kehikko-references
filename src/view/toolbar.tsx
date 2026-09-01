@@ -121,6 +121,17 @@ import { EVERYTHING, narrowing, type KindFilter, type Sifting, type StateFilter 
  * collapsed filter's label is the setting: a control that has to be opened to
  * say what it is doing is the thing that was rejected, whatever it is called.
  *
+ * ## Why this bar is still here at all
+ *
+ * The host can draw a filter control in a container's header now, from an offer a
+ * module sends, and every measurement above is an argument about a strip this
+ * module would then not be drawing. It is still drawn, and the decision is at
+ * the top of `live/sift.ts` rather than here: the short of it is that the typed
+ * query cannot be offered, a module cannot clear a choice the host is holding,
+ * and splitting the filter would break `goto` and the `Clear` beside the count.
+ * Nothing below changes if that decision is ever reversed except which two
+ * groups this file draws.
+ *
  * ## Measured, not queried, and this is the one place in the app that is
  *
  * Every other width decision here and in `reference-row.tsx` is a container

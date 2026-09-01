@@ -124,6 +124,23 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     fetcher,
   )
 
+  /*
+   * No `roadmap.filters` offer is sent, and `onGoto` above is one of the two
+   * reasons why.
+   *
+   * The host will draw a filter control in the container header for any module that
+   * offers one, and `kind` and `state` would fit it exactly. The typed query
+   * would not — there is no shape for free text in that message, deliberately —
+   * so offering the two would put this app's filtering in two places, and a
+   * module cannot set its own choice, so the `setSifting(EVERYTHING)` in
+   * `onGoto` and the `Clear` button in the toolbar would both stop being able to
+   * undo two thirds of what is hiding a row. The argument in full, including the third cost and the
+   * condition under which it reverses, is at the top of `live/sift.ts`.
+   *
+   * Nothing is sent rather than an empty offer: an empty one means "withdraw
+   * the control I gave you", and this module has never given one.
+   */
+
   /**
    * The kept string this page has already acted on.
    *
