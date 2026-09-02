@@ -5,7 +5,7 @@ import type { Fetcher } from '@/live/ask.ts'
 import { collect, generatedAt } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
-import { hides, narrowing, offer, sift, siftingOf } from '@/live/sift.ts'
+import { KEHIKKO, hides, narrowing, nothingPicked, offer, sift, siftingOf } from '@/live/sift.ts'
 import { useRoadmap, type GotoHandler, type Settled } from '@/wire/use-roadmap.ts'
 import {
   Asking,
@@ -13,6 +13,7 @@ import {
   NoProject,
   NothingFound,
   NothingMatches,
+  NothingPicked,
   Troubled,
   Unhosted,
 } from '@/view/absence.tsx'
@@ -134,9 +135,16 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * local copy `chosen` exists to avoid. Everything downstream — `sift`, the
    * count, `narrowing`, `goto` — takes this and cannot tell one group from
    * another, which is right: a reader looking at four rows of four hundred does
-   * not care which of the three controls did it.
+   * not care which of the four controls did it.
+   *
+   * The selection is the second input, and it is the one thing on this page
+   * that arrives from another container: the fourth group narrows to what the
+   * canvas has picked out, and `context.selection` is where that is read. This
+   * is the "reacts" the manifest declares — the list narrows when the pick
+   * changes — and it is only ever in force while the header's `Kehikko` group
+   * is on, which is the person's to set. See `Sifting.picked` in `sift.ts`.
    */
-  const sifting = useMemo(() => siftingOf(chosen), [chosen])
+  const sifting = useMemo(() => siftingOf(chosen, selection), [chosen, selection])
 
   /**
    * What this module can be narrowed by, announced whenever the words change.
@@ -157,9 +165,12 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * there offering `Issues 0`.
    */
   useEffect(() => {
-    const groups = offer(rows, sight.at === 'read')
+    /* And on every selection, because `Picked here 3` is a count of rows a
+       pick reaches and changes with the pick. See the note on the fourth
+       group in `offer`. */
+    const groups = offer(rows, sight.at === 'read', selection)
     if (groups) offerFilters(groups)
-  }, [rows, sight.at, offerFilters])
+  }, [rows, sight.at, selection, offerFilters])
 
   /**
    * What this page says about being read again, which is the whole of the
@@ -229,6 +240,25 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   }, [setFilters])
 
   /**
+   * Turn off the narrowing to picks, and nothing else.
+   *
+   * The one press `NothingPicked` offers, and it is deliberately not `clearAll`:
+   * a person looking at open issues who turned on "picked here" and then
+   * cleared the canvas selection wants their open issues back, not every row in
+   * the project. So the whole choice is re-sent with only this group at rest —
+   * `filters.set` takes a whole choice, and leaving a key out is how a group is
+   * put back to its fallback. The same refusal handling as `clearAll`, for the
+   * same reason.
+   */
+  const everythingInProject = useCallback(async (): Promise<Settled> => {
+    setFilterRefused(null)
+    const { [KEHIKKO]: _picked, ...rest } = chosen
+    const settled = await setFilters(rest)
+    if (!settled.ok) setFilterRefused(settled.why)
+    return settled
+  }, [chosen, setFilters])
+
+  /**
    * Answering a host that says "go to this reference".
    *
    * Four things happen here that are easy to get wrong and all four matter:
@@ -295,7 +325,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
          the list uses. A settled choice that still hides it is not a success
          with a caveat — it is a walk to an invisible row, which is the one thing
          this handler exists to refuse. */
-      if (hides(siftingOf(settled.filters), row)) {
+      if (hides(siftingOf(settled.filters, selection), row)) {
         answer(false, `${message.ref} is in this list, but this container’s filters are still hiding it.`)
         return
       }
@@ -550,6 +580,14 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {rows.length === 0 ? (
           <NothingFound project={sight.project} generated={generated} />
+        ) : shown.length === 0 && nothingPicked(rows, sifting) ? (
+          /* Before `NothingMatches`, because when the pick alone reaches no row
+             the menus are not what to change — see `NothingPicked`. */
+          <NothingPicked
+            picked={sifting.picked?.length ?? 0}
+            total={rows.length}
+            everything={() => void everythingInProject()}
+          />
         ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => void clearAll()} />
         ) : (

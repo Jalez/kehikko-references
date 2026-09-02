@@ -99,21 +99,59 @@ export interface Sifting {
   query: string
   kind: KindFilter
   state: StateFilter
+  /**
+   * The refs this list is narrowed to, or `null` for "not narrowed to any".
+   *
+   * ## The fourth group, and why it holds a list rather than a word
+   *
+   * The other three are choices a person made in this container's header, and
+   * each is a word. This one is a choice in the header AND a fact from
+   * somewhere else: the person turns it on, and WHAT it narrows to is the
+   * canvas selection — the references picked out on this kehikko, in this
+   * container or in any other. So the choice is read out of `context.filters`
+   * like the rest and the list is read out of `context.selection`, and they
+   * are folded together here so that nothing downstream has to know there are
+   * two sources. `sift` narrows, `narrowing` counts it, `goto` clears it, and
+   * none of them can tell this group from the other three, which is the point.
+   *
+   * `null` and `[]` are different states and the difference is the feature.
+   * `null` is the group at rest. `[]` is the group ON with nothing picked on
+   * the canvas, which hides every row — and must not be drawn as an empty list,
+   * because nothing is wrong: `app.tsx` draws `NothingPicked` for it and says
+   * in words what would put rows back.
+   *
+   * ## Why the selection, and not "everything the journey covers"
+   *
+   * The ask was to narrow this list to the issues and changes that are part of
+   * the kehikko. The canvas carries exactly one such thing, the selection, and
+   * it means what a PERSON picked out — one ref, several, or none — not the
+   * whole set some other module happens to know about. Narrowing to the
+   * selection is honest about that; a module that broadcast everything it knew
+   * as "selected" would have redefined the word for every other module on the
+   * canvas. So a person picks steps in Journeys, or rows here, and this group
+   * follows the pick. What it cannot do is narrow to a journey nobody has
+   * picked anything from, because the wire has no such fact to read.
+   */
+  picked: readonly string[] | null
 }
 
-export const EVERYTHING: Sifting = { query: '', kind: 'all', state: 'all' }
+export const EVERYTHING: Sifting = { query: '', kind: 'all', state: 'all', picked: null }
 
 /**
- * The three group ids, named because three things have to agree on them: the
+ * The four group ids, named because three things have to agree on them: the
  * offer, the reading of what the host chose, and the tests.
  */
 export const KIND = 'kind'
 export const STATE = 'state'
 export const SEARCH = 'search'
+export const KEHIKKO = 'kehikko'
+
+/** The option of the `kehikko` group that narrows to the canvas selection. */
+export const PICKED = 'picked'
 
 /** Whether anything is being hidden by choice. Drives the count and what `goto` has to undo. */
 export function narrowing(sifting: Sifting): boolean {
-  return sifting.query.trim() !== '' || sifting.kind !== 'all' || sifting.state !== 'all'
+  return sifting.query.trim() !== '' || sifting.kind !== 'all' || sifting.state !== 'all' || sifting.picked !== null
 }
 
 /**
@@ -140,9 +178,49 @@ export function narrowing(sifting: Sifting): boolean {
  * The guard matters more now than it did when two groups were at stake: what
  * would be erased includes somebody's typed query.
  */
-export function offer(rows: readonly Reference[], read: boolean): FilterGroup[] | null {
+export function offer(
+  rows: readonly Reference[],
+  read: boolean,
+  /** What the canvas has picked out, for the count on the fourth group. */
+  selection: readonly string[] = [],
+): FilterGroup[] | null {
   if (!read) return null
   if (rows.length === 0) return []
+
+  /*
+   * The fourth group, which is always offered whole — both options, whatever
+   * the count — and that is the one place this file's rule about dropping
+   * empty options is deliberately broken.
+   *
+   * The rule exists so that nobody is offered `Merged 0`, a press whose only
+   * outcome is an empty list. Here the empty outcome is the honest one: a
+   * person who turned this on and then cleared the canvas selection has a
+   * list narrowed to nothing, and the page says so in words. If the option
+   * were dropped when the count hit zero, the host would reconcile the stored
+   * choice back to `Everything`, the filter would silently turn itself OFF
+   * the moment the selection emptied, and it would stay off when the next
+   * pick arrived. A control that switches itself off is a control the person
+   * does not hold, which is the failure this whole group is built against:
+   * the header is where somebody turns this on and off, and only they do.
+   *
+   * The count is of the ROWS the selection reaches, not of the selection: a
+   * pick can name references this project's tracker does not hold, and
+   * `Picked here 0` over a three-ref selection is the true number of rows a
+   * press would show. It changes with every pick on the canvas, so the offer
+   * is re-sent on each — a `postMessage` per click, which is cheaper than a
+   * count that is wrong in a menu somebody has just opened.
+   */
+  const here = new Set(selection)
+  const reached = rows.filter((row) => here.has(row.ref)).length
+  const kehikko: FilterGroup = {
+    id: KEHIKKO,
+    label: 'Kehikko',
+    options: [
+      { id: 'all', label: `Everything ${rows.length}` },
+      { id: PICKED, label: `Picked here ${reached}` },
+    ],
+    fallback: 'all',
+  }
 
   const kinds = counted(rows, [
     { id: 'all', word: 'All', has: () => true },
@@ -161,6 +239,7 @@ export function offer(rows: readonly Reference[], read: boolean): FilterGroup[] 
   ])
 
   return [
+    kehikko,
     { id: KIND, label: 'Kind', options: kinds, fallback: 'all' },
     { id: STATE, label: 'State', options: states, fallback: 'all' },
     /*
@@ -216,7 +295,7 @@ function counted(
  * clipped query is still a query; a dropped one is a filter that silently stops
  * working the first time somebody pastes something long into it.
  */
-export function siftingOf(chosen: FilterChoice): Sifting {
+export function siftingOf(chosen: FilterChoice, selection: readonly string[] = []): Sifting {
   const kind = chosen[KIND]
   const state = chosen[STATE]
   const query = chosen[SEARCH]
@@ -224,6 +303,10 @@ export function siftingOf(chosen: FilterChoice): Sifting {
     query: typeof query === 'string' ? query.slice(0, LIMITS.FILTER_TEXT) : '',
     kind: kind === 'issue' || kind === 'change' ? kind : 'all',
     state: state === 'opened' || state === 'closed' || state === 'merged' ? state : 'all',
+    /* Copied, so that a sifting is a value: the array the host handed over is
+       state elsewhere and a later context replaces it, and a sifting that held
+       the old reference would be wrong about a pick it was never re-read for. */
+    picked: chosen[KEHIKKO] === PICKED ? [...selection] : null,
   }
 }
 
@@ -261,6 +344,23 @@ export function hides(sifting: Sifting, row: Reference): boolean {
 }
 
 /**
+ * Whether the fourth group alone is hiding every row: it is on, and nothing
+ * the canvas has picked is in this reading.
+ *
+ * Asked so that the page can say the right sentence. "Nothing here matches
+ * what you asked for" is true of a kind and a state somebody chose and can
+ * change; it is misleading over a list narrowed to a selection that is empty,
+ * where the remedy is to pick something — anywhere on the kehikko — rather
+ * than to loosen a menu. The two are told apart here, through the same `sift`
+ * the list uses, so the sentence and the list cannot disagree about why the
+ * list is empty.
+ */
+export function nothingPicked(rows: readonly Reference[], sifting: Sifting): boolean {
+  if (sifting.picked === null) return false
+  return sift(rows, { ...EVERYTHING, picked: sifting.picked }).length === 0
+}
+
+/**
  * The rows to draw, in the order `collect` put them.
  *
  * Order is never changed here. A filter that also reordered would mean pressing
@@ -269,7 +369,13 @@ export function hides(sifting: Sifting, row: Reference): boolean {
  */
 export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] {
   const terms = sifting.query.toLowerCase().split(/\s+/).filter(Boolean)
+  const picked = sifting.picked === null ? null : new Set(sifting.picked)
   return rows.filter((row) => {
+    /* Exact strings, on both sides. `gh#41` and `#41` are two different
+       references, and every module on this canvas spells them the way this
+       list draws them — see `select` in `use-roadmap.ts` — so normalising here
+       would show a row for a pick that was never about it. */
+    if (picked && !picked.has(row.ref)) return false
     if (sifting.kind !== 'all' && row.kind !== sifting.kind) return false
     /* A row whose state could not be read is not `opened`, and asking for open
        rows must not produce it. It survives `all`, where it belongs: it is a

@@ -639,17 +639,20 @@ describe('the filters the header holds', () => {
       kind?: string
       options: { id: string; label: string }[]
     }[]
-    expect(groups.map((group) => group.id)).toEqual(['kind', 'state', 'search'])
+    expect(groups.map((group) => group.id)).toEqual(['kehikko', 'kind', 'state', 'search'])
     /* Eight issues, two of them closed. The number is in the words because the
        protocol has no count field — see `filterOptionSchema`. */
-    expect(groups[0]?.options.map((option) => option.label)).toEqual(['All 8', 'Issues 8'])
-    expect(groups[1]?.options.map((option) => option.label)).toEqual(['Any 8', 'Open 6', 'Closed 2'])
+    expect(groups[1]?.options.map((option) => option.label)).toEqual(['All 8', 'Issues 8'])
+    expect(groups[2]?.options.map((option) => option.label)).toEqual(['Any 8', 'Open 6', 'Closed 2'])
     /* And nothing nobody can press: `Changes 0` and `Merged 0` would be menu
-       entries whose only outcome is an empty list. */
-    expect(JSON.stringify(groups)).not.toContain(' 0')
-    /* The third group is the typed query, which is why this module draws no
+       entries whose only outcome is an empty list. The kehikko group is the
+       one exception and is checked on its own below — its zero is offered so
+       that the filter cannot switch itself off. */
+    expect(JSON.stringify(groups.slice(1))).not.toContain(' 0')
+    expect(groups[0]?.options.map((option) => option.label)).toEqual(['Everything 8', 'Picked here 0'])
+    /* The last group is the typed query, which is why this module draws no
        chrome of its own any more. */
-    expect(groups[2]?.kind).toBe('text')
+    expect(groups[3]?.kind).toBe('text')
   })
 
   test('a choice in the greeting narrows the list before anything else happens', async () => {
@@ -690,6 +693,84 @@ describe('the filters the header holds', () => {
     /* The symptom without this sentence is a press that changes nothing at all,
        which reads as a broken button rather than as a host saying no. */
     expect(document.body.textContent).toContain('is pinned')
+  })
+})
+
+/**
+ * The list narrowed to what the kehikko has picked out — the one filter on
+ * this page whose WHAT comes from another container.
+ *
+ * The four things that would break quietly: the list must follow the pick
+ * while the group is on; it must ignore the pick while the group is off; an
+ * empty pick must be a sentence and never an empty list; and the press that
+ * puts rows back must leave the other groups where the reader set them.
+ */
+describe('narrowed to what the kehikko has picked', () => {
+  const ON = { kehikko: 'picked' }
+  const listed = async (selection: string[], filters: Record<string, string> = {}) => {
+    const roadmap = stubRoadmap()
+    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    act(() => roadmap.greet(PROJECT, null, selection, filters))
+    await settle()
+    return roadmap
+  }
+
+  test('on, the rows are the ones picked on the canvas, in the list’s own order', async () => {
+    await listed(['gh#7', 'gh#2', 'gh#31337'], ON)
+    expect(document.body.textContent).toContain('2 of 8 shown')
+    expect([...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))).toEqual([
+      'gh#2',
+      'gh#7',
+    ])
+  })
+
+  test('and follows the pick as it changes, which is the whole of what "reacts" means', async () => {
+    const roadmap = await listed(['gh#7'], ON)
+    expect(document.body.textContent).toContain('1 of 8 shown')
+    /* A step ticked in another container, say. Nothing in THIS container was
+       pressed; the context is the only thing that changed. */
+    act(() => roadmap.context(PROJECT, ['gh#7', 'gh#3', 'gh#4'], 'an-epic', ON))
+    await settle()
+    expect(document.body.textContent).toContain('3 of 8 shown')
+  })
+
+  test('off, the pick may be anything and every row stays', async () => {
+    await listed(['gh#7'])
+    expect(document.body.textContent).toContain('8 references')
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(8)
+  })
+
+  test('on with nothing picked is a sentence, and never an empty list', async () => {
+    await listed([], ON)
+    expect(screen.getByText('Nothing is picked on this kehikko.')).toBeTruthy()
+    expect(document.body.textContent).toContain('tick a step in a journey')
+    expect(document.body.textContent).not.toContain('Nothing here matches')
+    expect(document.querySelectorAll('li')).toHaveLength(0)
+  })
+
+  test('on with a pick this project does not hold says so, rather than blaming the menus', async () => {
+    await listed(['#2274', '!1800'], ON)
+    expect(screen.getByText('What is picked on this kehikko is not in this list.')).toBeTruthy()
+    expect(document.body.textContent).toContain('2 references are picked out')
+  })
+
+  test('the one press turns off only this group, and leaves the others as the reader set them', async () => {
+    const roadmap = await listed([], { ...ON, state: 'closed' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything' }))
+    await settle()
+    /* The state the reader chose is asked for again; only the kehikko group is
+       left out, which is how a group is put back to its fallback. */
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { state: 'closed' } }])
+  })
+
+  test('the offer is re-sent as the pick changes, because its count is of rows the pick reaches', async () => {
+    const roadmap = await listed([])
+    const first = roadmap.offered() as { id: string; options: { label: string }[] }[]
+    expect(first[0]?.options[1]?.label).toBe('Picked here 0')
+    act(() => roadmap.context(PROJECT, ['gh#1', 'gh#2', 'gh#31337']))
+    await settle()
+    const next = roadmap.offered() as { id: string; options: { label: string }[] }[]
+    expect(next[0]?.options[1]?.label).toBe('Picked here 2')
   })
 })
 
