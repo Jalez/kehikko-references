@@ -284,6 +284,30 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     'while you work.',
   entry: '/',
   modes: [{ id: 'references', label: 'References', scope: 'epic' }],
+  /**
+   * What this page DOES with the context it is handed — the receiving half of
+   * the selection, and the newest claim in this file.
+   *
+   * `selection`, because the program genuinely moves: the `Kehikko` group
+   * offered to the container header has an option that narrows this list to
+   * the references picked out on the canvas, and while it is on, every pick —
+   * a row here, a step ticked in Journeys, anything in any other container —
+   * changes which rows are drawn. That is the test the protocol's essay on
+   * `reacts` sets, and it is met; it would not have been met by the ticks
+   * alone, which this page has always drawn from the selection without doing
+   * anything about it. A tick is display. Narrowing is a reaction.
+   *
+   * Together with `selection:set` below this manifest now names both ends of
+   * one relationship, and so does Journeys'. The host's `relations.ts` draws
+   * the pair as "Consumes / Provides to" in the registered list, and draws it
+   * as weaker evidence than a carried event on purpose — both ends are what
+   * the modules say about themselves, and the host performs no delivery it
+   * could vouch for. Nothing here is granted by the word and nothing is routed
+   * on it. The context arrives whether or not it is written.
+   *
+   * Not `passage`. Nothing here reads one.
+   */
+  reacts: ['selection'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
     uses: ['selection:set', 'filters:set', 'state:keep'],

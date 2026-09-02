@@ -287,6 +287,65 @@ export function NothingMatches({ total, clear }: { total: number; clear: () => v
 }
 
 /**
+ * The list is narrowed to what is picked on the kehikko, and that reaches
+ * nothing here.
+ *
+ * Two situations, one panel, and the sentence changes because what to do next
+ * does. Nothing picked at all: pick something, anywhere on the canvas — a row
+ * here, a step in a journey — and it appears. Something picked that this
+ * project's tracker does not hold: the pick is real and is about references
+ * that are not in this reading, which is worth saying because the other
+ * container is showing them and this one is not, and a reader deserves to know
+ * that is not a fault.
+ *
+ * It is NOT `NothingMatches`, on purpose. That panel says the reader narrowed
+ * the list with a menu and offers to loosen every menu at once; this state is
+ * not fixed by loosening — the kind and the state may be exactly what the
+ * reader wants — and it is very often fixed by a click in another container.
+ * The one press here turns off only this group, and leaves the rest as they
+ * were.
+ *
+ * An empty selection MUST NOT be an empty list. A pane that goes blank because
+ * nothing is picked reads as a broken module, and this is the sentence that
+ * stops it.
+ */
+export function NothingPicked({
+  picked,
+  total,
+  everything,
+}: {
+  /** How many references the canvas has picked out, none of which is here. */
+  picked: number
+  total: number
+  /** Turn off the narrowing to picks, leaving every other filter alone. */
+  everything: () => void
+}) {
+  return (
+    <Panel title={picked ? 'What is picked on this kehikko is not in this list.' : 'Nothing is picked on this kehikko.'}>
+      {picked ? (
+        <p>
+          {picked === 1 ? 'One reference is' : `${picked} references are`} picked out on the canvas, and{' '}
+          {picked === 1 ? 'it is not' : 'none of them is'} among the {total} in this project’s tracker. The pick is
+          real; it is about work that is not filed here.
+        </p>
+      ) : (
+        <p>
+          This list is showing only what is picked out on the canvas, and nothing is. Pick a row here, tick a
+          step in a journey, or pick a reference in any other container on this kehikko and it appears.
+        </p>
+      )}
+      <p>Nothing has gone missing: the project has {total} {total === 1 ? 'reference' : 'references'}.</p>
+      {/* Three words, because at 220 pixels "Show everything in the project"
+          ran off the panel's edge — measured in the scratch host — and a press
+          whose last word is clipped reads as a broken control. */}
+      <Button variant="outline" size="sm" onClick={everything}>
+        Show everything
+      </Button>
+    </Panel>
+  )
+}
+
+/**
  * The short name for a project folder, for a heading in a 220px container.
  *
  * The last segment, which is what a person calls their project. The full path is

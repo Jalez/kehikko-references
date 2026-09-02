@@ -8,6 +8,7 @@ import {
   NoProject,
   NothingFound,
   NothingMatches,
+  NothingPicked,
   Troubled,
   Unhosted,
   projectName,
@@ -204,6 +205,41 @@ describe('the filter hiding everything is the reader’s own doing', () => {
     const said = document.body.textContent ?? ''
     expect(said).toContain('Nothing has gone missing')
     expect(said).not.toContain('refresh')
+  })
+})
+
+describe('the list is narrowed to what the kehikko picked, and that reaches nothing', () => {
+  test('nothing picked at all: says so, says what would put rows back, and never says "no match"', () => {
+    render(<NothingPicked picked={0} total={412} everything={() => {}} />)
+    expect(screen.getByText('Nothing is picked on this kehikko.')).toBeTruthy()
+    const said = document.body.textContent ?? ''
+    expect(said).toContain('Pick a row here, tick a step in a journey')
+    expect(said).toContain('Nothing has gone missing')
+    expect(said).toContain('412 references')
+    expect(said).not.toContain('matches')
+  })
+
+  test('something picked that is not here: says the pick is real and about work not filed here', () => {
+    render(<NothingPicked picked={3} total={412} everything={() => {}} />)
+    expect(screen.getByText('What is picked on this kehikko is not in this list.')).toBeTruthy()
+    const said = document.body.textContent ?? ''
+    expect(said).toContain('3 references are picked out')
+    expect(said).toContain('none of them is among the 412')
+    expect(said).not.toContain('Nothing is picked')
+  })
+
+  test('one reference picked reads as one', () => {
+    render(<NothingPicked picked={1} total={1} everything={() => {}} />)
+    const said = document.body.textContent ?? ''
+    expect(said).toContain('One reference is picked out')
+    expect(said).toContain('it is not among the 1')
+    expect(said).toContain('the project has 1 reference.')
+  })
+
+  test('the one press is about this group and not about every filter', () => {
+    render(<NothingPicked picked={0} total={4} everything={() => {}} />)
+    expect(screen.getByRole('button', { name: 'Show everything' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show all 4' })).toBeNull()
   })
 })
 
