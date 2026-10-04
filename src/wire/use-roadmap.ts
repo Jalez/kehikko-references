@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ask, type Fetcher } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
-import { filterChoiceSchema, type FilterChoice, type FilterGroup } from 'roadmap-module-protocol'
+import {
+  filterChoiceSchema,
+  type CanvasContainer,
+  type Disposition,
+  type FilterChoice,
+  type FilterGroup,
+} from 'roadmap-module-protocol'
 import {
   HostRefused,
   connect,
@@ -219,6 +225,40 @@ export interface Roadmap {
   kept: string | null | undefined
   /** Ask the host to keep this string. Fire and forget; a host that will not is not an emergency. */
   keep: (state: string) => void
+  /**
+   * The refs the open epic names — every step's refs and the umbrella — or
+   * `null` for "no epic is open, or what it names could not be read".
+   *
+   * ## Asked of the host, not read off the disk
+   *
+   * The epic lives in `.kehikot/roadmap/epics/<slug>.json` under the project,
+   * and this app's own server could read it there. It does not, because the
+   * file is the ROADMAP's, and the host already answers `steps.list` and
+   * `epic.get` out of it: a second reader of somebody else's file is a second
+   * answer to what the epic says, and it would be wrong the first time the
+   * roadmap moved where it keeps them. So this module declares `steps:read`
+   * and `epics:read` and asks, and a host that refuses both leaves this `null`
+   * — which the scope reads as "nothing to narrow to", never as "the epic names
+   * nothing".
+   *
+   * Asked again when the epic or the project changes, and on the host's
+   * refresh, because steps are edited while an epic is open. Not on every
+   * context: a context arrives after every click on the canvas.
+   */
+  epicRefs: string[] | null
+  /**
+   * What the containers picked out on this kehikko say they are showing, as
+   * one list of refs, or `null` when no container is picked out.
+   *
+   * This module's own container is left out of it. It says nothing with
+   * `showing.set`, and a host folding the selection into whoever set it would
+   * put this list's own picks here — so a ticked References container would
+   * narrow itself to its own clicks, which is the kehikko group's job and not
+   * the scope's.
+   */
+  aimed: string[] | null
+  /** `context.dispositions`: what people have marked about why a reference closed. */
+  marks: Disposition[]
 }
 
 /**
@@ -238,6 +278,9 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [chosen, setChosen] = useState<FilterChoice>({})
   const [kept, setKept] = useState<string | null | undefined>(undefined)
+  const [epicRefs, setEpicRefs] = useState<string[] | null>(null)
+  const [aimed, setAimed] = useState<string[] | null>(null)
+  const [marks, setMarks] = useState<Disposition[]>([])
   const host = useRef<Connection | null>(null)
 
   /**
@@ -309,6 +352,46 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
    */
   const standingOn = useRef<string | null | undefined>(undefined)
 
+  /**
+   * The epic the page is standing on, and a counter for the question about it.
+   *
+   * The same arrangement as `asking` above, for the same reason: epics switch
+   * faster than a host answers, and without the counter the previous epic's
+   * refs could arrive second and narrow the list to the wrong work.
+   */
+  const epicOn = useRef<string | null | undefined>(undefined)
+  const epicAsked = useRef(0)
+
+  const readEpic = useCallback(() => {
+    const epic = epicOn.current
+    const mine = (epicAsked.current += 1)
+    const current = host.current
+    if (!epic || !current) {
+      setEpicRefs(null)
+      return
+    }
+    /* Both, side by side, and either is enough. `steps.list` is the steps'
+       refs under `steps:read`; `epic.get` is the umbrella under `epics:read`.
+       A host that grants one and refuses the other still narrows the list to
+       what it granted, which is a list somebody can read; one that refuses
+       both leaves the scope with nothing to narrow to, and says so. */
+    void Promise.allSettled([
+      current.request('steps.list', { epic }),
+      current.request('epic.get', { epic }),
+    ]).then(([steps, whole]) => {
+      if (epicAsked.current !== mine) return
+      if (steps.status === 'rejected' && whole.status === 'rejected') {
+        setEpicRefs(null)
+        return
+      }
+      const named = namedBy(
+        steps.status === 'fulfilled' ? steps.value : null,
+        whole.status === 'fulfilled' ? whole.value : null,
+      )
+      setEpicRefs((was) => (was && same(was, named) ? was : named))
+    })
+  }, [])
+
   const read = useCallback((fresh: boolean) => {
     const project = standingOn.current
     if (!project) return
@@ -345,10 +428,13 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
      */
     const arrived = (
       context: {
+        epic?: string | null
         projectPath?: string | null
         theme: 'light' | 'dark'
         selection: string[]
         filters?: FilterChoice
+        containers?: CanvasContainer[]
+        dispositions?: Disposition[]
       },
       /**
        * Whether this was a greeting rather than a later context, which decides
@@ -379,6 +465,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
     ) => {
       if (greeting) {
         standingOn.current = undefined
+        epicOn.current = undefined
         /* Set even when it is null, and that is the whole point of the third
            value on `kept`: `null` means the host answered and keeps nothing,
            which is a fact the view is entitled to act on, and it is a different
@@ -418,6 +505,13 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
        */
       setChosen((was) => (agrees(was, context.filters ?? {}) ? was : (context.filters ?? {})))
 
+      /* The two other facts the narrowing reads, compared for the same reason
+         before they are written. */
+      const pointed = aimedAt(context.containers ?? [], id)
+      setAimed((was) => (was === pointed || (was && pointed && same(was, pointed)) ? was : pointed))
+      const marked = context.dispositions ?? []
+      setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
+
       /* Read once, defensively, and treated as absent unless it is a non-empty
          string. The protocol says the host vouches for it being absolute; this
          page does not check that, because the door does and is the thing that
@@ -426,6 +520,15 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
 
       const moved = project !== standingOn.current
       standingOn.current = project
+
+      /* The epic is asked about again when it changes, and when the project
+         does: two projects can each have an epic with the same slug. */
+      const epic = typeof context.epic === 'string' && context.epic ? context.epic : null
+      if (moved || epic !== epicOn.current) {
+        epicOn.current = epic
+        readEpic()
+      }
+
       if (!moved) return
 
       if (project) read(false)
@@ -484,7 +587,10 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
        * needs is already in this file: `read` is defined above, and the decision
        * about WHEN a read happens has always lived here rather than in the view.
        */
-      onRefresh: () => read(true),
+      onRefresh: () => {
+        read(true)
+        readEpic()
+      },
     })
     host.current = live
     live.listen()
@@ -505,7 +611,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
          already assigned its own connection by the time some cleanups run. */
       if (host.current === live) host.current = null
     }
-  }, [id, read])
+  }, [id, read, readEpic])
 
   const resize = useCallback((height: number) => host.current?.resize(height), [])
 
@@ -629,6 +735,9 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       setFilters,
       kept,
       keep,
+      epicRefs,
+      aimed,
+      marks,
     }),
     [
       sight,
@@ -644,6 +753,9 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       setFilters,
       kept,
       keep,
+      epicRefs,
+      aimed,
+      marks,
     ],
   )
 }
@@ -660,5 +772,57 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
 function agrees(one: FilterChoice, other: FilterChoice): boolean {
   const mine = Object.keys(one)
   const theirs = Object.keys(other)
-  return mine.length === theirs.length && mine.every((key) => one[key] === other[key])
+  return (
+    mine.length === theirs.length &&
+    mine.every((key) => {
+      const a = one[key]
+      const b = other[key]
+      /* A toggles group's value is a list, and two lists are never `===`. In
+         order, because the host keeps the order things were switched on in. */
+      return Array.isArray(a) && Array.isArray(b) ? same(a, b) : a === b
+    })
+  )
+}
+
+/** Two lists of strings, element by element. */
+function same(one: readonly string[], other: readonly string[]): boolean {
+  return one.length === other.length && one.every((value, at) => value === other[at])
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/**
+ * The refs an epic names, out of what `steps.list` and `epic.get` answered.
+ *
+ * Read leniently, because the protocol gives neither answer a schema — a module
+ * reading them is reading the host's own material. What is taken: every string
+ * in every step's `refs`, from either answer, and the epic's `umbrella`. In the
+ * order they were found and once each; anything that is not a non-empty string
+ * is not a ref and is skipped.
+ */
+export function namedBy(steps: unknown, epic: unknown): string[] {
+  const out = new Set<string>()
+  const take = (value: unknown) => {
+    if (typeof value === 'string' && value) out.add(value)
+  }
+  const fromSteps = (list: unknown) => {
+    if (!Array.isArray(list)) return
+    for (const step of list) if (isObject(step) && Array.isArray(step.refs)) step.refs.forEach(take)
+  }
+  if (isObject(steps)) fromSteps(steps.steps)
+  if (isObject(epic)) {
+    take(epic.umbrella)
+    fromSteps(epic.steps)
+  }
+  return [...out]
+}
+
+/**
+ * What the picked-out containers are showing, as one list, or `null` when no
+ * container other than this one is picked out. See `aimed` on `Roadmap`.
+ */
+export function aimedAt(containers: readonly CanvasContainer[], self: string): string[] | null {
+  const picked = containers.filter((container) => container.selected && container.module !== self)
+  if (!picked.length) return null
+  return [...new Set(picked.flatMap((container) => container.showing?.refs ?? []))]
 }

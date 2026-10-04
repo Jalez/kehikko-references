@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
+import type { Scope } from '@/live/sift.ts'
 import type { Trouble, TroubleKind } from '@/live/sight.ts'
 
 /**
@@ -300,7 +301,7 @@ export function NothingMatches({ total, clear }: { total: number; clear: () => v
  *
  * It is NOT `NothingMatches`, on purpose. That panel says the reader narrowed
  * the list with a menu and offers to loosen every menu at once; this state is
- * not fixed by loosening — the kind and the state may be exactly what the
+ * not fixed by loosening — the toggles may be exactly what the
  * reader wants — and it is very often fixed by a click in another container.
  * The one press here turns off only this group, and leaves the rest as they
  * were.
@@ -338,6 +339,68 @@ export function NothingPicked({
       {/* Three words, because at 220 pixels "Show everything in the project"
           ran off the panel's edge — measured in the scratch host — and a press
           whose last word is clipped reads as a broken control. */}
+      <Button variant="outline" size="sm" onClick={everything}>
+        Show everything
+      </Button>
+    </Panel>
+  )
+}
+
+/**
+ * The scope is on, and nothing it names is in this reading.
+ *
+ * Its own panel rather than `NothingMatches`, for the reason `NothingPicked`
+ * is: the remedy is not to loosen a menu somebody set, because nobody set this
+ * one — the scope is on by default. Two cases with two sentences. An epic whose
+ * refs are all elsewhere is the common one: its steps cite GitLab issues and
+ * this project's tracker reads GitHub, or the epic simply names nothing yet.
+ * Picked containers that show nothing here is the other, and the sentence says
+ * where to look instead.
+ *
+ * The press turns the scope to Everything and leaves the other groups alone.
+ */
+export function NothingInScope({
+  scope,
+  total,
+  everything,
+}: {
+  scope: Scope
+  total: number
+  everything: () => void
+}) {
+  const named = scope.refs.length
+  const containers = scope.from === 'containers'
+  return (
+    <Panel
+      title={
+        containers
+          ? 'The picked containers show nothing in this list.'
+          : named
+            ? 'Nothing this epic names is in this list.'
+            : 'This epic names no references.'
+      }
+    >
+      {containers ? (
+        <p>
+          This list is showing what the containers picked out on this kehikko say they are showing, and{' '}
+          {named
+            ? `the ${named === 1 ? 'reference they name is' : `${named} references they name are`} not in this project’s tracker.`
+            : 'none of them says it is showing a reference.'}{' '}
+          Untick them, or pick a container that shows references, and the list follows.
+        </p>
+      ) : named ? (
+        <p>
+          The open epic names {named === 1 ? 'one reference' : `${named} references`} in its steps and umbrella, and{' '}
+          {named === 1 ? 'it is not' : 'none of them is'} among the {total} in this project’s tracker. They are
+          real; they are filed somewhere this list does not read.
+        </p>
+      ) : (
+        <p>
+          This list is narrowed to the references the open epic names in its steps and umbrella, and it names none
+          yet. A step that cites an issue or a change puts it here.
+        </p>
+      )}
+      <p>Nothing has gone missing: the project has {total} {total === 1 ? 'reference' : 'references'}.</p>
       <Button variant="outline" size="sm" onClick={everything}>
         Show everything
       </Button>

@@ -45,16 +45,40 @@ is no second copy to go stale.
 
 ### What that cost, said plainly
 
-**The list is the project's, not the epic's.** The roadmap's reading was a
-curated set: the refs an epic's narrative named, plus pull requests discovered
-against them. GitHub records nowhere which epic an issue belongs to, so that set
-cannot be rebuilt from the tracker, and the choice was between a fresh list of
-everything in the project and a stale list of the right things.
+**The reading is the project's; the list shows the epic's.** The roadmap's
+reading was a curated set: the refs an epic's narrative named, plus pull
+requests discovered against them. GitHub records nowhere which epic an issue
+belongs to, so that set cannot be rebuilt from the tracker, and the choice was
+between a fresh list of everything in the project and a stale list of the right
+things. Freshness won, because the failure of the other one is invisible: a
+closed issue still reading `opened` looks exactly like an open issue.
 
-Freshness won, because the failure of the other one is invisible. A closed issue
-still reading `opened` looks exactly like an open issue; a list that is longer
-than somebody expected looks exactly like what it is. The summary, the guidance,
-the header and every paragraph in `absence.tsx` say "this project".
+For a while that meant the list on screen was the whole project too, and on a
+real project it read as noise — 466 rows under an epic that names about 80, with
+nothing saying which were the work on the canvas (issue #1). The epic itself
+says which refs are its own: every step's `refs`, and its umbrella. So the
+container header has a **Scope** group, on by default:
+
+- **This epic** (the resting option) narrows to the refs the open epic names,
+  asked of the host with `steps.list` and `epic.get` — the host already answers
+  those out of `.kehikot/roadmap/epics/<slug>.json`, and a second reader of the
+  roadmap's file would be a second answer to what the epic says.
+- **While containers are picked out** on the kehikko, the same option narrows to
+  the union of what they say they are showing (`context.containers`,
+  `showing.refs`) instead, and its label says `Picked containers`. This
+  container's own row is left out.
+- **Everything** is the other option, one press away, and every "show all" on
+  this page — the empty-list panels, `goto` — asks for it explicitly, because
+  `{}` would put the scope back on the epic.
+
+The scope never narrows to nothing it has not read. No epic open, or a host that
+refuses both questions, leaves the whole project on screen and the option says
+`This epic (not read)`. An epic that names nothing this tracker holds draws its
+own panel rather than "nothing matches what you asked for", because nobody
+asked. The heading says which scope the count is of — `37 of 412 shown · this
+epic` — and how old the reading is, `read 6 d ago`, because a snapshot nothing
+on this machine can refresh (a GitLab project, say) otherwise looks exactly like
+a live list.
 
 ### What did not change, deliberately
 
@@ -84,12 +108,11 @@ longer says "merge request", the two GitLab bags are present and empty, and the
 row, the filter and the `!41` spelling are all still in place waiting for the day
 somebody has a GitLab project to prove one call to `glab mr list` against.
 
-## Three capabilities, where there were four
+## Five capabilities
 
-`selection:set`, `filters:set` and `state:keep`.
+`selection:set`, `filters:set`, `state:keep`, `epics:read` and `steps:read`.
 
-`filters:set` is the newest and arrived with the kind and state filters moving
-into the container header. Offering filters costs nothing — an offer is fire and
+`filters:set` arrived with the filters moving into the container header. Offering filters costs nothing — an offer is fire and
 forget — but two promises on this page need to be able to ask for the choice
 BACK: `view.goto`, which answers "go to `gh#105`" by clearing whatever is hiding
 that row, and the `Clear` beside the count, whose whole promise is that one press
@@ -97,12 +120,15 @@ puts everything back. Without the declaration both calls are refused and both
 promises become two thirds true. It is a request rather than a permission: a host
 may decline, and the page draws the host's own sentence when it does.
 
-`live:read` came out because nothing calls it:
-there is no `live.get` anywhere in this program. `epics:read` came out with it,
-and that one was a capability that WORKED — it existed so a page with no epic
-open could offer a picker instead of a blank, and there is now no such state to
-be in. Keeping either declaration would be this module telling everyone who reads
-its manifest that it intends to ask a question it will never ask.
+`live:read` came out because nothing calls it: there is no `live.get` anywhere in
+this program. `epics:read` came out with it once, when its picker went, and is
+back with `steps:read` for the scope above: `steps.list` is the steps' refs and
+`epic.get` the umbrella. Either refused alone still narrows to what the other
+granted.
+
+`reacts` names `selection`, `containers` and `dispositions` — the kehikko pick,
+the picked-out containers the scope follows, and the marks people put on why a
+reference closed, which decide its `closed:*` facet below.
 
 `storage: true` went in, and it is the one that is worth reading `manifest.ts`
 about. The short version: an opaque origin cannot fetch its own server without a
@@ -359,17 +385,40 @@ against the box, which is 58 pixels narrower. Which is right — "is there room 
 a second line" is a question about the container, and "is there room for the people"
 is a question about what is left after the two controls have taken theirs.
 
-### All three filters are in the container's header, and the toolbar is gone
+### Every filter is in the container's header, and the toolbar is gone
 
 They used to be seven buttons and a text box in this app's own bar — `All ·
 Issues · Changes`, `Any · Open · Merged · Closed`, and a query input — with a
 whole essay about fitting them into 220 pixels and a `ResizeObserver` collapsing
-them behind one labelled trigger below 21rem. All three are `roadmap.filters`
-groups now, drawn in the container's own header beside every other module's.
+them behind one labelled trigger below 21rem. Every one is a `roadmap.filters`
+group now, drawn in the container's own header beside every other module's:
+**Scope** (above); **Kehikko**, which narrows to what is picked on the canvas
+while it is on (`Picked here`); **hide**; and the query — four, which is
+`LIMITS.FILTER_GROUPS`.
 
-The kind and the state are lists of options, and the counts ride in the labels
-because the protocol has no count field: `Issues 17`, `Open 9`. An option nothing
-matches — `Merged 0`, on a GitHub-only reading — is not offered at all.
+**`hide` is the shared ref facets**, one `toggles` group from
+`roadmap-module-protocol/facets` where there used to be two single choices for
+kind and state. A pair of single choices can only say a cell of their product,
+and what people wanted was "hide closed MRs/PRs, keep closed issues": a closed
+issue is usually finished work and a closed change usually abandoned. So each of
+`open issues`, `closed issues`, `open MRs/PRs`, `closed MRs/PRs` and `merged
+MRs/PRs` is its own toggle, and so is each reason a closed ref closed — `done`,
+`won’t do`, `duplicates`, `superseded`, `closed, reason unknown`. The vocabulary
+and the group id are the protocol's, so Journeys offers the same toggles under
+the same id and a choice means the same thing in both containers.
+
+The reason a ref closed comes from a person's mark when there is one
+(`context.dispositions`), and otherwise from the tracker: GitHub's `stateReason`,
+which `tracker/gh.ts` now asks for, and for a GitLab issue a merged merge request
+the reading links it to. A closed ref with neither is "reason unknown" — a state
+to settle, never counted as done. A row whose state nobody could read has no
+facets and no toggle ever hides it.
+
+The counts ride in the labels because the protocol has no count field —
+`closed issues (12)` — and are of the whole reading, not of the scope. A facet
+nothing has is not offered unless it is switched on. A choice a container stored
+under the old `kind` and `state` groups narrows nothing; the host prunes it once
+the new offer lands.
 
 **The query is a `text` group**, which the protocol grew for this module. It had
 refused free text twice, on the grounds that a text box in a container header
@@ -382,15 +431,17 @@ accessible name, so it says what this search looks at: `Filter by number, title,
 label or person`.
 
 Two behaviours had to keep working across the move, and both did, because the
-protocol also grew `filters.set` — a module asking for a WHOLE choice, where `{}`
-is "clear the narrowing":
+protocol also grew `filters.set` — a module asking for a WHOLE choice, where
+`{ scope: 'all' }` is "clear the narrowing" (`{}` would leave the default scope
+on):
 
-- **`goto` still clears what is hiding its target.** There is nothing left here
-  to clear locally, so all of it is asked for. It then reads what the host
+- **`goto` still clears what is hiding its target**, and only when something is:
+  a walk to a ref the epic names leaves the scope alone. There is nothing left
+  here to clear locally, so all of it is asked for. It then reads what the host
   *settled* on, which is deliberately not what was asked for, and only answers
   `found: true` about a row that survives it.
-- **One press still puts everything back.** `{}` reaches all three groups,
-  including the query — an empty string is how a text group says it is at rest.
+- **One press still puts everything back.** It reaches every group, including
+  the query — an empty string is how a text group says it is at rest.
   The host's own "Show everything" makes the same call; so does the button on the
   panel this app draws when the narrowing has hidden every row.
 

@@ -52,7 +52,7 @@ describe('four hundred rows', () => {
 
   test('a filtered list draws exactly what the filter kept, and nothing else', () => {
     const rows = collect(reading(400))
-    const kept = sift(rows, { ...EVERYTHING, state: 'closed' })
+    const kept = sift(rows, { ...EVERYTHING, hidden: ['issue:open'] })
     const { container } = render(<ReferenceList rows={kept} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelectorAll('li')).toHaveLength(kept.length)
     expect(kept.length).toBeGreaterThan(0)

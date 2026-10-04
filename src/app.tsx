@@ -5,13 +5,24 @@ import type { Fetcher } from '@/live/ask.ts'
 import { collect, generatedAt } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
-import { KEHIKKO, hides, narrowing, nothingPicked, offer, sift, siftingOf } from '@/live/sift.ts'
+import {
+  KEHIKKO,
+  SHOW_ALL,
+  hides,
+  narrowing,
+  nothingInScope,
+  nothingPicked,
+  offer,
+  sift,
+  siftingOf,
+} from '@/live/sift.ts'
 import { useRoadmap, type GotoHandler, type Settled } from '@/wire/use-roadmap.ts'
 import {
   Asking,
   Listening,
   NoProject,
   NothingFound,
+  NothingInScope,
   NothingMatches,
   NothingPicked,
   Troubled,
@@ -62,7 +73,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   /**
    * The order, which is the only setting this page still holds.
    *
-   * The kind, the state and the typed query are all the host's now — offered as
+   * The scope, the toggles and the typed query are all the host's now — offered as
    * `roadmap.filters`, drawn in the container's own header, and sent back in
    * `context.filters`. There is no local copy of any of them, for the same
    * reason there is no local copy of the selection: a second answer would go
@@ -126,6 +137,9 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     setFilters,
     kept,
     keep,
+    epicRefs,
+    aimed,
+    marks,
   } = useRoadmap(ID, onGoto, fetcher)
 
   /**
@@ -137,14 +151,15 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * another, which is right: a reader looking at four rows of four hundred does
    * not care which of the four controls did it.
    *
-   * The selection is the second input, and it is the one thing on this page
-   * that arrives from another container: the fourth group narrows to what the
-   * canvas has picked out, and `context.selection` is where that is read. This
-   * is the "reacts" the manifest declares — the list narrows when the pick
-   * changes — and it is only ever in force while the header's `Kehikko` group
-   * is on, which is the person's to set. See `Sifting.picked` in `sift.ts`.
+   * The canvas is the second input, and four facts in it arrive from other
+   * containers: the selection, which the `Kehikko` group narrows to while it
+   * is on; what the open epic names and what the picked-out containers show,
+   * which the scope narrows to by default; and the marks people put on why a
+   * reference closed, which decide which `closed:*` facet a row has. Those are
+   * the reactions the manifest declares. See `Sifting` in `sift.ts`.
    */
-  const sifting = useMemo(() => siftingOf(chosen, selection), [chosen, selection])
+  const canvas = useMemo(() => ({ selection, epicRefs, aimed, marks }), [selection, epicRefs, aimed, marks])
+  const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 
   /**
    * What this module can be narrowed by, announced whenever the words change.
@@ -165,12 +180,13 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * there offering `Issues 0`.
    */
   useEffect(() => {
-    /* And on every selection, because `Picked here 3` is a count of rows a
-       pick reaches and changes with the pick. See the note on the fourth
-       group in `offer`. */
-    const groups = offer(rows, sight.at === 'read', selection)
+    /* And on every change to the canvas, because `Picked here 3` and `This
+       epic 37` are counts of rows a pick or a scope reaches; and on every
+       change to what is hidden, because a facet counted zero stays offered
+       only while it is on. See `offer`. */
+    const groups = offer(rows, sight.at === 'read', canvas, sifting.hidden)
     if (groups) offerFilters(groups)
-  }, [rows, sight.at, selection, offerFilters])
+  }, [rows, sight.at, canvas, sifting.hidden, offerFilters])
 
   /**
    * What this page says about being read again, which is the whole of the
@@ -216,11 +232,13 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * One press puts everything back — including the two thirds this page does not
    * hold.
    *
-   * One call, because `filters.set` takes a whole choice and `{}` is exactly
-   * "clear the narrowing" — every group back to its resting option, the typed
-   * query included, since an empty string is how a text group says it is at
-   * rest. Per-group clearing would produce a context per group and a page seen
-   * part-way through its own reset.
+   * One call, because `filters.set` takes a whole choice and `SHOW_ALL` is
+   * exactly "clear the narrowing" — the scope on Everything and every other
+   * group back to its resting option, the typed query included, since an empty
+   * string is how a text group says it is at rest. Not `{}`, which would put
+   * the scope back on the epic: see `SHOW_ALL` in `sift.ts`. Per-group
+   * clearing would produce a context per group and a page seen part-way
+   * through its own reset.
    *
    * This is now the only way this page can undo anything it is showing, and
    * that is the shape of the whole change: nothing here holds a filter, so
@@ -234,7 +252,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    */
   const clearAll = useCallback(async (): Promise<Settled> => {
     setFilterRefused(null)
-    const settled = await setFilters({})
+    const settled = await setFilters(SHOW_ALL)
     if (!settled.ok) setFilterRefused(settled.why)
     return settled
   }, [setFilters])
@@ -259,6 +277,21 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   }, [chosen, setFilters])
 
   /**
+   * Turn the scope to Everything, and nothing else.
+   *
+   * The press `NothingInScope` offers, for the reason `everythingInProject`
+   * above leaves the other groups alone: somebody hiding closed changes whose
+   * epic named nothing in this tracker wants the project's open work, not
+   * every closed change as well.
+   */
+  const outOfScope = useCallback(async (): Promise<Settled> => {
+    setFilterRefused(null)
+    const settled = await setFilters({ ...chosen, ...SHOW_ALL })
+    if (!settled.ok) setFilterRefused(settled.why)
+    return settled
+  }, [chosen, setFilters])
+
+  /**
    * Answering a host that says "go to this reference".
    *
    * Four things happen here that are easy to get wrong and all four matter:
@@ -266,7 +299,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * 1. **What is hiding the target is cleared.** Answering `found: true` while
    *    the row is filtered out walks the reader to a page where their reference
    *    is invisible, which is worse than the fallback link they would have got
-   *    for `found: false`. All three groups are the host's now, so all of it is
+   *    for `found: false`. Every group is the host's now, so all of it is
    *    ASKED for — there is nothing left here to clear locally, which makes this
    *    simpler than it was rather than more fragile.
    * 2. **The answer is read rather than assumed.** What comes back from
@@ -304,15 +337,19 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
 
     setLandedOn(row.ref)
 
-    /* Nothing is narrowed, so there is nothing to ask for and nothing to wait
-       on. The common case, and it answers in the same breath it always did. */
-    if (!narrowing(sifting)) {
+    /* Nothing is hiding it, so there is nothing to ask for and nothing to wait
+       on. The common case, and it answers in the same breath it always did.
+       Asked of the row rather than of the narrowing, now that the scope is on
+       by default: a walk to a ref the epic names must not throw away the
+       scope, the toggles and the query to land on a row that was already
+       drawn. */
+    if (!narrowing(sifting) || !hides(sifting, row)) {
       answer(true, '')
       return
     }
 
     setFilterRefused(null)
-    void setFilters({}).then((settled) => {
+    void setFilters(SHOW_ALL).then((settled) => {
       if (!settled.ok) {
         setFilterRefused(settled.why)
         answer(
@@ -325,7 +362,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
          the list uses. A settled choice that still hides it is not a success
          with a caveat — it is a walk to an invisible row, which is the one thing
          this handler exists to refuse. */
-      if (hides(siftingOf(settled.filters, selection), row)) {
+      if (hides(siftingOf(settled.filters, canvas), row)) {
         answer(false, `${message.ref} is in this list, but this container’s filters are still hiding it.`)
         return
       }
@@ -531,6 +568,8 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
         onOrder={setOrdering}
         showing={shown.length}
         total={rows.length}
+        scope={sifting.scope?.from ?? null}
+        generated={generated}
       />
       {/*
         A read that failed over rows that could still be shown.
@@ -587,6 +626,15 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
             picked={sifting.picked?.length ?? 0}
             total={rows.length}
             everything={() => void everythingInProject()}
+          />
+        ) : shown.length === 0 && nothingInScope(rows, sifting) ? (
+          /* Before `NothingMatches` too, and for the same reason: nobody asked
+             for this narrowing — the scope is on by default — so "nothing
+             matches what you asked for" would be wrong about it. */
+          <NothingInScope
+            scope={sifting.scope!}
+            total={rows.length}
+            everything={() => void outOfScope()}
           />
         ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => void clearAll()} />

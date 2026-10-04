@@ -1,11 +1,22 @@
-import { LIMITS, type FilterChoice, type FilterGroup } from 'roadmap-module-protocol'
+import { LIMITS, type Disposition, type FilterChoice, type FilterGroup } from 'roadmap-module-protocol'
+import {
+  HIDE_GROUP,
+  countFacets,
+  dispositionOf,
+  facetsOf,
+  hiddenIn,
+  offer as offerFacets,
+  sift as siftFacets,
+  type Facet,
+  type Sighting,
+} from 'roadmap-module-protocol/facets'
 
 import type { Reference } from './reference.ts'
 
 /**
  * Narrowing the list, which is the only place this app is allowed to hide a
- * row — and only because somebody asked it to, in the current second, with the
- * count of what is hidden on screen.
+ * row — and only because somebody asked it to, with the count of what is
+ * hidden on screen.
  *
  * That is the whole rule this file exists to keep, and it survived the control
  * leaving. `collect` never drops anything; a filter drops things by definition,
@@ -14,144 +25,240 @@ import type { Reference } from './reference.ts'
  * that matches nothing says so in its own words rather than in the words used
  * for a project with no references, and one press puts everything back.
  *
- * ## This file has argued three different things, and this is the third
+ * ## This file has argued four different things, and this is the fourth
  *
  * **First**, that the module kept all of its filtering, because the protocol
- * had no way for a module to write its own choice back. Two behaviours here
- * depended on being able to: `view.goto`, which answers "go to `gh#105`" by
- * clearing whatever is hiding that row, and the Clear that promised one press
- * would put everything back. With `kind` and `state` held by the host and no
- * way to write them, both would have become two thirds true.
+ * had no way for a module to write its own choice back. **Second**, that `kind`
+ * and `state` should move to the host's header and the typed query should stay.
+ * **Third**, that all of it goes: the protocol grew a `text` kind, so this
+ * module offers its groups, holds none of them, and reads every one out of
+ * `context.filters`. What that bought was consistency first and about a
+ * hundred pixels of chrome as a consequence.
  *
- * **Second**, that `kind` and `state` should move and the typed query should
- * stay. `filters.set` had arrived, so the two costs above were payable; and
- * `filterGroupSchema` could not express free text, saying so in its own words —
- * a text box in a 220-pixel container header needs room, focus and a keyboard.
- * That left this module drawing one input in a row of its own chrome for the
- * sake of one control, and a person looking in two places for one filter.
+ * **Fourth, and this is what the code does now:** the two single-choice groups
+ * for kind and state are gone, replaced by ONE `toggles` group built from the
+ * shared ref facets in `roadmap-module-protocol/facets`, and the group that
+ * frees is spent on a scope that is on by default.
  *
- * **Third, and this is what the code does now: all three go.** The protocol
- * grew a `text` kind, and the argument that had refused one turned out to be
- * about a text box in the header STRIP rather than about the feature — the
- * control is a MENU, which has its own width, its own focus scope and as many
- * rows as it likes. So this module offers three groups, holds none of them, and
- * reads all three out of `context.filters`.
+ * Two reasons, either of which would have been enough. A pair of single
+ * choices can only say a cell of their product — "issues" AND "closed" — and
+ * the thing people actually wanted was "hide closed MRs/PRs, keep closed
+ * issues", because a closed issue is usually finished and a closed change is
+ * usually abandoned. And the vocabulary was References' own, so Journeys would
+ * have had to copy it and the two copies would have drifted. The facets are the
+ * protocol's, so `hide` means the same thing in both containers and is stored
+ * under the same group id.
  *
- * What that bought is not pixels, and the honest note from the second version
- * survives: moving `kind` and `state` alone bought nothing at 220 pixels,
- * because the toolbar stayed for the query. Moving the query is what let the
- * toolbar go, and the header with it — about a hundred pixels of chrome over a
- * list that had three hundred to divide. The reason the owner gave was
- * consistency, twice, and the room came as a consequence rather than as the
- * argument.
+ * Then the cap. `LIMITS.FILTER_GROUPS` is four, and the four were spent —
+ * kehikko, kind, state, search — so there was no room for the scope issue #1
+ * asked for. Kind and state in one group is what made room.
  *
  * ## What stayed here, and could not have gone
  *
  * **The sifting itself.** The host holds the CHOICE and this holds what it
- * means. Nothing in `filterOptionSchema` tells a host that `opened` is a state
- * or that a query looks at labels and people as well as titles, and nothing
- * should: the host draws a menu and reports a press, and the meaning stays with
- * the program that wrote the words.
+ * means. The facets module says what `change:closed` is; only this module knows
+ * how to read a facet off one of its own rows, and only this one knows which
+ * refs the open epic names.
  *
  * **The count.** `37 of 412 shown` is drawn by this module, in this module's
- * words, from numbers only this module can count — the host sees rows it does
- * not render, in a document it cannot read, in a frame on another origin. It
- * lives in the table's heading now; `view/heading.tsx` has the argument.
+ * words, from numbers only this module can count. It lives in the table's
+ * heading; `view/heading.tsx` has the argument.
  *
  * **The order.** It is not a filter: it hides nothing, so it has no business in
- * a control a reader has learned to check when a list looks short. It went to
- * the column headings, where somebody looking at a table expects it.
+ * a control a reader has learned to check when a list looks short. It is on the
+ * column headings.
  *
  * ## The counts ride in the labels, and are counted over the whole reading
  *
- * `filterOptionSchema` says so: there is no count field, because a separate one
- * would be the host deciding how a count is phrased. So `Issues 17` is one
- * string, and the offer is re-sent whenever the words change — which, here, is
- * whenever a reading changes.
+ * `filterOptionSchema` has no count field, because a separate one would be the
+ * host deciding how a count is phrased. So `Everything 412` is one string, and
+ * the offer is re-sent whenever the words change.
  *
  * The numbers deliberately ignore the query and each other. A count that
- * narrowed with the query would re-send the whole offer on every keystroke, to
- * keep a number current in a menu that is usually closed; a count that narrowed
- * with the other group would make `Open 9` mean something different depending
- * on whether `Issues` was pressed, which is a number nobody can act on.
- * `Issues 17` means "seventeen of the references in this project are issues",
- * every time.
+ * narrowed with the query would re-send the whole offer on every keystroke; a
+ * count that narrowed with another group would make `closed issues (9)` mean
+ * something different depending on what else was pressed, which is a number
+ * nobody can act on. `closed issues (9)` means "nine of the references in this
+ * project are closed issues", every time — and that includes the scope: the
+ * facet counts are of the reading, not of the epic.
  *
- * ## An option nothing matches is not offered
+ * ## A facet nothing has is not offered, unless it is on
  *
- * A GitHub-only reading has no merged rows in it, so `Merged 0` would be a menu
- * entry whose only possible outcome is an empty list. Options with nothing
- * behind them are left out and the fallback is always kept, which is the same
- * rule `kehikko-learning`'s `wire/scope.ts` keeps for a rung nothing is pointing
- * at. The host reconciles a stored choice naming an option that is no longer
- * offered by falling back, so a reader who had chosen `Merged` and moved to a
- * project with none is returned to `Any` rather than left looking at nothing.
- *
- * The query group is exempt from that, and the protocol is the reason: a text
- * group has no options to be missing and no fallback to fall to. Its resting
- * state is the empty string, which is spelled by not being in the record at all.
+ * A GitHub-only reading has no merged rows, so `merged MRs/PRs (0)` would be a
+ * toggle whose press hides nothing. The facets module drops a zero-count facet
+ * unless it is currently switched on, so a person can always switch off what
+ * they switched on. Two groups are exempt from dropping anything, each for a
+ * reason given where it is built: the scope, and the kehikko pick.
  */
 
-export type KindFilter = 'all' | 'issue' | 'change'
-export type StateFilter = 'all' | 'opened' | 'closed' | 'merged'
+/**
+ * The refs a scope narrows to, and where they came from.
+ *
+ * `containers` when one or more containers on the kehikko are picked out, and
+ * the refs are the union of what they say they are showing; `epic` otherwise,
+ * and the refs are what the open epic names — its steps' refs and its
+ * umbrella. See `scopeOf`.
+ */
+export interface Scope {
+  from: 'epic' | 'containers'
+  refs: readonly string[]
+}
 
 export interface Sifting {
   query: string
-  kind: KindFilter
-  state: StateFilter
   /**
-   * The refs this list is narrowed to, or `null` for "not narrowed to any".
+   * The facets switched on in the `hide` group. A row with any of them is
+   * hidden. Ids the facets module does not know are already dropped by
+   * `hiddenIn`, so a stored choice from a newer or older vocabulary narrows
+   * nothing rather than everything.
+   */
+  hidden: readonly Facet[]
+  /**
+   * The refs the scope group narrows to, or `null` for "not narrowed by it".
    *
-   * ## The fourth group, and why it holds a list rather than a word
+   * ## On by default, which is the first group here that is
    *
-   * The other three are choices a person made in this container's header, and
-   * each is a word. This one is a choice in the header AND a fact from
-   * somewhere else: the person turns it on, and WHAT it narrows to is the
-   * canvas selection — the references picked out on this kehikko, in this
-   * container or in any other. So the choice is read out of `context.filters`
-   * like the rest and the list is read out of `context.selection`, and they
-   * are folded together here so that nothing downstream has to know there are
-   * two sources. `sift` narrows, `narrowing` counts it, `goto` clears it, and
-   * none of them can tell this group from the other three, which is the point.
+   * Issue #1 is the argument. On a real project the list held every one of
+   * 466 references while the epic on the canvas named about 80, and a reader
+   * could not tell which belonged to the work in front of them. So the
+   * fallback of the scope group — the option the host stores by not storing
+   * anything — is `epic`, and "Everything" is the press away from it.
+   *
+   * `null` in two cases: the reader chose Everything, or the scope has nothing
+   * to narrow to yet — no epic is open, or what it names has not been read.
+   * The second is deliberate: a scope that hid every row while the epic was
+   * still being asked about would draw an empty list for the length of a round
+   * trip, and one whose read was refused would draw it forever. The heading
+   * says which scope is in force, so a list that is NOT narrowed says so too.
+   *
+   * `[]` is different: an epic that names nothing, or picked containers that
+   * show nothing. That hides every row, and `app.tsx` draws `NothingInScope`
+   * for it rather than an empty list.
+   */
+  scope: Scope | null
+  /**
+   * The refs the kehikko group narrows to, or `null` for "not narrowed to any".
+   *
+   * ## The group that holds a list rather than a word
+   *
+   * The others are choices a person made in this container's header. This one
+   * is a choice in the header AND a fact from somewhere else: the person turns
+   * it on, and WHAT it narrows to is the canvas selection — the references
+   * picked out on this kehikko, in this container or in any other. So the
+   * choice is read out of `context.filters` like the rest and the list is read
+   * out of `context.selection`, and they are folded together here so that
+   * nothing downstream has to know there are two sources.
    *
    * `null` and `[]` are different states and the difference is the feature.
    * `null` is the group at rest. `[]` is the group ON with nothing picked on
    * the canvas, which hides every row — and must not be drawn as an empty list,
-   * because nothing is wrong: `app.tsx` draws `NothingPicked` for it and says
-   * in words what would put rows back.
-   *
-   * ## Why the selection, and not "everything the journey covers"
-   *
-   * The ask was to narrow this list to the issues and changes that are part of
-   * the kehikko. The canvas carries exactly one such thing, the selection, and
-   * it means what a PERSON picked out — one ref, several, or none — not the
-   * whole set some other module happens to know about. Narrowing to the
-   * selection is honest about that; a module that broadcast everything it knew
-   * as "selected" would have redefined the word for every other module on the
-   * canvas. So a person picks steps in Journeys, or rows here, and this group
-   * follows the pick. What it cannot do is narrow to a journey nobody has
-   * picked anything from, because the wire has no such fact to read.
+   * because nothing is wrong: `app.tsx` draws `NothingPicked` for it.
    */
   picked: readonly string[] | null
+  /**
+   * The marks people have put on why a ref closed, from `context.dispositions`.
+   *
+   * Not a choice, but it decides which `closed:*` facet a row has — a mark
+   * always wins over the tracker's reason — so it travels with the choice, for
+   * the reason `picked` does: `sift`, `hides` and `goto` must all read a row's
+   * facets the same way, and the only way to make sure they do is to hand them
+   * the same value.
+   */
+  marks: readonly Disposition[]
 }
 
-export const EVERYTHING: Sifting = { query: '', kind: 'all', state: 'all', picked: null }
+export const EVERYTHING: Sifting = { query: '', hidden: [], scope: null, picked: null, marks: [] }
 
 /**
  * The four group ids, named because three things have to agree on them: the
- * offer, the reading of what the host chose, and the tests.
+ * offer, the reading of what the host chose, and the tests. `hide` is the
+ * protocol's, because Journeys stores the same group under the same id.
  */
-export const KIND = 'kind'
-export const STATE = 'state'
+export const SCOPE = 'scope'
+export const HIDE = HIDE_GROUP
 export const SEARCH = 'search'
 export const KEHIKKO = 'kehikko'
+
+/** The scope group's resting option: what the open epic names, or what the picked containers show. */
+export const IN_SCOPE = 'epic'
+/** The other option of the scope and kehikko groups, and the one every "show me everything" press asks for. */
+export const ALL = 'all'
 
 /** The option of the `kehikko` group that narrows to the canvas selection. */
 export const PICKED = 'picked'
 
+/**
+ * The choice that shows every row: Everything in the scope, every other group
+ * at rest.
+ *
+ * Not `{}`, and that is the one place the default-on scope costs something.
+ * `{}` puts every group back to its fallback, and the scope's fallback is the
+ * epic — so a "Show all" that sent `{}` would show all of the epic. Every press
+ * that promises the whole project sends this instead.
+ */
+export const SHOW_ALL: FilterChoice = { [SCOPE]: ALL }
+
 /** Whether anything is being hidden by choice. Drives the count and what `goto` has to undo. */
 export function narrowing(sifting: Sifting): boolean {
-  return sifting.query.trim() !== '' || sifting.kind !== 'all' || sifting.state !== 'all' || sifting.picked !== null
+  return (
+    sifting.query.trim() !== '' || sifting.hidden.length > 0 || sifting.scope !== null || sifting.picked !== null
+  )
+}
+
+/**
+ * What one row is, in the facets module's terms, or `null` for a row whose
+ * state nobody could read.
+ *
+ * `null` is the rule this module has always kept — a state that could not be
+ * read is not `opened` — carried into the shared vocabulary: a row with no
+ * sighting has no facets, and the facets module's `sift` never hides a row
+ * with none. Hiding open issues must not hide an unreadable row, and neither
+ * must hiding closed ones.
+ */
+export function sightingOf(row: Reference): Sighting | null {
+  if (row.state === null) return null
+  return {
+    kind: row.kind,
+    state: row.state === 'opened' ? 'open' : row.state,
+    stateReason: row.stateReason,
+    closedByMerge: row.closedByMerge,
+  }
+}
+
+/** Every facet one row has, with a person's mark winning over the tracker's reason. */
+export function facetsOfRow(row: Reference, marks: readonly Disposition[]): Facet[] {
+  const sighting = sightingOf(row)
+  if (!sighting) return []
+  return facetsOf(sighting, dispositionOf(row.ref, sighting, marks))
+}
+
+/**
+ * Which scope the `epic` option means right now, or `null` for "nothing to
+ * narrow to".
+ *
+ * Picked-out containers win over the epic, and that order is the protocol's
+ * argument for `containers` rather than this module's: a person ticking
+ * containers is aiming at them, here and now, and the epic is the standing
+ * answer to "what is on this canvas" when nobody is aiming at anything. So
+ * `aimed` — the union of the picked containers' `showing.refs`, or `null` when
+ * none is picked — is asked first.
+ */
+export function scopeOf(epicRefs: readonly string[] | null, aimed: readonly string[] | null): Scope | null {
+  if (aimed) return { from: 'containers', refs: aimed }
+  if (epicRefs) return { from: 'epic', refs: epicRefs }
+  return null
+}
+
+/** What else the narrowing is read against, besides the choice: four facts from the canvas. */
+export interface Canvas {
+  /** `context.selection`. */
+  selection?: readonly string[]
+  /** What the open epic names, or `null` when no epic is open or it has not been read. */
+  epicRefs?: readonly string[] | null
+  /** The union of the picked containers' `showing.refs`, or `null` when no container is picked out. */
+  aimed?: readonly string[] | null
+  /** `context.dispositions`. */
+  marks?: readonly Disposition[]
 }
 
 /**
@@ -163,152 +270,130 @@ export function narrowing(sifting: Sifting): boolean {
  * host acts on it by withdrawing the control and pruning this container's stored
  * choice. That is right for a project whose tracker is genuinely empty, and it
  * is catastrophic before a reading has arrived: the effect that sends this first
- * runs on mount, with no rows, and a module that answered `[]` there would claim
- * it had nothing to offer at the one moment it could not possibly know. The host
- * would believe it and erase the remembered choice on every single load. The
- * setting would appear to work perfectly and be forgotten every time the page
- * was reloaded.
+ * runs on mount, with no rows, and a module that answered `[]` there would erase
+ * the remembered choice on every single load. So `read` is the caller's answer
+ * to "has a reading actually arrived", and until it has, this returns `null` and
+ * the caller sends nothing at all.
  *
- * It was found in the checklist module against the real host, and
- * `kehikko-learning`'s `wire/scope.ts` carries the same guard for the same
- * reason. So `read` is the caller's answer to "has a reading actually arrived",
- * and until it has, this returns `null` and the caller sends nothing at all —
- * whatever was last offered stands.
- *
- * The guard matters more now than it did when two groups were at stake: what
- * would be erased includes somebody's typed query.
+ * `hidden` is what the `hide` group has on now, so that a facet counted zero
+ * stays offered while it is on — see `offer` in the facets module.
  */
 export function offer(
   rows: readonly Reference[],
   read: boolean,
-  /** What the canvas has picked out, for the count on the fourth group. */
-  selection: readonly string[] = [],
+  canvas: Canvas = {},
+  hidden: readonly string[] = [],
 ): FilterGroup[] | null {
   if (!read) return null
   if (rows.length === 0) return []
+  const { selection = [], epicRefs = null, aimed = null, marks = [] } = canvas
+  const reach = (refs: readonly string[]) => {
+    const here = new Set(refs)
+    return rows.filter((row) => here.has(row.ref)).length
+  }
 
   /*
-   * The fourth group, which is always offered whole — both options, whatever
-   * the count — and that is the one place this file's rule about dropping
-   * empty options is deliberately broken.
+   * The scope, which is offered whole — both options, whatever the counts —
+   * because its fallback is the option that narrows, and a group whose fallback
+   * had been dropped is an offer the protocol's own schema refuses.
    *
-   * The rule exists so that nobody is offered `Merged 0`, a press whose only
-   * outcome is an empty list. Here the empty outcome is the honest one: a
-   * person who turned this on and then cleared the canvas selection has a
-   * list narrowed to nothing, and the page says so in words. If the option
-   * were dropped when the count hit zero, the host would reconcile the stored
-   * choice back to `Everything`, the filter would silently turn itself OFF
-   * the moment the selection emptied, and it would stay off when the next
-   * pick arrived. A control that switches itself off is a control the person
-   * does not hold, which is the failure this whole group is built against:
-   * the header is where somebody turns this on and off, and only they do.
+   * The `epic` option's word says which scope it means right now, because the
+   * same press means two things: what the picked containers show, while any
+   * are picked, and what the epic names otherwise. A label that said "This
+   * epic" while the list was narrowed to two picked containers would be the
+   * header describing a list that is not on screen. When there is nothing to
+   * narrow to yet it says so instead of a count, because `This epic 0` would
+   * read as "the epic names nothing".
+   */
+  const scope = scopeOf(epicRefs, aimed)
+  const scoped = !scope
+    ? 'This epic (not read)'
+    : scope.from === 'containers'
+      ? `Picked containers ${reach(scope.refs)}`
+      : `This epic ${reach(scope.refs)}`
+  const scopeGroup: FilterGroup = {
+    id: SCOPE,
+    label: 'Scope',
+    options: [
+      { id: IN_SCOPE, label: scoped },
+      { id: ALL, label: `Everything ${rows.length}` },
+    ],
+    fallback: IN_SCOPE,
+  }
+
+  /*
+   * The kehikko pick, which is always offered whole — both options, whatever
+   * the count. Dropping `Picked here 0` when the selection emptied would make
+   * the host reconcile the stored choice back to `Everything`, and the filter
+   * would silently switch itself OFF and stay off when the next pick arrived.
+   * A control that switches itself off is a control the person does not hold.
    *
    * The count is of the ROWS the selection reaches, not of the selection: a
-   * pick can name references this project's tracker does not hold, and
-   * `Picked here 0` over a three-ref selection is the true number of rows a
-   * press would show. It changes with every pick on the canvas, so the offer
-   * is re-sent on each — a `postMessage` per click, which is cheaper than a
-   * count that is wrong in a menu somebody has just opened.
+   * pick can name references this project's tracker does not hold.
    */
-  const here = new Set(selection)
-  const reached = rows.filter((row) => here.has(row.ref)).length
   const kehikko: FilterGroup = {
     id: KEHIKKO,
     label: 'Kehikko',
     options: [
-      { id: 'all', label: `Everything ${rows.length}` },
-      { id: PICKED, label: `Picked here ${reached}` },
+      { id: ALL, label: `Everything ${rows.length}` },
+      { id: PICKED, label: `Picked here ${reach(selection)}` },
     ],
-    fallback: 'all',
+    fallback: ALL,
   }
 
-  const kinds = counted(rows, [
-    { id: 'all', word: 'All', has: () => true },
-    { id: 'issue', word: 'Issues', has: (row) => row.kind === 'issue' },
-    { id: 'change', word: 'Changes', has: (row) => row.kind === 'change' },
-  ])
-  const states = counted(rows, [
-    { id: 'all', word: 'Any', has: () => true },
-    /* A row whose state could not be read is not `opened`, here as in `sift`
-       below: it is counted by `Any` and by nothing else, because a count that
-       included it under `Open` would be this page inventing the one fact
-       somebody came to check. */
-    { id: 'opened', word: 'Open', has: (row) => row.state === 'opened' },
-    { id: 'merged', word: 'Merged', has: (row) => row.state === 'merged' },
-    { id: 'closed', word: 'Closed', has: (row) => row.state === 'closed' },
-  ])
+  /* The shared vocabulary, counted over the whole reading with the marks in
+     force — a ref somebody marked `wont-do` is counted under "won't do", not
+     under the tracker's guess. */
+  const hide = offerFacets({ counts: countFacets(rows, (row) => facetsOfRow(row, marks)), hidden })
 
   return [
+    scopeGroup,
     kehikko,
-    { id: KIND, label: 'Kind', options: kinds, fallback: 'all' },
-    { id: STATE, label: 'State', options: states, fallback: 'all' },
+    hide,
     /*
-     * The typed query, whose label is doing two jobs at once.
-     *
-     * A `text` group has one string for a person to read, and the host uses it
-     * as both the input's placeholder and its accessible name. So it has to say
-     * what this search LOOKS AT, which is the one thing no host could have
-     * written: "by number, title, label or person" is a sentence about this
-     * module's own rows. `FILTER_LABEL` is 48 characters and this is 40.
-     *
-     * No count in it, unlike the two above. The number a reader wants about a
-     * query is how much it is hiding, and that changes on every keystroke — a
-     * count here would re-send the whole offer per letter to keep a number
-     * current in a menu that is, at that moment, open in front of them. The
-     * count is drawn in the page instead, where this module is re-rendering
-     * anyway and where there is room to say what it is a count OF.
+     * The typed query, whose label is doing two jobs at once: the host uses it
+     * as both the input's placeholder and its accessible name, so it says what
+     * this search LOOKS AT. No count in it — the number a reader wants about a
+     * query changes on every keystroke, and is drawn in the page instead.
      */
     { id: SEARCH, label: 'Filter by number, title, label or person', kind: 'text', options: [] },
   ]
 }
 
-/** One option, with its number in its label, and dropped when the number is zero. */
-function counted(
-  rows: readonly Reference[],
-  options: { id: string; word: string; has: (row: Reference) => boolean }[],
-): { id: string; label: string }[] {
-  return options
-    .map((option) => ({ id: option.id, word: option.word, count: rows.filter(option.has).length }))
-    /* The fallback is never dropped. A group has to have one, and a group whose
-       fallback had gone is an offer the protocol's own schema refuses. */
-    .filter((option) => option.id === 'all' || option.count > 0)
-    .map((option) => ({ id: option.id, label: `${option.word} ${option.count}` }))
-}
-
 /**
- * The whole narrowing, read out of what the host says this container is set to.
- *
- * Every part of it now, where this used to take a locally held query as well.
- * There is no local copy of any of it, for the same reason there is no local
- * copy of the selection: a second answer would go stale on its own schedule, and
- * a page that drew what it asked for rather than what the host settled on would
- * disagree with the header in exactly the cases that matter.
+ * The whole narrowing, read out of what the host says this container is set to
+ * and what the canvas is showing.
  *
  * Lenient about what arrives, and that is required rather than defensive. The
- * host reconciles a stored choice against what a module offers, but it cannot do
- * that before the module has offered anything, and the greeting goes first — so
- * the first choice this page ever receives may name an option from a version of
- * itself that no longer exists. Anything unrecognised is the resting option,
- * which is a state the page is already correct in.
+ * host reconciles a stored choice against what a module offers, but it cannot
+ * do that before the module has offered anything, and the greeting goes first —
+ * so the first choice this page ever receives may name an option from a version
+ * of itself that no longer exists. A container stored under the old `kind` and
+ * `state` groups arrives as `{ kind: 'issue', state: 'closed' }`; neither is a
+ * group this reads any more, so both narrow nothing, and the host prunes them
+ * the moment the new offer lands. A `hide` that arrives as a string rather than
+ * a list is the resting state too — `hiddenIn` says so.
  *
  * The query is clipped rather than dropped, on the protocol's own bound. A
  * clipped query is still a query; a dropped one is a filter that silently stops
  * working the first time somebody pastes something long into it.
  */
-export function siftingOf(chosen: FilterChoice, selection: readonly string[] = []): Sifting {
-  const kind = chosen[KIND]
-  const state = chosen[STATE]
+export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
+  const { selection = [], epicRefs = null, aimed = null, marks = [] } = canvas
   const query = chosen[SEARCH]
   return {
     query: typeof query === 'string' ? query.slice(0, LIMITS.FILTER_TEXT) : '',
-    kind: kind === 'issue' || kind === 'change' ? kind : 'all',
-    state: state === 'opened' || state === 'closed' || state === 'merged' ? state : 'all',
-    /* Copied, so that a sifting is a value: the array the host handed over is
-       state elsewhere and a later context replaces it, and a sifting that held
-       the old reference would be wrong about a pick it was never re-read for. */
+    hidden: hiddenIn(chosen, HIDE),
+    /* Anything but an explicit `all` is the resting option, which narrows. */
+    scope: chosen[SCOPE] === ALL ? null : copied(scopeOf(epicRefs, aimed)),
+    /* Copied, so that a sifting is a value: the arrays the host handed over are
+       state elsewhere and a later context replaces them. */
     picked: chosen[KEHIKKO] === PICKED ? [...selection] : null,
+    marks: [...marks],
   }
 }
+
+const copied = (scope: Scope | null): Scope | null => (scope ? { from: scope.from, refs: [...scope.refs] } : null)
 
 /**
  * Every word has to match something; the words do not have to match the same
@@ -316,13 +401,9 @@ export function siftingOf(chosen: FilterChoice, selection: readonly string[] = [
  *
  * `jaakko rbac` finds the change `jaakko` wrote about `rbac` — one word from the
  * people, one from the title — which is how somebody looking for a reference
- * they half remember actually types. An implementation that required the whole
- * phrase in one field would find nothing and give no reason for it.
- *
- * The haystack is built once per row per call and includes the identifier, the
- * title, every label and every person. The identifier matters most and is
- * cheapest: `1848` finds `!1848`, and typing `!1848` finds it too, because the
- * spelling is in the haystack exactly as it is drawn.
+ * they half remember actually types. The haystack includes the identifier, the
+ * title, every label and every person; `1848` finds `!1848`, and so does
+ * `!1848`, because the spelling is in the haystack exactly as it is drawn.
  */
 function matches(row: Reference, terms: string[]): boolean {
   if (!terms.length) return true
@@ -333,27 +414,20 @@ function matches(row: Reference, terms: string[]): boolean {
 /**
  * Whether this narrowing would hide this row.
  *
- * `goto` asks it about one row, twice: once about what is hiding the target
- * before anything is asked of the host, and once about what the host actually
- * settled on afterwards. Written in terms of `sift` rather than beside it,
- * because two implementations of "is this row hidden" is exactly the pair that
- * would drift and leave `goto` answering `found: true` about an invisible row.
+ * Written in terms of `sift` rather than beside it, because two implementations
+ * of "is this row hidden" is exactly the pair that would drift and leave `goto`
+ * answering `found: true` about an invisible row.
  */
 export function hides(sifting: Sifting, row: Reference): boolean {
   return sift([row], sifting).length === 0
 }
 
 /**
- * Whether the fourth group alone is hiding every row: it is on, and nothing
+ * Whether the kehikko group alone is hiding every row: it is on, and nothing
  * the canvas has picked is in this reading.
  *
- * Asked so that the page can say the right sentence. "Nothing here matches
- * what you asked for" is true of a kind and a state somebody chose and can
- * change; it is misleading over a list narrowed to a selection that is empty,
- * where the remedy is to pick something — anywhere on the kehikko — rather
- * than to loosen a menu. The two are told apart here, through the same `sift`
- * the list uses, so the sentence and the list cannot disagree about why the
- * list is empty.
+ * Asked so that the page can say the right sentence: the remedy for an empty
+ * pick is to pick something, not to loosen a menu.
  */
 export function nothingPicked(rows: readonly Reference[], sifting: Sifting): boolean {
   if (sifting.picked === null) return false
@@ -361,26 +435,40 @@ export function nothingPicked(rows: readonly Reference[], sifting: Sifting): boo
 }
 
 /**
+ * Whether the scope alone is hiding every row: the epic names nothing this
+ * reading holds, or the picked containers show nothing it holds.
+ *
+ * The same reasoning as `nothingPicked`, and the more common case of the two —
+ * an epic whose steps cite GitLab issues over a project whose tracker read only
+ * GitHub, say. "Nothing here matches what you asked for" would be wrong about
+ * that: nobody asked for anything, because the scope is on by default.
+ */
+export function nothingInScope(rows: readonly Reference[], sifting: Sifting): boolean {
+  if (sifting.scope === null) return false
+  return sift(rows, { ...EVERYTHING, scope: sifting.scope }).length === 0
+}
+
+/**
  * The rows to draw, in the order `collect` put them.
  *
  * Order is never changed here. A filter that also reordered would mean pressing
- * "issues" moves every remaining row, and the reader loses the place they had
+ * a toggle moves every remaining row, and the reader loses the place they had
  * just found.
  */
 export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] {
   const terms = sifting.query.toLowerCase().split(/\s+/).filter(Boolean)
   const picked = sifting.picked === null ? null : new Set(sifting.picked)
-  return rows.filter((row) => {
+  const scope = sifting.scope === null ? null : new Set(sifting.scope.refs)
+  const narrowed = rows.filter((row) => {
     /* Exact strings, on both sides. `gh#41` and `#41` are two different
        references, and every module on this canvas spells them the way this
        list draws them — see `select` in `use-roadmap.ts` — so normalising here
        would show a row for a pick that was never about it. */
+    if (scope && !scope.has(row.ref)) return false
     if (picked && !picked.has(row.ref)) return false
-    if (sifting.kind !== 'all' && row.kind !== sifting.kind) return false
-    /* A row whose state could not be read is not `opened`, and asking for open
-       rows must not produce it. It survives `all`, where it belongs: it is a
-       reference that exists, with a state nobody can see. */
-    if (sifting.state !== 'all' && row.state !== sifting.state) return false
     return matches(row, terms)
   })
+  /* The toggles through the facets module's own `sift`, so that "a row with no
+     facets is never hidden" is its rule and not a copy of it. It keeps order. */
+  return siftFacets(narrowed, sifting.hidden, (row) => facetsOfRow(row, sifting.marks)).kept
 }

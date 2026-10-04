@@ -25,7 +25,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * `gh pr list` in it. So two declarations came out and one went in, and each of
  * those three is a decision worth its paragraph.
  *
- * ## Three capabilities, one of them new, and the two that left
+ * ## The capabilities, and the ones that left
  *
  * - `selection:set`, which is the one write on this list and is a shared one.
  *   The protocol spells it out and the wording matters: "every module on the
@@ -39,11 +39,11 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   the string `gh#105`, spelled in one function in `tracker/gh.ts`, and other
  *   modules go on recognising it.
  * - `filters:set`, which is the newest and the one worth a paragraph of its own.
- *   None of this app's filtering is drawn in this app any more. The kind, the
- *   state AND the typed query are offered as `roadmap.filters` — the last of
- *   them as a `text` group, which the protocol grew for exactly this module —
- *   and all three are drawn in the container's own header beside every other
- *   module's. That is what the owner asked for, twice, and it is how the rest of
+ *   None of this app's filtering is drawn in this app any more. The scope, the
+ *   `hide` toggles, the kehikko pick AND the typed query are offered as
+ *   `roadmap.filters` — the last of them as a `text` group, which the protocol
+ *   grew for exactly this module — and all four are drawn in the container's
+ *   own header beside every other module's. That is what the owner asked for, twice, and it is how the rest of
  *   this family already behaves.
  *
  *   Offering costs no capability, because an offer is fire and forget. This
@@ -83,15 +83,18 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * never ask — permission described to a program that will never exercise it —
  * and Paper removed `epics:read` for exactly that reason.
  *
- * `epics:read` came out with it, and that one deserves more than a line, because
- * it is a capability that WORKED. It existed so that a page with no epic open
- * could offer a picker instead of a blank. There is now no such state to be in:
- * the list is not about an epic, so a page with no epic open is a page with a
- * perfectly good list on it. Keeping the declaration would have meant keeping a
- * picker that steers nothing.
+ * `epics:read` came out with it once, because the picker it served had gone,
+ * and it is back with `steps:read` beside it for a different job. The list is
+ * narrowed by default to the references the open epic names (issue #1), and
+ * those are an epic's steps' refs and its umbrella: `steps.list` answers the
+ * first under `steps:read` and `epic.get` the second under `epics:read`. They
+ * are asked of the host rather than read off `.kehikot/roadmap/epics/` by this
+ * app's server, because those files are the roadmap's and the host already
+ * answers out of them — see `epicRefs` in `src/wire/use-roadmap.ts`. Either
+ * refused alone still narrows to what the other granted; both refused leaves
+ * the whole project on screen with the heading saying so, never an empty list.
  *
- * Not declared, each for its own reason: `steps:read`, because a step's prose is
- * not a reference and this surface would only be quoting it; `stage:report`,
+ * Not declared, each for its own reason: `stage:report`,
  * because nothing here is an assertion about work — this app reads and shows,
  * and a list that could also write would be a list somebody has to wonder about;
  * `events:emit`, because the one thing worth emitting from here would be a
@@ -101,31 +104,27 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * answered. The host refuses whatever it likes at every call whatever is written
  * here, so the page below is built to be refused — see `sight.ts`.
  *
- * ## The list is the PROJECT's now, and the summary says so
+ * ## The READING is the project's; the list on screen is the epic's by default
  *
- * This is the honest cost of the change and it is stated here rather than
- * discovered. The roadmap's reading was a curated set — the refs an epic's
- * narrative named, plus pull requests discovered against them. GitHub records
- * nowhere which epic an issue belongs to, so that set cannot be rebuilt from the
+ * The roadmap's old reading was a curated set — the refs an epic's narrative
+ * named, plus pull requests discovered against them. GitHub records nowhere
+ * which epic an issue belongs to, so that set cannot be rebuilt from the
  * tracker, and the choice was between a fresh list of everything in the project
- * and a stale list of the right things.
+ * and a stale list of the right things. Freshness won, and still does: the rows
+ * are read from the project's own tracker, all of them.
  *
- * Freshness won because the failure of the other one is invisible. A closed
- * issue still reading `opened` looks exactly like an open issue; a list that is
- * longer than somebody expected looks exactly like what it is. The summary, the
- * guidance, the header and `absence.tsx` all say "this project" rather than
- * "this epic", and the mode's scope stays `epic` for the reason below.
+ * What changed (issue #1) is what is DRAWN. A fresh list of every one of 466
+ * references, under an epic that names about 80, read as noise. The epic itself
+ * says which refs are its own — every step's `refs` and the umbrella — so the
+ * scope group narrows to those by default, or to what the picked-out containers
+ * show while any are picked, and "Everything" is one press away. The rows the
+ * scope hides are still read, still counted, and still reachable by `goto`.
  *
- * ## `scope: 'epic'` for a list that is not about an epic
+ * ## `scope: 'epic'`, which is now true in full
  *
- * The enum has two values and neither fits, so the closer one is kept and the
- * gap is written down. `epic` means the tab is "told which epic is open and told
- * again on every switch"; `global` means "told nothing and never re-pointed".
- * This app must be re-pointed — when the reader moves to another project, the
- * context that says so is the only way it finds out — so `global` would be a
- * false claim about the thing that matters most, and `epic` is a true claim
- * about being told, with one field of what it is told now going unused. There is
- * no `project` scope to ask for; when there is, this line changes.
+ * `epic` means the tab is "told which epic is open and told again on every
+ * switch", and this app uses both halves: the project to read the tracker in,
+ * and the epic to narrow to. It used to use only the first and say so here.
  *
  * ## No `mcp`, and that is a decision rather than an omission
  *
@@ -190,7 +189,13 @@ export const ID = 'roadmap.references'
  * possible answer to that. The page, the refs and the selection were unchanged
  * by it; everything behind them was not.
  *
- * `2.2.0` is the largest change a person SEES since: this app draws no chrome of
+ * `2.3.0` is what the list SHOWS: narrowed by default to the open epic's refs,
+ * with kind and state folded into one `hide` group of the shared ref facets,
+ * closed-reason facets among them. A container that stored a kind or a state
+ * under 2.2.0 loses that choice — the groups are gone and the host prunes them
+ * — and narrows by nothing it did not ask for.
+ *
+ * `2.2.0` was the largest change a person SEES before that: this app draws no chrome of
  * its own any more. The header and the toolbar are gone, and with them the
  * project line, the freshness line, the Refresh button, the query box, the seven
  * filter buttons, the order trigger and the Clear. What is left is the table and
@@ -209,7 +214,7 @@ export const ID = 'roadmap.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '2.2.0'
+export const VERSION = '2.3.0'
 
 /**
  * The port this app would rather have.
@@ -276,8 +281,9 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * because it is this module's claim and not the host's.
    */
   guidance:
-    'Every issue and pull request in this project is listed here, read from the project’s own GitHub ' +
-    'rather than from any copy, so it is current rather than as current as the last refresh. Before ' +
+    'Every issue and pull request in this project is read here from the project’s own GitHub rather ' +
+    'than from any copy, and the list shows the ones the open epic names unless the header’s scope is ' +
+    'set to Everything — check the scope before concluding a reference does not exist. Before ' +
     'deciding what to work on, read the list rather than assuming the work is the one thing you were ' +
     'pointed at — very often a change is already open for it. Picking a row sets the canvas selection ' +
     'and other modules react to it, so select the reference you are working on and leave it selected ' +
@@ -305,12 +311,20 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * could vouch for. Nothing here is granted by the word and nothing is routed
    * on it. The context arrives whether or not it is written.
    *
+   * `containers`, because the scope narrows to what the picked-out containers
+   * say they are showing while any are picked — tick a paper and a journey on
+   * the kehikko and this list follows them. `dispositions`, because a person's
+   * mark on why a reference closed decides which `closed:*` facet it has in the
+   * `hide` group, over the tracker's own reason; marking a ref `won't do`
+   * elsewhere moves it here. Both are reactions in the protocol's sense: the
+   * rows on screen change.
+   *
    * Not `passage`. Nothing here reads one.
    */
-  reacts: ['selection'],
+  reacts: ['selection', 'containers', 'dispositions'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['selection:set', 'filters:set', 'state:keep'],
+    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read'],
     storage: true,
   },
 })

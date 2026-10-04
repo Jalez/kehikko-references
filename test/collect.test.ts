@@ -107,6 +107,57 @@ describe('what is read off one entry', () => {
   })
 })
 
+describe('why a closed thing closed, as far as the reading says', () => {
+  test('GitHub’s reason is carried as it arrived, and nothing else invents one', () => {
+    const rows = collect(
+      reading({
+        ghIssues: { 'gh#1': { state: 'closed', stateReason: 'NOT_PLANNED' }, 'gh#2': { state: 'closed' } },
+        issues: { '3': { state: 'closed', stateReason: 42 } },
+      }),
+    )
+    const by = Object.fromEntries(rows.map((row) => [row.ref, row]))
+    expect(by['gh#1']?.stateReason).toBe('NOT_PLANNED')
+    expect(by['gh#2']?.stateReason).toBeNull()
+    expect(by['#3']?.stateReason).toBeNull()
+  })
+
+  test('a GitLab issue linked to a merged merge request was closed by it', () => {
+    const rows = collect(
+      reading({
+        issues: { '10': { state: 'closed' }, '11': { state: 'closed' }, '12': { state: 'closed' } },
+        mrs: { '20': { state: 'merged' }, '21': { state: 'closed' } },
+        /* Keyed with and without the sigil, and listing iids as numbers and
+           as spelled refs: the refresher's shape is not promised, so both are
+           read and nothing else is. */
+        links: { '10': [20], '#11': ['!21'], '12': ['nonsense', null] },
+      }),
+    )
+    const by = Object.fromEntries(rows.map((row) => [row.ref, row]))
+    expect(by['#10']?.closedByMerge).toBe(true)
+    /* Linked to a change that closed without merging: not done. */
+    expect(by['#11']?.closedByMerge).toBe(false)
+    expect(by['#12']?.closedByMerge).toBe(false)
+  })
+
+  test('the same, for GitHub, out of ghLinks', () => {
+    const rows = collect(
+      reading({
+        ghIssues: { 'gh#68': { state: 'closed' } },
+        ghPrs: { 'gh#76': { state: 'merged' } },
+        ghLinks: { 'gh#68': [76] },
+      }),
+    )
+    expect(rows.find((row) => row.ref === 'gh#68')?.closedByMerge).toBe(true)
+    /* Never about a change: a merged change says so in its own state. */
+    expect(rows.find((row) => row.ref === 'gh#76')?.closedByMerge).toBe(false)
+  })
+
+  test('a row that says so itself is believed', () => {
+    const rows = collect(reading({ issues: { '1': { state: 'closed', closedByMerge: true } } }))
+    expect(rows[0]?.closedByMerge).toBe(true)
+  })
+})
+
 describe('order', () => {
   test('most recently moved first, and rows with no date last', () => {
     const rows = collect(
