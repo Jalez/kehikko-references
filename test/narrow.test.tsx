@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
-import { Heading } from '@/view/heading.tsx'
+import { Heading, ageOf } from '@/view/heading.tsx'
 
 const PROJECT = '/Users/somebody/Projects/roadmap'
 
@@ -182,6 +182,36 @@ describe('the table’s heading, at every width', () => {
     const heading = container.querySelector('[data-heading]')!
     expect(heading.getAttribute('title')).toContain(PROJECT)
     expect(heading.getAttribute('title')).toContain('7 of 24 shown')
+  })
+
+  test('says which scope the count is of, and how old the reading is', () => {
+    const now = Date.parse('2026-10-05T12:00:00Z')
+    const { container } = render(
+      <Heading
+        project={PROJECT}
+        ordering="moved"
+        onOrder={() => {}}
+        showing={7}
+        total={24}
+        scope="epic"
+        generated="2026-09-29T08:00:00Z"
+        now={now}
+      />,
+    )
+    const heading = container.querySelector('[data-heading]')!
+    expect(heading.textContent).toContain('this epic')
+    expect(heading.textContent).toContain('read 6 d ago')
+    expect(heading.getAttribute('title')).toContain('7 of 24 shown · this epic · read 6 d ago')
+  })
+
+  test('the age is coarse, and an undated reading says so', () => {
+    const now = Date.parse('2026-10-05T12:00:00Z')
+    expect(ageOf('2026-10-05T11:59:40Z', now)).toBe('read just now')
+    expect(ageOf('2026-10-05T11:48:00Z', now)).toBe('read 12 min ago')
+    expect(ageOf('2026-10-04T12:00:00Z', now)).toBe('read 24 h ago')
+    expect(ageOf('2026-09-29T08:00:00Z', now)).toBe('read 6 d ago')
+    expect(ageOf(null, now)).toBe('reading not dated')
+    expect(ageOf('yesterday-ish', now)).toBe('reading not dated')
   })
 
   test('every order is reachable, including the two whose column a narrow row drops', () => {

@@ -19,7 +19,8 @@ import { projectName } from './absence.tsx'
  * because the question it was answering has been dissolved rather than answered
  * better:
  *
- * - **The kind and state filters** are `roadmap.filters` groups now, drawn in
+ * - **The kind and state filters** are `roadmap.filters` groups now — one
+ *   `hide` group of the shared ref facets since 2.3.0 — drawn in
  *   the container's own header beside every other module's.
  * - **The query** is a `text` filter group, drawn as an input inside the same
  *   menu. The protocol refused free text twice and the refusal is now written
@@ -91,6 +92,25 @@ import { projectName } from './absence.tsx'
  * `title` at every width. That is the same discipline every row keeps: what a
  * narrow container takes away is still on the element's own tooltip, in the
  * order the wide layout would have drawn it.
+ *
+ * ## Which scope, and how old the reading is
+ *
+ * Two words after the count, both from issue #1, and both there because the
+ * count alone stopped being enough the moment the scope went on by default.
+ *
+ * `this epic` (or `picked containers`) says what the first number is OF. A
+ * list narrowed to the epic and a list of the whole project look identical,
+ * and `37 of 412 shown` with no scope beside it reads as "a filter somebody set
+ * is hiding 375", which sends a reader to the menus for a narrowing nobody set.
+ * Nothing is drawn when the scope is off, or has nothing to narrow to: the
+ * count then is the project's, which is what a bare count has always meant.
+ *
+ * `read 6 d ago` says how old the reading is. The host draws its own freshness
+ * line from `roadmap.refreshable`, but only where it has room for one and only
+ * in its header; a snapshot imported weeks ago, which no read on this machine
+ * can replace — a GitLab project, say, where this app never asks `glab` —
+ * looks exactly like a live list unless the list itself says otherwise. It is
+ * the reading's own `generated`, never the moment the page asked.
  */
 
 /** Which order each column heading sets, and what its arrow means. */
@@ -102,6 +122,9 @@ export function Heading({
   onOrder,
   showing,
   total,
+  scope = null,
+  generated,
+  now,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
   project: string
@@ -109,14 +132,22 @@ export function Heading({
   onOrder: (ordering: Ordering) => void
   showing: number
   total: number
+  /** What the scope is narrowing to, or `null` when it is not narrowing. */
+  scope?: 'epic' | 'containers' | null
+  /** When the reading was taken, as the reading says. */
+  generated?: string | null
+  /** The time to measure the age against. A parameter so a test can hold it still. */
+  now?: number
 }) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
   const brief = showing === total ? `${total}` : `${showing}/${total}`
+  const within = scope === 'epic' ? 'this epic' : scope === 'containers' ? 'picked containers' : null
+  const age = generated === undefined ? null : ageOf(generated, now)
 
   return (
     <div
       data-heading="columns"
-      title={`${project} · ${count}`}
+      title={[project, count, within, age].filter(Boolean).join(' · ')}
       className="flex items-stretch border-b border-border bg-muted/30"
     >
       {/* Above the checkboxes, and the same width as them, so the columns below
@@ -158,6 +189,8 @@ export function Heading({
           <span className="hidden @sm:inline">{projectName(project)} · </span>
           <span className="@sm:hidden">{brief}</span>
           <span className="hidden @sm:inline">{count}</span>
+          {within && <span className="hidden @sm:inline"> · {within}</span>}
+          {age && <span className="hidden @md:inline"> · {age}</span>}
         </span>
 
         {/* Kept at every width where its column is not, because an order nobody
@@ -274,4 +307,23 @@ function Sort({
       )}
     </button>
   )
+}
+
+/**
+ * How old a reading is, in the fewest words that still say it.
+ *
+ * Coarse on purpose: minutes, hours, days. The exact instant is on the host's
+ * own freshness line, and the question this answers is only "is this list
+ * from today". A reading with no date, or one this cannot parse, says so
+ * rather than guessing — an undated list is the one most worth doubting.
+ */
+export function ageOf(generated: string | null, now: number = Date.now()): string {
+  const at = generated ? Date.parse(generated) : Number.NaN
+  if (Number.isNaN(at)) return 'reading not dated'
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000))
+  if (minutes < 1) return 'read just now'
+  if (minutes < 60) return `read ${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 48) return `read ${hours} h ago`
+  return `read ${Math.floor(hours / 24)} d ago`
 }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 
 import { collect } from '@/live/collect.ts'
-import { LIMIT, argsFor, bagFrom, diagnose, readTracker, refOf } from '../tracker/gh.ts'
+import { ISSUE_FIELDS, LIMIT, PR_FIELDS, argsFor, bagFrom, diagnose, readTracker, refOf } from '../tracker/gh.ts'
 import type { Ran, Runner } from '../tracker/run.ts'
 
 /**
@@ -215,6 +215,23 @@ describe('gh’s JSON becomes the shape the rest of this app already reads', () 
   test('people are named rather than logged in, and an author leads a change', () => {
     expect(bagFrom(ISSUES, 'issues')?.['gh#140']).toMatchObject({ assignees: ['Jaakko Rajala'] })
     expect(bagFrom(PRS, 'prs')?.['gh#146']).toMatchObject({ author: 'Jaakko Rajala', reviewers: ['someone'] })
+  })
+
+  test('a closed issue carries GitHub’s reason, and an open one carries none', () => {
+    /* `deriveDisposition` in the shared facets reads this, and without it every
+       closed GitHub issue would be "closed, reason unknown". */
+    const bag = bagFrom(
+      JSON.stringify([
+        { number: 1, state: 'CLOSED', stateReason: 'NOT_PLANNED' },
+        { number: 2, state: 'OPEN', stateReason: '' },
+      ]),
+      'issues',
+    )
+    expect(bag?.['gh#1']).toMatchObject({ state: 'closed', stateReason: 'NOT_PLANNED' })
+    expect(bag?.['gh#2']).not.toHaveProperty('stateReason')
+    expect(ISSUE_FIELDS.split(',')).toContain('stateReason')
+    /* A pull request has no reason to ask for; `gh` would refuse the field. */
+    expect(PR_FIELDS.split(',')).not.toContain('stateReason')
   })
 
   test('a login with no name is still a person rather than a blank', () => {

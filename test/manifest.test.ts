@@ -28,7 +28,16 @@ describe('the manifest a host reads', () => {
   test('says it both sets the selection and narrows when it changes', () => {
     expect(MANIFEST.declares.uses).toContain('selection:set')
     expect(MANIFEST.declares.uses).toContain('filters:set')
-    expect(MANIFEST.reacts).toEqual(['selection'])
+    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions'])
+  })
+
+  /**
+   * The scope (issue #1) narrows to what the open epic names, asked of the
+   * host: the steps' refs under `steps:read`, the umbrella under `epics:read`.
+   */
+  test('says it reads the open epic’s steps and umbrella', () => {
+    expect(MANIFEST.declares.uses).toContain('steps:read')
+    expect(MANIFEST.declares.uses).toContain('epics:read')
   })
 
   test('asks the host for nothing it reads itself', () => {

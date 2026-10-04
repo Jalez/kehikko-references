@@ -68,8 +68,9 @@ const names = (v: unknown): string[] => (Array.isArray(v) ? v.filter((n): n is s
  * Never throws and never refuses. The caller has already decided this row
  * exists; this only decides how much of it is legible.
  */
-function readOne(key: string, raw: unknown, shape: (typeof BAGS)[number]): Reference {
+function readOne(key: string, raw: unknown, shape: (typeof BAGS)[number], merged: ReadonlySet<string>): Reference {
   const o = isObject(raw) ? raw : {}
+  const ref = shape.spell(key)
   const state = str(o.state)
   const url = str(o.url)
   /* Author first, then assignees, then reviewers: on a change the author is the
@@ -78,10 +79,15 @@ function readOne(key: string, raw: unknown, shape: (typeof BAGS)[number]): Refer
   const people = [...names(o.author ? [o.author] : []), ...names(o.assignees), ...names(o.reviewers)]
   return {
     key: `${shape.bag}:${key}`,
-    ref: shape.spell(key),
+    ref,
     kind: shape.kind,
     origin: shape.origin,
     state: STATES.includes(state) ? (state as State) : null,
+    stateReason: str(o.stateReason) || null,
+    /* Either the reading says so on the row, or it links the issue to a change
+       that is merged. Only ever about an issue: a change that merged is
+       `merged`, and the facets module reads that off the state. */
+    closedByMerge: shape.kind === 'issue' && (o.closedByMerge === true || merged.has(ref)),
     draft: o.draft === true,
     title: str(o.title),
     at: str(o.at),
@@ -113,10 +119,11 @@ function readOne(key: string, raw: unknown, shape: (typeof BAGS)[number]): Refer
 export function collect(live: unknown): Reference[] {
   if (!isObject(live)) return []
   const out: Reference[] = []
+  const merged = linkedMerges(live)
   for (const shape of BAGS) {
     const bag = live[shape.bag]
     if (!isObject(bag)) continue
-    for (const [key, raw] of Object.entries(bag)) out.push(readOne(key, raw, shape))
+    for (const [key, raw] of Object.entries(bag)) out.push(readOne(key, raw, shape, merged))
   }
   return out.sort((a, b) => {
     if (!a.at && !b.at) return 0
@@ -124,6 +131,58 @@ export function collect(live: unknown): Reference[] {
     if (!b.at) return -1
     return a.at < b.at ? 1 : a.at > b.at ? -1 : 0
   })
+}
+
+/**
+ * The issues a reading links to a merged change, as refs.
+ *
+ * ## Why this is read at all, and why only from what the reading carries
+ *
+ * GitLab records no reason on a closed issue. What it has is the merge request
+ * that closed it, and the roadmap's refresher files that as `links` — issue to
+ * the merge requests that name it — beside the bags; GitHub's equivalent is
+ * `ghLinks`. A closed issue with a merged change under it is the one closed
+ * GitLab issue the facets module can call `done` without a person saying so,
+ * which is what `Sighting.closedByMerge` is for.
+ *
+ * Nothing is guessed. A reading `gh` took in this app has no `links` — it asks
+ * for none — so every row from it is `false` here and GitHub's `stateReason`
+ * does the work instead. A snapshot imported from the roadmap may carry them,
+ * and then they count. Keys are taken with or without their sigil (`12` and
+ * `#12`), because the refresher keys GitLab's bags by the bare number and
+ * GitHub's by the ref as written; a change is merged only if the reading's own
+ * bag says so. Anything that is not that shape is ignored rather than read.
+ */
+function linkedMerges(live: Record<string, unknown>): Set<string> {
+  const out = new Set<string>()
+  const pairs = [
+    {
+      links: live.links,
+      changes: live.mrs,
+      issue: (k: string) => `#${k.replace(/^#/, '')}`,
+      change: (n: string) => n.replace(/^!/, ''),
+    },
+    {
+      links: live.ghLinks,
+      changes: live.ghPrs,
+      issue: (k: string) => (k.startsWith('gh#') ? k : `gh#${k.replace(/^#/, '')}`),
+      change: (n: string) => `gh#${n.replace(/^(gh)?#/, '')}`,
+    },
+  ]
+  for (const { links, changes, issue, change } of pairs) {
+    if (!isObject(links) || !isObject(changes)) continue
+    for (const [key, listed] of Object.entries(links)) {
+      if (!Array.isArray(listed)) continue
+      const done = listed.some((n) => {
+        if (typeof n !== 'number' && typeof n !== 'string') return false
+        const id = change(String(n))
+        const found = Object.hasOwn(changes, id) ? changes[id] : undefined
+        return isObject(found) && found.state === 'merged'
+      })
+      if (done) out.add(issue(key))
+    }
+  }
+  return out
 }
 
 /** When the reading was taken, as the roadmap wrote it, or null if it did not say. */

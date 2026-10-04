@@ -75,8 +75,14 @@ export type Kind = 'issues' | 'prs'
  * and this is a contract: `gh` documents these names, refuses one it does not
  * know at the moment it is asked rather than by printing something odd, and adds
  * fields without moving the ones already there.
+ *
+ * `stateReason` is on the issue list and not the pull request one, because only
+ * an issue has one: `COMPLETED`, `NOT_PLANNED`, `DUPLICATE`, or `REOPENED` on
+ * one that came back. It is the tracker's account of WHY a closed issue closed,
+ * and without it every closed GitHub issue would be "closed, reason unknown" in
+ * the shared facets — the same as GitLab's, which has no such field to ask for.
  */
-export const ISSUE_FIELDS = 'number,state,title,updatedAt,closedAt,url,labels,assignees'
+export const ISSUE_FIELDS = 'number,state,stateReason,title,updatedAt,closedAt,url,labels,assignees'
 export const PR_FIELDS = 'number,state,title,updatedAt,closedAt,mergedAt,url,labels,author,assignees,reviewRequests,isDraft'
 
 /**
@@ -300,6 +306,9 @@ export function bagFrom(text: string, kind: Kind): Record<string, unknown> | nul
       labels: labels(raw.labels),
       assignees: people(raw.assignees),
     }
+    /* Only when there is one. An open issue answers `""`, and a field written
+       as an empty string would be a reason somebody has to read past. */
+    if (kind === 'issues' && str(raw.stateReason)) entry.stateReason = str(raw.stateReason)
     if (kind === 'prs') {
       entry.draft = raw.isDraft === true
       const author = who(raw.author)

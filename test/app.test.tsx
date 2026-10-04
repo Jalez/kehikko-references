@@ -42,6 +42,9 @@ afterEach(() => {
 const PROJECT = '/Users/somebody/Projects/roadmap'
 const OTHER = '/Users/somebody/Projects/kehikko'
 
+/** What a host holds for a container: a word per choice group, a list per toggles group. */
+type Choice = Record<string, string | string[]>
+
 /** Something to be greeted by, and to read what the page says back to it. */
 function stubRoadmap() {
   const said: Record<string, unknown>[] = []
@@ -62,13 +65,14 @@ function stubRoadmap() {
       projectPath: string | null,
       kept: string | null = null,
       selection: string[] = [],
-      filters: Record<string, string> = {},
+      filters: Choice = {},
+      more: Record<string, unknown> = {},
     ) =>
       post({
         type: MESSAGE.HELLO,
         protocol: PROTOCOL,
         session: 'test-1',
-        context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection, filters },
+        context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection, filters, ...more },
         state: kept,
       }),
     /**
@@ -80,8 +84,9 @@ function stubRoadmap() {
     context: (
       projectPath: string | null,
       selection: string[] = [],
-      epic = 'an-epic',
-      filters: Record<string, string> = {},
+      epic: string | null = 'an-epic',
+      filters: Choice = {},
+      more: Record<string, unknown> = {},
     ) =>
       post({
         type: MESSAGE.CONTEXT,
@@ -92,6 +97,7 @@ function stubRoadmap() {
         theme: 'light',
         selection,
         filters,
+        ...more,
       }),
     goto: (ref: string) => post({ type: MESSAGE.GOTO, id: 'walk-1', ref }),
     /**
@@ -103,10 +109,14 @@ function stubRoadmap() {
      * `goto` over a narrowed list waiting for a timeout. The two shapes are the
      * two the protocol has — a `data` payload, or a reason and a sentence.
      */
-    answer: (method: string, outcome: { ok: true; data: unknown } | { ok: false; error: string }) => {
-      const asked = said.findLast(
-        (message) => message.type === MESSAGE.REQUEST && message.method === method,
-      ) as { id: string } | undefined
+    answer: (
+      method: string,
+      outcome: { ok: true; data: unknown } | { ok: false; error: string },
+      /* The first rather than the most recent, to answer a question late. */
+      which: 'last' | 'first' = 'last',
+    ) => {
+      const asking = (message: Record<string, unknown>) => message.type === MESSAGE.REQUEST && message.method === method
+      const asked = (which === 'first' ? said.find(asking) : said.findLast(asking)) as { id: string } | undefined
       if (!asked) throw new Error(`nothing asked ${method}`)
       post(
         outcome.ok
@@ -225,8 +235,9 @@ describe('with a roadmap answering', () => {
     act(() => roadmap.greet(PROJECT))
     expect(roadmap.said[0]).toMatchObject({ type: MESSAGE.READY, id: 'roadmap.references' })
     /* Nothing is asked of the HOST for the rows any more. `live.get` is gone,
-       and this assertion is what would catch it coming back. */
-    expect(roadmap.asked()).toEqual([])
+       and this assertion is what would catch it coming back. What IS asked is
+       what the open epic names, for the scope — and nothing else. */
+    expect(roadmap.asked().sort()).toEqual(['epic.get', 'steps.list'])
     expect(door.seen).toEqual([{ project: PROJECT, fresh: false }])
     expect(screen.getByText('Reading the tracker in roadmap.')).toBeTruthy()
     await settle()
@@ -614,7 +625,7 @@ describe('remembering the order, which is all this module keeps for itself', () 
  * the top of `live/sift.ts`; these are the four things that would break quietly.
  */
 describe('the filters the header holds', () => {
-  const listed = async (count: number, filters: Record<string, string> = {}) => {
+  const listed = async (count: number, filters: Choice = {}) => {
     const roadmap = stubRoadmap()
     render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
     act(() => roadmap.greet(PROJECT, null, [], filters))
@@ -639,24 +650,27 @@ describe('the filters the header holds', () => {
       kind?: string
       options: { id: string; label: string }[]
     }[]
-    expect(groups.map((group) => group.id)).toEqual(['kehikko', 'kind', 'state', 'search'])
-    /* Eight issues, two of them closed. The number is in the words because the
-       protocol has no count field — see `filterOptionSchema`. */
-    expect(groups[1]?.options.map((option) => option.label)).toEqual(['All 8', 'Issues 8'])
-    expect(groups[2]?.options.map((option) => option.label)).toEqual(['Any 8', 'Open 6', 'Closed 2'])
-    /* And nothing nobody can press: `Changes 0` and `Merged 0` would be menu
-       entries whose only outcome is an empty list. The kehikko group is the
-       one exception and is checked on its own below — its zero is offered so
-       that the filter cannot switch itself off. */
-    expect(JSON.stringify(groups.slice(1))).not.toContain(' 0')
-    expect(groups[0]?.options.map((option) => option.label)).toEqual(['Everything 8', 'Picked here 0'])
+    expect(groups.map((group) => group.id)).toEqual(['scope', 'kehikko', 'hide', 'search'])
+    /* The scope first, on the epic by default — not read yet, so it says so
+       rather than counting zero. */
+    expect(groups[0]?.options.map((option) => option.label)).toEqual(['This epic (not read)', 'Everything 8'])
+    expect(groups[1]?.options.map((option) => option.label)).toEqual(['Everything 8', 'Picked here 0'])
+    /* Eight issues, two of them closed, as the shared facets. The number is in
+       the words because the protocol has no count field. And nothing nobody
+       can press: no change facet, because there are no changes. */
+    expect(groups[2]?.kind).toBe('toggles')
+    expect(groups[2]?.options.map((option) => option.label)).toEqual([
+      'open issues (6)',
+      'closed issues (2)',
+      'closed, reason unknown (2)',
+    ])
     /* The last group is the typed query, which is why this module draws no
        chrome of its own any more. */
     expect(groups[3]?.kind).toBe('text')
   })
 
   test('a choice in the greeting narrows the list before anything else happens', async () => {
-    await listed(8, { state: 'closed' })
+    await listed(8, { hide: ['issue:open'] })
     expect(document.body.textContent).toContain('2 of 8 shown')
   })
 
@@ -666,21 +680,21 @@ describe('the filters the header holds', () => {
        empty string is how a text group says it is at rest. The Clear beside the
        count is gone with the toolbar; the host's own "Show everything" is the
        other way to the same call. */
-    const roadmap = await listed(8, { state: 'closed', search: 'nothing matches this' })
+    const roadmap = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
     expect(document.body.textContent).toContain('Nothing here matches what you asked for')
 
     fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: {} }])
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
 
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: {} } }))
-    act(() => roadmap.context(PROJECT))
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
+    act(() => roadmap.context(PROJECT, [], 'an-epic', { scope: 'all' }))
     await settle()
     expect(document.body.textContent).toContain('8 references')
   })
 
   test('a host that declines is quoted, rather than the press quietly doing nothing', async () => {
-    const roadmap = await listed(8, { state: 'closed', search: 'nothing matches this' })
+    const roadmap = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
     fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
     act(() =>
@@ -707,7 +721,7 @@ describe('the filters the header holds', () => {
  */
 describe('narrowed to what the kehikko has picked', () => {
   const ON = { kehikko: 'picked' }
-  const listed = async (selection: string[], filters: Record<string, string> = {}) => {
+  const listed = async (selection: string[], filters: Choice = {}) => {
     const roadmap = stubRoadmap()
     render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
     act(() => roadmap.greet(PROJECT, null, selection, filters))
@@ -755,27 +769,27 @@ describe('narrowed to what the kehikko has picked', () => {
   })
 
   test('the one press turns off only this group, and leaves the others as the reader set them', async () => {
-    const roadmap = await listed([], { ...ON, state: 'closed' })
+    const roadmap = await listed([], { ...ON, hide: ['issue:open'] })
     fireEvent.click(screen.getByRole('button', { name: 'Show everything' }))
     await settle()
     /* The state the reader chose is asked for again; only the kehikko group is
        left out, which is how a group is put back to its fallback. */
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { state: 'closed' } }])
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { hide: ['issue:open'] } }])
   })
 
   test('the offer is re-sent as the pick changes, because its count is of rows the pick reaches', async () => {
     const roadmap = await listed([])
     const first = roadmap.offered() as { id: string; options: { label: string }[] }[]
-    expect(first[0]?.options[1]?.label).toBe('Picked here 0')
+    expect(first[1]?.options[1]?.label).toBe('Picked here 0')
     act(() => roadmap.context(PROJECT, ['gh#1', 'gh#2', 'gh#31337']))
     await settle()
     const next = roadmap.offered() as { id: string; options: { label: string }[] }[]
-    expect(next[0]?.options[1]?.label).toBe('Picked here 2')
+    expect(next[1]?.options[1]?.label).toBe('Picked here 2')
   })
 })
 
 describe('being walked to a reference', () => {
-  const listed = async (count: number, filters: Record<string, string> = {}) => {
+  const listed = async (count: number, filters: Choice = {}) => {
     const roadmap = stubRoadmap()
     render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
     act(() => roadmap.greet(PROJECT, null, [], filters))
@@ -806,21 +820,21 @@ describe('being walked to a reference', () => {
        is not drawn. This is the case the whole move had to not break: a module
        that could not clear a host-held filter would have to answer `found: true`
        about a row nobody can see, or refuse a reference it is looking at. */
-    const roadmap = await listed(20, { state: 'closed' })
+    const roadmap = await listed(20, { hide: ['issue:open'] })
     act(() => roadmap.goto('gh#7'))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: {} }])
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
     /* Nothing is answered yet: the walk is not over until it is known whether
        the host did it. */
     expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toBeUndefined()
 
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: {} } }))
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
     await settle()
     expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
   })
 
   test('a host that declines the filter gets the honest refusal, not a walk to an invisible row', async () => {
-    const roadmap = await listed(20, { state: 'closed' })
+    const roadmap = await listed(20, { hide: ['issue:open'] })
     act(() => roadmap.goto('gh#7'))
     await settle()
     act(() =>
@@ -841,13 +855,169 @@ describe('being walked to a reference', () => {
        what was asked for. A page that assumed otherwise would draw one thing and
        be told another on the next context — so the settled choice is put back
        through the same narrowing the list uses, against the actual row. */
-    const roadmap = await listed(20, { state: 'closed' })
+    const roadmap = await listed(20, { hide: ['issue:open'] })
     act(() => roadmap.goto('gh#7'))
     await settle()
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { state: 'closed' } } }))
+    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { hide: ['issue:open'] } } }))
     await settle()
     const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ found: false })
     expect(String(went?.why)).toContain('still hiding it')
+  })
+})
+
+/**
+ * The scope, on by default: narrowed to what the open epic names (issue #1).
+ *
+ * The things that would break quietly: the list must narrow once the epic is
+ * read and not before; a host that refuses must leave the whole project rather
+ * than nothing; Everything must be one press; picked containers must win over
+ * the epic; and a walk to a ref the scope hides must turn the scope off.
+ */
+describe('narrowed to the open epic', () => {
+  const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
+    const roadmap = stubRoadmap()
+    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    act(() => roadmap.greet(PROJECT, null, [], filters, more))
+    await settle()
+    return roadmap
+  }
+  const named = (roadmap: ReturnType<typeof stubRoadmap>) => {
+    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }, { refs: ['#77'] }] } }))
+    act(() => roadmap.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#5', steps: [] } }))
+  }
+
+  test('asks the host what the epic names, and narrows to it once answered', async () => {
+    const roadmap = await listed()
+    expect(roadmap.calls('steps.list')).toEqual([{ epic: 'an-epic' }])
+    expect(roadmap.calls('epic.get')).toEqual([{ epic: 'an-epic' }])
+    /* Not read yet: the whole project, never an empty list. */
+    expect(document.body.textContent).toContain('8 references')
+
+    named(roadmap)
+    await settle()
+    expect(document.body.textContent).toContain('3 of 8 shown')
+    expect(document.body.textContent).toContain('this epic')
+    expect([...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))).toEqual([
+      'gh#2',
+      'gh#3',
+      'gh#5',
+    ])
+    const scope = (roadmap.offered() as { options: { label: string }[] }[])[0]!
+    expect(scope.options.map((option) => option.label)).toEqual(['This epic 3', 'Everything 8'])
+  })
+
+  test('Everything is one choice away', async () => {
+    const roadmap = await listed({ scope: 'all' })
+    named(roadmap)
+    await settle()
+    expect(document.body.textContent).toContain('8 references')
+    expect(document.body.textContent).not.toContain('this epic')
+  })
+
+  test('a host that refuses both questions leaves the whole project, not an empty list', async () => {
+    const roadmap = await listed()
+    act(() => roadmap.answer('steps.list', { ok: false, error: 'roadmap.references may not read steps.' }))
+    act(() => roadmap.answer('epic.get', { ok: false, error: 'roadmap.references may not read epics.' }))
+    await settle()
+    expect(document.body.textContent).toContain('8 references')
+  })
+
+  test('an epic that names nothing in this tracker says so, and its press asks for Everything alone', async () => {
+    const roadmap = await listed({ hide: ['change:closed'] })
+    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['#77'] }] } }))
+    act(() => roadmap.answer('epic.get', { ok: true, data: { umbrella: null } }))
+    await settle()
+    expect(screen.getByText('Nothing this epic names is in this list.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('Nothing here matches')
+    fireEvent.click(screen.getByRole('button', { name: 'Show everything' }))
+    await settle()
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { hide: ['change:closed'], scope: 'all' } }])
+  })
+
+  test('picked-out containers win over the epic, and this container is not one of them', async () => {
+    const roadmap = await listed()
+    named(roadmap)
+    act(() =>
+      roadmap.context(PROJECT, [], 'an-epic', {}, {
+        containers: [
+          { module: 'roadmap.journeys', selected: true, showing: { refs: ['gh#7', 'gh#8'] } },
+          { module: 'roadmap.paper', selected: false, showing: { refs: ['gh#1'] } },
+          /* Its own ticks would narrow it to its own clicks. */
+          { module: 'roadmap.references', selected: true, showing: { refs: ['gh#6'] } },
+        ],
+      }),
+    )
+    await settle()
+    expect(document.body.textContent).toContain('2 of 8 shown')
+    expect(document.body.textContent).toContain('picked containers')
+    /* And unticking them puts the epic back. */
+    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { containers: [] }))
+    await settle()
+    expect(document.body.textContent).toContain('3 of 8 shown')
+  })
+
+  test('a new epic is asked about again, and a slow answer about the old one is ignored', async () => {
+    const roadmap = await listed()
+    act(() => roadmap.context(PROJECT, [], 'another-epic'))
+    await settle()
+    expect(roadmap.calls('steps.list')).toEqual([{ epic: 'an-epic' }, { epic: 'another-epic' }])
+    /* The answer about the new epic arrives first, then the old one's. */
+    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#1'] }] } }))
+    act(() => roadmap.answer('epic.get', { ok: true, data: {} }))
+    await settle()
+    expect(document.body.textContent).toContain('1 of 8 shown')
+    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }] } }, 'first'))
+    act(() => roadmap.answer('epic.get', { ok: true, data: {} }, 'first'))
+    await settle()
+    expect(document.body.textContent).toContain('1 of 8 shown')
+  })
+
+  test('a walk to a ref the scope hides turns the scope to Everything; one it keeps asks for nothing', async () => {
+    const roadmap = await listed()
+    named(roadmap)
+    await settle()
+    act(() => roadmap.goto('gh#2'))
+    await settle()
+    expect(roadmap.calls('filters.set')).toEqual([])
+    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
+
+    act(() => roadmap.goto('gh#7'))
+    await settle()
+    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
+  })
+})
+
+describe('the shared facets, with the marks people put on them', () => {
+  const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
+    const roadmap = stubRoadmap()
+    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    act(() => roadmap.greet(PROJECT, null, [], filters, more))
+    await settle()
+    return roadmap
+  }
+
+  test('a container stored under the old kind and state groups narrows nothing', async () => {
+    /* What a host holding a 2.2.0 choice sends in the greeting, before this
+       version has offered anything for it to reconcile against. */
+    const roadmap = await listed({ kind: 'change', state: 'merged' })
+    expect(document.body.textContent).toContain('8 references')
+    expect((roadmap.offered() as { id: string }[]).map((group) => group.id)).not.toContain('kind')
+  })
+
+  test('a mark from somebody moves a closed ref under the facet they chose', async () => {
+    /* gh#4 and gh#8 are closed with no reason. Marked `wont-do`, gh#4 is
+       hidden with the won't-do facet on, and gh#8 is not. */
+    const marks = [{ ref: 'gh#4', value: 'wont-do' }]
+    const roadmap = await listed({ hide: ['closed:wont-do'] }, { dispositions: marks })
+    expect(document.body.textContent).toContain('7 of 8 shown')
+    expect(document.querySelector('li[data-ref="gh#4"]')).toBeNull()
+    const hide = (roadmap.offered() as { id: string; options: { label: string }[] }[]).find((g) => g.id === 'hide')!
+    expect(hide.options.map((option) => option.label)).toContain('won’t do (1)')
+
+    /* And unmarked, it is back to "reason unknown", which nothing is hiding. */
+    act(() => roadmap.context(PROJECT, [], 'an-epic', { hide: ['closed:wont-do'] }, { dispositions: [] }))
+    await settle()
+    expect(document.body.textContent).toContain('8 references')
   })
 })

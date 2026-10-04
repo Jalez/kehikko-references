@@ -55,6 +55,21 @@ export interface Reference {
   kind: Kind
   origin: Origin
   state: State | null
+  /**
+   * Why the tracker says it closed, in the tracker's own word — GitHub's
+   * `stateReason`: `COMPLETED`, `NOT_PLANNED`, `DUPLICATE`. Null where the
+   * reading carried none, which is every GitLab row and every pull request.
+   * Passed to the facets module as it arrived; `deriveDisposition` there is
+   * what reads it.
+   */
+  stateReason: string | null
+  /**
+   * True when the reading links this issue to a change that merged — GitLab's
+   * only sign that a closed issue was done, since GitLab records no reason.
+   * Read off the reading, never guessed from a title; see `linkedMerges` in
+   * `collect.ts`.
+   */
+  closedByMerge: boolean
   /** A change the tracker says is not finished being written. Never inferred. */
   draft: boolean
   title: string

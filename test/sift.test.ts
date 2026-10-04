@@ -1,9 +1,27 @@
 import { describe, expect, test } from 'bun:test'
 
-import { LIMITS, filterGroupSchema } from 'roadmap-module-protocol'
+import { LIMITS, filterGroupSchema, filtersSchema, MESSAGE, type Disposition } from 'roadmap-module-protocol'
 
 import type { Reference } from '@/live/reference.ts'
-import { EVERYTHING, KEHIKKO, PICKED, hides, narrowing, nothingPicked, offer, sift, siftingOf } from '@/live/sift.ts'
+import {
+  ALL,
+  EVERYTHING,
+  HIDE,
+  IN_SCOPE,
+  KEHIKKO,
+  PICKED,
+  SCOPE,
+  SHOW_ALL,
+  facetsOfRow,
+  hides,
+  narrowing,
+  nothingInScope,
+  nothingPicked,
+  offer,
+  scopeOf,
+  sift,
+  siftingOf,
+} from '@/live/sift.ts'
 
 /**
  * The filter, which is the only thing in this app permitted to hide a row.
@@ -20,6 +38,8 @@ const row = (over: Partial<Reference>): Reference => ({
   kind: 'issue',
   origin: 'gitlab',
   state: 'opened',
+  stateReason: null,
+  closedByMerge: false,
   draft: false,
   title: '',
   at: '2026-08-01T00:00:00Z',
@@ -71,23 +91,76 @@ describe('what the query looks at', () => {
   })
 })
 
-describe('kind and state', () => {
-  test('issues and changes', () => {
-    expect(sift(rows, { ...EVERYTHING, kind: 'issue' }).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
-    expect(sift(rows, { ...EVERYTHING, kind: 'change' }).map((r) => r.ref)).toEqual(['!1848', 'gh#99'])
+/**
+ * The `hide` group: the shared ref facets, any number of them on at once.
+ *
+ * What the old pair of single choices could not say is the reason the group
+ * exists — "hide closed MRs/PRs, keep closed issues" — so that is held first.
+ */
+describe('hiding by facet', () => {
+  const mark = (ref: string, value: Disposition['value']): Disposition => ({
+    ref,
+    value,
+    target: null,
+    note: '',
+    by: null,
+    at: null,
   })
 
-  test('a state nobody could read is not open', () => {
-    /* The assertion this file exists for. Asking for open work must never turn
-       up a reference whose state was unreadable — that is the app inventing the
-       one fact somebody came to check. */
-    expect(sift(rows, { ...EVERYTHING, state: 'opened' }).map((r) => r.ref)).toEqual(['#2274'])
-    expect(sift(rows, { ...EVERYTHING, state: 'all' }).map((r) => r.ref)).toContain('gh#99')
+  test('each row has the facets the protocol says it has', () => {
+    expect(rows.map((r) => facetsOfRow(r, []))).toEqual([
+      ['issue:open'],
+      ['change:merged', 'closed:done'],
+      /* Closed with no reason the tracker gave and no mark: the case a person
+         is asked to settle, never counted as done. */
+      ['issue:closed', 'closed:unknown'],
+      /* A state nobody could read has no facets at all. */
+      [],
+    ])
   })
 
-  test('the filters compose', () => {
-    expect(sift(rows, { ...EVERYTHING, query: 'a', kind: 'change', state: 'merged' }).map((r) => r.ref)).toEqual([
+  test('closed changes and closed issues are separately hideable', () => {
+    const closedIssue = row({ ref: 'gh#7', origin: 'github', state: 'closed' })
+    const closedChange = row({ ref: 'gh#8', origin: 'github', kind: 'change', state: 'closed' })
+    const both = [closedIssue, closedChange]
+    expect(sift(both, { ...EVERYTHING, hidden: ['change:closed'] }).map((r) => r.ref)).toEqual(['gh#7'])
+    expect(sift(both, { ...EVERYTHING, hidden: ['issue:closed'] }).map((r) => r.ref)).toEqual(['gh#8'])
+  })
+
+  test('a state nobody could read is never hidden, whatever is switched on', () => {
+    /* The assertion the old `state` group was written for, kept in the new
+       vocabulary: the app must not decide an unreadable row is open, and must
+       not decide it is closed either. */
+    const all = ['issue:open', 'issue:closed', 'change:open', 'change:closed', 'change:merged'] as const
+    expect(sift(rows, { ...EVERYTHING, hidden: [...all] }).map((r) => r.ref)).toEqual(['gh#99'])
+  })
+
+  test('GitHub’s reason decides the closed facet', () => {
+    const notPlanned = row({ ref: 'gh#5', origin: 'github', state: 'closed', stateReason: 'NOT_PLANNED' })
+    const completed = row({ ref: 'gh#6', origin: 'github', state: 'closed', stateReason: 'COMPLETED' })
+    expect(facetsOfRow(notPlanned, [])).toEqual(['issue:closed', 'closed:wont-do'])
+    expect(sift([notPlanned, completed], { ...EVERYTHING, hidden: ['closed:wont-do'] }).map((r) => r.ref)).toEqual([
+      'gh#6',
+    ])
+  })
+
+  test('a GitLab issue closed by a merged change is done', () => {
+    const closed = row({ ref: '#12', state: 'closed', closedByMerge: true })
+    expect(facetsOfRow(closed, [])).toEqual(['issue:closed', 'closed:done'])
+  })
+
+  test('a person’s mark wins over the tracker’s reason', () => {
+    const completed = row({ ref: 'gh#6', origin: 'github', state: 'closed', stateReason: 'COMPLETED' })
+    const marks = [mark('gh#6', 'duplicate')]
+    expect(facetsOfRow(completed, marks)).toEqual(['issue:closed', 'closed:duplicate'])
+    expect(sift([completed], { ...EVERYTHING, hidden: ['closed:duplicate'], marks })).toHaveLength(0)
+    expect(sift([completed], { ...EVERYTHING, hidden: ['closed:done'], marks })).toHaveLength(1)
+  })
+
+  test('the toggles compose with the query', () => {
+    expect(sift(rows, { ...EVERYTHING, query: 'a', hidden: ['issue:open', 'issue:closed'] }).map((r) => r.ref)).toEqual([
       '!1848',
+      'gh#99',
     ])
   })
 })
@@ -108,31 +181,41 @@ describe('what is offered to the host, which is all of the narrowing now', () =>
 
   test('the counts are in the labels, because the protocol has no count field', () => {
     const groups = offer(rows, true)!
-    expect(groups.map((group) => group.id)).toEqual(['kehikko', 'kind', 'state', 'search'])
-    expect(groups[1]?.options).toEqual([
-      { id: 'all', label: 'All 4' },
-      { id: 'issue', label: 'Issues 2' },
-      { id: 'change', label: 'Changes 2' },
-    ])
-    /* `Any` counts the row whose state nobody could read; nothing else does. The
-       same rule `sift` keeps below, kept in the words as well. */
+    expect(groups.map((group) => group.id)).toEqual([SCOPE, KEHIKKO, HIDE, 'search'])
+    /* One toggles group, from the shared vocabulary, counted over the whole
+       reading. The unreadable row is counted under nothing. */
+    expect(groups[2]?.kind).toBe('toggles')
     expect(groups[2]?.options).toEqual([
-      { id: 'all', label: 'Any 4' },
-      { id: 'opened', label: 'Open 1' },
-      { id: 'merged', label: 'Merged 1' },
-      { id: 'closed', label: 'Closed 1' },
+      { id: 'issue:open', label: 'open issues (1)' },
+      { id: 'issue:closed', label: 'closed issues (1)' },
+      { id: 'change:merged', label: 'merged MRs/PRs (1)' },
+      { id: 'closed:done', label: 'done (1)' },
+      { id: 'closed:unknown', label: 'closed, reason unknown (1)' },
     ])
   })
 
-  test('an option nothing matches is not offered, and the fallback never goes', () => {
+  test('a facet nothing has is not offered, unless it is switched on', () => {
     const only = [rows[0]!]
-    const groups = offer(only, true)!
-    expect(groups[1]?.options.map((option) => option.id)).toEqual(['all', 'issue'])
-    expect(groups[2]?.options.map((option) => option.id)).toEqual(['all', 'opened'])
-    /* The typed group is exempt, and the protocol is the reason: it has no
-       options to be missing and no fallback to fall to. Its resting state is
-       the empty string, which is spelled by being absent from the choice. */
-    for (const group of groups.filter((one) => one.kind !== 'text')) {
+    expect(offer(only, true)![2]?.options.map((option) => option.id)).toEqual(['issue:open'])
+    /* On, it stays, so a person can switch off what they switched on. */
+    expect(offer(only, true, {}, ['change:closed'])![2]?.options.map((option) => option.id)).toEqual([
+      'issue:open',
+      'change:closed',
+    ])
+  })
+
+  test('the facet counts follow the marks', () => {
+    const marks: Disposition[] = [{ ref: 'gh#41', value: 'wont-do', target: null, note: '', by: null, at: null }]
+    const labels = offer(rows, true, { marks })![2]?.options.map((option) => option.label)
+    expect(labels).toContain('won’t do (1)')
+    expect(labels).not.toContain('closed, reason unknown (1)')
+  })
+
+  test('the fallbacks never go', () => {
+    const groups = offer([rows[0]!], true)!
+    /* The typed group and the toggles are exempt, and the protocol is the
+       reason: neither has a fallback to fall to. */
+    for (const group of groups.filter((one) => one.kind !== 'text' && one.kind !== 'toggles')) {
       expect(group.options.some((option) => option.id === group.fallback)).toBe(true)
     }
   })
@@ -159,54 +242,124 @@ describe('what is offered to the host, which is all of the narrowing now', () =>
     for (const group of offer(rows, true)!) {
       expect(filterGroupSchema.safeParse(group).success).toBe(true)
     }
+    /* And the whole offer, under the four-group cap the scope had to fit in. */
+    const message = { type: MESSAGE.FILTERS, groups: offer(rows, true, { epicRefs: ['gh#41'], selection: ['#2274'] }) }
+    expect(filtersSchema.safeParse(message).success).toBe(true)
   })
 })
 
 describe('reading back what the host chose', () => {
   test('all four groups are read out of one record', () => {
-    /* The query among them, which is the change: this page holds no part of its
-       own narrowing any more. */
-    expect(siftingOf({ kind: 'change', state: 'merged', search: 'rbac jaakko' })).toEqual({
+    expect(
+      siftingOf(
+        { [SCOPE]: IN_SCOPE, [HIDE]: ['change:closed', 'closed:wont-do'], search: 'rbac jaakko', [KEHIKKO]: PICKED },
+        { selection: ['gh#41'], epicRefs: ['#2274'] },
+      ),
+    ).toEqual({
       query: 'rbac jaakko',
-      kind: 'change',
-      state: 'merged',
-      picked: null,
+      hidden: ['change:closed', 'closed:wont-do'],
+      scope: { from: 'epic', refs: ['#2274'] },
+      picked: ['gh#41'],
+      marks: [],
     })
   })
 
-  test('anything else is the resting option rather than a page narrowed by a rule nobody can see', () => {
+  test('a choice stored by the version with kind and state groups narrows nothing', () => {
     /* The host reconciles a stored choice against what a module offers, and it
        cannot do that before the module has offered anything — the greeting goes
-       first. So the first choice this page ever receives may name an option from
-       a version of itself that no longer exists. */
+       first. So a container saved under 2.2.0 arrives with `kind` and `state`
+       in it, and neither is a group this version reads. */
+    expect(siftingOf({ kind: 'change', state: 'merged' })).toEqual(EVERYTHING)
     expect(siftingOf({ kind: 'epics', state: 'abandoned' })).toEqual(EVERYTHING)
     expect(siftingOf({})).toEqual(EVERYTHING)
   })
 
+  test('a hide that is not a list, or names facets nobody knows, hides nothing it does not understand', () => {
+    expect(siftingOf({ [HIDE]: 'issue:open' }).hidden).toEqual([])
+    expect(siftingOf({ [HIDE]: ['opened', 'issue:closed', 'not-a-facet'] }).hidden).toEqual(['issue:closed'])
+  })
+
   test('a query longer than the protocol allows is clipped rather than dropped', () => {
-    /* A clipped query is still a query. A dropped one is a filter that silently
-       stops working the first time somebody pastes something long. */
     const long = 'x'.repeat(LIMITS.FILTER_TEXT + 100)
     expect(siftingOf({ search: long }).query).toHaveLength(LIMITS.FILTER_TEXT)
   })
 
   test('anything narrowed at all is narrowed, whichever group did it', () => {
-    /* `goto` asks this to decide whether it has to ask the host for anything at
-       all before it can honestly answer `found: true`. */
     expect(narrowing({ ...EVERYTHING, query: 'rbac' })).toBe(true)
-    expect(narrowing({ ...EVERYTHING, state: 'closed' })).toBe(true)
+    expect(narrowing({ ...EVERYTHING, hidden: ['issue:closed'] })).toBe(true)
+    expect(narrowing({ ...EVERYTHING, scope: { from: 'epic', refs: [] } })).toBe(true)
     expect(narrowing(EVERYTHING)).toBe(false)
   })
 
   test('one row is asked about with the same function the list is', () => {
     const closed = rows.find((row) => row.state === 'closed')!
-    expect(hides({ ...EVERYTHING, state: 'opened' }, closed)).toBe(true)
+    expect(hides({ ...EVERYTHING, hidden: ['issue:closed'] }, closed)).toBe(true)
     expect(hides(EVERYTHING, closed)).toBe(false)
+  })
+
+  test('show-all is not the empty choice, because the scope rests on the epic', () => {
+    expect(SHOW_ALL).toEqual({ [SCOPE]: ALL })
+    expect(siftingOf(SHOW_ALL, { epicRefs: ['#2274'] }).scope).toBeNull()
+    expect(siftingOf({}, { epicRefs: ['#2274'] }).scope).not.toBeNull()
   })
 })
 
 /**
- * The fourth group: narrowed to what the kehikko has picked out.
+ * The scope: on by default, narrowed to what the open epic names, or to what
+ * the picked-out containers show while any are.
+ */
+describe('the scope', () => {
+  test('at rest it narrows to the epic’s refs, in the list’s own order', () => {
+    const scoped = siftingOf({}, { epicRefs: ['gh#41', '#2274', '#9999'] })
+    expect(sift(rows, scoped).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
+  })
+
+  test('Everything is one choice away, and narrows nothing', () => {
+    expect(sift(rows, siftingOf({ [SCOPE]: ALL }, { epicRefs: ['gh#41'] }))).toHaveLength(4)
+  })
+
+  test('with nothing read about the epic, it narrows nothing rather than everything', () => {
+    /* No epic open, or the host refused both questions: the scope has nothing
+       to narrow to, and an empty list for that would be a lie about the work. */
+    const unread = siftingOf({})
+    expect(unread.scope).toBeNull()
+    expect(sift(rows, unread)).toHaveLength(4)
+  })
+
+  test('picked-out containers win over the epic', () => {
+    expect(scopeOf(['gh#41'], ['!1848'])).toEqual({ from: 'containers', refs: ['!1848'] })
+    expect(scopeOf(['gh#41'], null)).toEqual({ from: 'epic', refs: ['gh#41'] })
+    expect(scopeOf(null, null)).toBeNull()
+    const aimed = siftingOf({}, { epicRefs: ['gh#41'], aimed: ['!1848'] })
+    expect(sift(rows, aimed).map((r) => r.ref)).toEqual(['!1848'])
+  })
+
+  test('an epic that names nothing here is its own state, not "nothing matches"', () => {
+    const elsewhere = siftingOf({}, { epicRefs: ['#31337'] })
+    expect(sift(rows, elsewhere)).toHaveLength(0)
+    expect(nothingInScope(rows, elsewhere)).toBe(true)
+    expect(nothingInScope(rows, siftingOf({}, { epicRefs: [] }))).toBe(true)
+    /* A toggle that hides what the scope kept is the menus, not the scope. */
+    expect(nothingInScope(rows, { ...siftingOf({}, { epicRefs: ['gh#41'] }), hidden: ['issue:closed'] })).toBe(false)
+  })
+
+  test('is offered first, with the epic as its fallback and both options whatever the counts', () => {
+    const scope = offer(rows, true, { epicRefs: ['gh#41', '#31337'] })![0]!
+    expect(scope).toMatchObject({ id: SCOPE, label: 'Scope', fallback: IN_SCOPE })
+    expect(scope.options).toEqual([
+      { id: IN_SCOPE, label: 'This epic 1' },
+      { id: ALL, label: 'Everything 4' },
+    ])
+    expect(offer(rows, true, { epicRefs: [] })![0]!.options[0]?.label).toBe('This epic 0')
+    expect(offer(rows, true)![0]!.options[0]?.label).toBe('This epic (not read)')
+    expect(offer(rows, true, { epicRefs: ['gh#41'], aimed: ['!1848', '#2274'] })![0]!.options[0]?.label).toBe(
+      'Picked containers 2',
+    )
+  })
+})
+
+/**
+ * The kehikko group: narrowed to what the kehikko has picked out.
  *
  * Two symmetrical failures again, and a third particular to this group. It
  * must narrow to the pick when it is on; it must not narrow when it is off,
@@ -217,28 +370,28 @@ describe('reading back what the host chose', () => {
  */
 describe('narrowed to what the kehikko has picked', () => {
   test('on, the list is what the canvas picked and nothing else', () => {
-    const picked = siftingOf({ [KEHIKKO]: PICKED }, ['gh#41', '!1848'])
+    const picked = siftingOf({ [KEHIKKO]: PICKED }, { selection: ['gh#41', '!1848'] })
     expect(picked.picked).toEqual(['gh#41', '!1848'])
     expect(sift(rows, picked).map((r) => r.ref)).toEqual(['!1848', 'gh#41'])
     expect(narrowing(picked)).toBe(true)
   })
 
   test('off, the canvas may pick what it likes and every row stays', () => {
-    const rest = siftingOf({}, ['gh#41'])
+    const rest = siftingOf({}, { selection: ['gh#41'] })
     expect(rest.picked).toBeNull()
     expect(sift(rows, rest)).toHaveLength(4)
     expect(narrowing(rest)).toBe(false)
   })
 
   test('on with nothing picked hides everything, and says so as its own state rather than as "no match"', () => {
-    const empty = siftingOf({ [KEHIKKO]: PICKED }, [])
+    const empty = siftingOf({ [KEHIKKO]: PICKED }, { selection: [] })
     expect(empty.picked).toEqual([])
     expect(sift(rows, empty)).toHaveLength(0)
     expect(nothingPicked(rows, empty)).toBe(true)
     /* A kind that hides everything is "nothing matches", not "nothing picked":
        the pick reaches a row, and the menus are what to change. */
-    expect(nothingPicked(rows, { ...EVERYTHING, picked: ['gh#41'], kind: 'change' })).toBe(false)
-    expect(nothingPicked(rows, { ...EVERYTHING, kind: 'change' })).toBe(false)
+    expect(nothingPicked(rows, { ...EVERYTHING, picked: ['gh#41'], hidden: ['issue:closed'] })).toBe(false)
+    expect(nothingPicked(rows, { ...EVERYTHING, hidden: ['issue:closed'] })).toBe(false)
   })
 
   test('a pick about references this project does not hold is "nothing picked" too', () => {
@@ -246,7 +399,7 @@ describe('narrowed to what the kehikko has picked', () => {
   })
 
   test('composes with the other three', () => {
-    const both = { ...siftingOf({ [KEHIKKO]: PICKED, kind: 'issue' }, ['gh#41', '!1848']) }
+    const both = siftingOf({ [KEHIKKO]: PICKED, [HIDE]: ['change:merged'] }, { selection: ['gh#41', '!1848'] })
     expect(sift(rows, both).map((r) => r.ref)).toEqual(['gh#41'])
   })
 
@@ -254,8 +407,8 @@ describe('narrowed to what the kehikko has picked', () => {
     expect(sift(rows, { ...EVERYTHING, picked: ['#41'] })).toHaveLength(0)
   })
 
-  test('is offered first, with the count of rows the pick reaches, and both options whatever the count', () => {
-    const none = offer(rows, true, [])!.find((group) => group.id === KEHIKKO)!
+  test('is offered second, with the count of rows the pick reaches, and both options whatever the count', () => {
+    const none = offer(rows, true, { selection: [] })!.find((group) => group.id === KEHIKKO)!
     expect(none.label).toBe('Kehikko')
     expect(none.fallback).toBe('all')
     /* `Picked here 0` is offered on purpose. Dropping it would make the host
@@ -265,14 +418,14 @@ describe('narrowed to what the kehikko has picked', () => {
       { id: 'all', label: 'Everything 4' },
       { id: PICKED, label: 'Picked here 0' },
     ])
-    const some = offer(rows, true, ['gh#41', 'gh#31337'])!.find((group) => group.id === KEHIKKO)!
+    const some = offer(rows, true, { selection: ['gh#41', 'gh#31337'] })!.find((group) => group.id === KEHIKKO)!
     expect(some.options[1]?.label).toBe('Picked here 1')
     expect(filterGroupSchema.safeParse(some).success).toBe(true)
   })
 
   test('the sifting holds a copy, so a later context cannot change a reading already taken', () => {
     const selection = ['gh#41']
-    const taken = siftingOf({ [KEHIKKO]: PICKED }, selection)
+    const taken = siftingOf({ [KEHIKKO]: PICKED }, { selection })
     selection.push('!1848')
     expect(taken.picked).toEqual(['gh#41'])
   })
