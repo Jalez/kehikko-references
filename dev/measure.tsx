@@ -30,19 +30,27 @@ const { ReferenceList } = await import('../src/view/reference-list.tsx')
  * browser to skip, without taking a single row out of the document.
  */
 
+/** The rows of a host's reading with `count` GitHub issues in it. */
 function reading(count: number) {
-  const ghIssues: Record<string, unknown> = {}
-  for (let n = 1; n <= count; n += 1) {
-    ghIssues[`gh#${n}`] = {
-      state: n % 4 === 0 ? 'closed' : 'opened',
+  return Array.from({ length: count }, (_, at) => {
+    const n = at + 1
+    return {
+      ref: `gh#${n}`,
+      tracker: 'github',
+      host: 'github.com',
+      repo: 'example/repo',
+      number: n,
+      kind: 'issue',
+      state: n % 4 === 0 ? 'closed' : 'open',
       title: `the thing that has to become true, number ${n}`,
-      at: '2026-08-20T10:00:00Z',
       url: `https://github.com/example/repo/issues/${n}`,
       labels: ['area::db', 'importance::P1'],
       assignees: ['ada lovelace'],
+      links: [],
+      updatedAt: '2026-08-20T10:00:00Z',
+      readAt: '2026-08-27T09:12:00Z',
     }
-  }
-  return { generated: '2026-08-27T09:12:00Z', ghIssues }
+  })
 }
 
 const at = () => performance.now()

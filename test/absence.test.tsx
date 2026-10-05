@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, render, screen } from '@testing-library/react'
 
-import type { Trouble, TroubleKind } from '@/live/sight.ts'
+import type { TrackerSource } from 'roadmap-module-protocol'
+
+import type { Held, Trouble, TroubleKind } from '@/live/sight.ts'
 import {
   Asking,
   Listening,
@@ -13,6 +15,7 @@ import {
   Unhosted,
   projectName,
 } from '@/view/absence.tsx'
+import { SourceTrouble } from '@/view/sources.tsx'
 
 /**
  * The words, word for word.
@@ -41,6 +44,27 @@ const trouble = (kind: TroubleKind, why = 'something happened', said: string | n
   said,
 })
 
+const SOURCE: TrackerSource = {
+  tracker: 'github',
+  host: 'github.com',
+  repo: 'example/repo',
+  default: true,
+  listed: true,
+  at: '2026-08-27T10:00:00Z',
+  error: null,
+  refreshing: false,
+}
+
+/** A reading with nothing in it, from one GitHub source that read cleanly. */
+const held = (over: Partial<Held> = {}): Held => ({
+  at: '2026-08-27T10:00:00Z',
+  refreshing: false,
+  sources: [SOURCE],
+  missing: [],
+  rows: [],
+  ...over,
+})
+
 describe('nothing has told me anything', () => {
   test('says it is not an empty list, in as many words', () => {
     render(<Unhosted />)
@@ -55,9 +79,10 @@ describe('nothing has told me anything', () => {
     expect(said.toLowerCase()).not.toContain('no results')
   })
 
-  test('names where the rows would have come from, which is no longer a roadmap’s cache', () => {
+  test('names where the rows would have come from: the roadmap’s reading of both trackers', () => {
     render(<Unhosted />)
-    expect(document.body.textContent).toContain('read out of one project’s GitHub')
+    expect(document.body.textContent).toContain('the roadmap’s reading of one')
+    expect(document.body.textContent).toContain('GitHub and GitLab')
   })
 })
 
@@ -82,28 +107,41 @@ describe('the absences are different sentences', () => {
 
   test('asking is the one honest wait, and says why', () => {
     render(<Asking project="/Users/somebody/Projects/roadmap" />)
-    expect(screen.getByText('Reading the tracker in roadmap.')).toBeTruthy()
+    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
     expect(document.body.textContent).toContain('the one wait on this page that means an answer is coming')
   })
 
-  test('an empty tracker is an answer rather than a gap, and dates itself', () => {
-    render(<NothingFound project="/Users/x/roadmap" generated="2026-08-27T10:00:00Z" />)
+  test('an empty tracker is an answer rather than a gap, names what was read, and dates itself', () => {
+    render(<NothingFound project="/Users/x/roadmap" reading={held({ at: '2026-08-27T10:00:00Z' })} />)
     expect(screen.getByText('This project’s tracker has nothing in it.')).toBeTruthy()
     expect(document.body.textContent).toContain('This one is an answer rather than a gap.')
+    expect(document.body.textContent).toContain('github.com/example/repo')
     expect(document.body.textContent).toContain('2026-08-27T10:00:00Z')
   })
 
   test('a reading with no date says nothing about a date', () => {
-    render(<NothingFound project="/x" generated={null} />)
-    expect(document.body.textContent).toContain('GitHub was asked')
+    render(<NothingFound project="/x" reading={held({ at: null })} />)
+    expect(document.body.textContent).toContain('The roadmap read')
     expect(document.body.textContent).not.toContain('the reading is dated')
   })
 
-  test('an empty tracker is never confused with a tracker that could not be read', () => {
-    render(<NothingFound project="/x" generated={null} />)
+  test('a roadmap that reads no tracker for the project says that, which is not an empty tracker', () => {
+    render(<NothingFound project="/x" reading={held({ sources: [] })} />)
+    expect(screen.getByText('The roadmap reads no tracker for this project.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('genuinely no work filed')
+  })
+
+  test('an empty reading over a source that failed does not claim there is no work', () => {
+    render(<NothingFound project="/x" reading={held({ sources: [{ ...SOURCE, error: 'gitlab.com could not be reached.' }] })} />)
+    expect(document.body.textContent).toContain('gitlab.com could not be reached.')
+    expect(document.body.textContent).not.toContain('genuinely no work filed')
+  })
+
+  test('an empty tracker is never confused with a reading that could not be had', () => {
+    render(<NothingFound project="/x" reading={held()} />)
     const found = document.body.textContent ?? ''
     cleanup()
-    render(<Troubled project="/x" trouble={trouble('offline')} again={() => {}} />)
+    render(<Troubled project="/x" trouble={trouble('refused')} again={() => {}} />)
     const missed = document.body.textContent ?? ''
     expect(found).toContain('genuinely no work filed')
     expect(missed).not.toContain('genuinely no work filed')
@@ -111,17 +149,7 @@ describe('the absences are different sentences', () => {
 })
 
 describe('the failures are told apart, one sentence each', () => {
-  const KINDS: TroubleKind[] = [
-    'bad-project',
-    'no-gh',
-    'not-a-repo',
-    'no-remote',
-    'unauthenticated',
-    'offline',
-    'rate-limited',
-    'refused',
-    'door',
-  ]
+  const KINDS: TroubleKind[] = ['unknown-method', 'refused', 'unreadable']
 
   test('every kind has a heading of its own', () => {
     const titles = new Set<string>()
@@ -144,51 +172,66 @@ describe('the failures are told apart, one sentence each', () => {
     expect(means.size).toBe(KINDS.length)
   })
 
-  test('the door’s own sentence is drawn, because it is the specific one', () => {
+  test('the host’s own sentence is drawn, because it is the specific one', () => {
     render(
       <Troubled
         project="/x"
-        trouble={trouble('unauthenticated', 'The GitHub CLI on this machine is not logged in.')}
+        trouble={trouble('refused', 'roadmap.references may not read trackers.')}
         again={() => {}}
       />,
     )
-    expect(document.body.textContent).toContain('The GitHub CLI on this machine is not logged in.')
+    expect(document.body.textContent).toContain('roadmap.references may not read trackers.')
   })
 
-  test('what the CLI printed is shown rather than summarised, and never on its own', () => {
-    render(<Troubled project="/x" trouble={trouble('refused', 'it refused', 'exit status 1: nope')} again={() => {}} />)
-    expect(document.body.textContent).toContain('exit status 1: nope')
-    expect(document.body.textContent).toContain('it refused')
+  test('anything more the host said is shown rather than summarised, and never on its own', () => {
+    render(<Troubled project="/x" trouble={trouble('unknown-method', 'it has no reading', 'no such method: tracker.get')} again={() => {}} />)
+    expect(document.body.textContent).toContain('no such method: tracker.get')
+    expect(document.body.textContent).toContain('it has no reading')
   })
 
-  test('a failure that printed nothing gets no empty quote drawn for it', () => {
-    render(<Troubled project="/x" trouble={trouble('offline')} again={() => {}} />)
+  test('a failure that said nothing more gets no empty quote drawn for it', () => {
+    render(<Troubled project="/x" trouble={trouble('refused')} again={() => {}} />)
     expect(document.body.querySelector('.italic')).toBeNull()
   })
 
-  test('the whole project path is on screen, because a fix happens in a terminal', () => {
-    render(<Troubled project="/Users/x/Projects/roadmap" trouble={trouble('no-remote')} again={() => {}} />)
+  test('the whole project path is on screen', () => {
+    render(<Troubled project="/Users/x/Projects/roadmap" trouble={trouble('refused')} again={() => {}} />)
     expect(document.body.textContent).toContain('/Users/x/Projects/roadmap')
   })
 
-  test('only the failures that can pass on their own offer to try again', () => {
-    for (const kind of ['offline', 'rate-limited', 'unauthenticated', 'door', 'refused'] as TroubleKind[]) {
+  test('asking again is offered unless the host has never heard of the question', () => {
+    for (const kind of ['refused', 'unreadable'] as TroubleKind[]) {
       render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
-      expect(screen.getByRole('button', { name: 'Read it again' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Ask again' })).toBeTruthy()
       cleanup()
     }
-    for (const kind of ['not-a-repo', 'no-remote', 'no-gh', 'bad-project'] as TroubleKind[]) {
-      render(<Troubled project="/x" trouble={trouble(kind)} again={() => {}} />)
-      expect(screen.queryByRole('button', { name: 'Read it again' })).toBeNull()
-      cleanup()
-    }
+    render(<Troubled project="/x" trouble={trouble('unknown-method')} again={() => {}} />)
+    expect(screen.queryByRole('button', { name: 'Ask again' })).toBeNull()
+  })
+})
+
+describe('a source that could not be read, over the rows it gave before', () => {
+  test('is named with its host and repository, its error, and the age of what it last gave', () => {
+    const now = Date.parse('2026-08-27T12:00:00Z')
+    render(
+      <SourceTrouble
+        sources={[
+          SOURCE,
+          { ...SOURCE, tracker: 'gitlab', host: 'gitlab.example.org', repo: 'group/project', error: 'could not be reached.', at: '2026-08-27T09:00:00Z' },
+        ]}
+        now={now}
+      />,
+    )
+    const said = document.body.textContent ?? ''
+    expect(said).toContain('gitlab.example.org/group/project could not be read: could not be reached.')
+    expect(said).toContain('read 3 h ago')
+    /* A source that read cleanly gets no line. */
+    expect(said).not.toContain('example/repo could not')
   })
 
-  test('a project that is not a repository never reads as a fault', () => {
-    render(<Troubled project="/x" trouble={trouble('not-a-repo')} again={() => {}} />)
-    const said = document.body.textContent ?? ''
-    expect(said).toContain('Nothing is wrong and nothing is being waited for')
-    expect(said.toLowerCase()).not.toContain('error')
+  test('nothing at all when every source read', () => {
+    const { container } = render(<SourceTrouble sources={[SOURCE]} />)
+    expect(container.innerHTML).toBe('')
   })
 })
 

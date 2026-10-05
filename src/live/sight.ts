@@ -1,3 +1,5 @@
+import type { TrackerMissing, TrackerSource } from 'roadmap-module-protocol'
+
 /**
  * What this app can see, and how it came to see it.
  *
@@ -15,13 +17,16 @@
  * thing the tests can hold, and so that adding one means answering the question
  * "what does this one SAY" before anything renders.
  *
- * ## What moved when the rows started coming from GitHub
+ * ## What moved when the rows started coming from the host's shared reading
  *
- * Three of the old states were about a conversation with the roadmap — the
- * question was out, the roadmap refused it, the roadmap had no reading — and all
- * three were about `live.get`, which this app no longer calls. What replaced
- * them is a conversation with a subprocess, which fails in more ways and more
- * interesting ones, so the single refusal state grew into `Trouble`.
+ * Twice now. The rows came from the roadmap's `live.get`, then from this app's
+ * own server running `gh` — which failed in eight interesting ways, each with
+ * its own sentence, and saw GitHub only. Since issue #4 they come from
+ * `tracker.get`, the reading the host keeps for every module in a project, and
+ * the CLI's failures are the host's to report: they arrive per source, in
+ * `sources[].error`, beside the rows that source last gave. What is left for
+ * this page to fail at is the conversation with the host, so `Trouble` shrank
+ * to the three ways that can go.
  *
  * What did NOT move is the shape of the argument. Every one of these is still a
  * distinct fact with its own paragraph, and the two that are easiest to confuse
@@ -30,32 +35,42 @@
  */
 
 /**
- * Why a read produced nothing, as the page understands it.
+ * Why asking the host for the reading produced nothing to draw.
  *
- * The kinds are `tracker/gh.ts`'s, deliberately spelled the same on both sides
- * of the wire: the door decides which one it is, because the door is the thing
- * holding the exit code and the CLI's own words, and the page draws it. A page
- * that re-derived the kind from a sentence would be parsing prose somebody may
- * one day reword.
+ * - `unknown-method` — the host has never heard of `tracker.get`: a roadmap
+ *   older than the shared reading. Asking again will not change it.
+ * - `refused` — the host answered no, in a sentence of its own: no tracker
+ *   permission for this module, no project, a failure on its side.
+ * - `unreadable` — the host answered in a shape this app cannot read as a
+ *   reading, which is two programs a version apart.
  */
-export type TroubleKind =
-  | 'bad-project'
-  | 'no-gh'
-  | 'not-a-repo'
-  | 'no-remote'
-  | 'unauthenticated'
-  | 'offline'
-  | 'rate-limited'
-  | 'refused'
-  /** The door itself did not answer: this app's own server is not there, or said something unreadable. */
-  | 'door'
+export type TroubleKind = 'unknown-method' | 'refused' | 'unreadable'
 
 export interface Trouble {
   kind: TroubleKind
-  /** One sentence for the person, written where the failure is known. */
+  /** One sentence for the person: the host's own when it gave one. */
   why: string
-  /** What `gh` printed, if anything. Shown rather than summarised, and never the only thing on screen. */
+  /** Anything more the host said, verbatim. Never the only thing on screen. */
   said: string | null
+}
+
+/**
+ * The reading as this page holds it: the protocol's `TrackerReading`, with the
+ * rows left as they arrived.
+ *
+ * Unparsed on purpose. `trackerReadingResult` checks every row, and one row a
+ * version ahead would fail the whole answer — four hundred references refused
+ * for one odd label. `collect.ts` reads the rows one at a time instead, and
+ * draws a row it cannot read as unreadable rather than losing the rest.
+ */
+export interface Held {
+  /** When the reading last changed, or null when nothing has ever been read for this project. */
+  at: string | null
+  /** Whether the host is reading right now. */
+  refreshing: boolean
+  sources: TrackerSource[]
+  missing: TrackerMissing[]
+  rows: unknown[]
 }
 
 /**
@@ -74,13 +89,14 @@ export interface Trouble {
  *   already on screen. The one state in which a whole container of waiting is honest.
  *   A read that happens while rows are already drawn is NOT this state — see
  *   `busy` on `Roadmap`, which is what keeps the container usable in flight.
- * - `trouble` — the read did not happen, there is no cached reading either, and
- *   the reason is one of the kinds above. Each draws its own paragraph.
+ * - `trouble` — the host was asked for the reading and gave nothing this page
+ *   can draw, for one of the reasons above. Each draws its own paragraph.
  * - `read` — a reading, which may itself contain no references, and that is the
- *   one genuinely empty list on this page. It carries where the rows came from
- *   this time, and a `trouble` alongside them when a fresh read failed over a
- *   cache that could still be shown: rows AND a sentence, which is the state
- *   this whole design exists to be able to draw.
+ *   one genuinely empty list on this page. A source that failed its last read
+ *   says so in `reading.sources`, beside the rows it gave before — rows AND a
+ *   sentence, which is the state this whole design exists to be able to draw.
+ *   `trouble` is set when asking AGAIN failed over a reading already on
+ *   screen: the rows stay, and the sentence says they were not re-asked.
  */
 export type Sight =
   | { at: 'listening' }
@@ -88,4 +104,4 @@ export type Sight =
   | { at: 'no-project' }
   | { at: 'asking'; project: string }
   | { at: 'trouble'; project: string; trouble: Trouble }
-  | { at: 'read'; project: string; live: unknown; from: 'gh' | 'cache'; trouble: Trouble | null }
+  | { at: 'read'; project: string; reading: Held; trouble: Trouble | null }

@@ -35,10 +35,10 @@ export function ReferenceList({
    * the array is what the wire carries and what a test can write down.
    *
    * Membership is by `ref` and not by `key`, and that is the protocol's choice
-   * rather than this file's: a selection travels as refs, and `gh#41` filed
-   * under both `ghIssues` and `ghPrs` is two rows that tick together. That is
-   * the honest rendering of a selection that genuinely cannot tell them apart,
-   * and it is better than picking one of the two arbitrarily.
+   * rather than this file's: a selection travels as refs, and two rows that
+   * spell themselves the same would tick together. That is the honest
+   * rendering of a selection that genuinely cannot tell them apart, and it is
+   * better than picking one of the two arbitrarily.
    */
   selection: readonly string[]
   onPick: (ref: string) => void

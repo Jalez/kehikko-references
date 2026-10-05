@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { ask, type Fetcher } from '@/live/ask.ts'
+import { askReading, askRefresh } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
 import {
   filterChoiceSchema,
@@ -45,8 +45,8 @@ import {
  * stops arriving. The `goto` backstop stays at 500ms, which is this module's
  * lineage and the client's default.
  *
- * It is also the only file that decides WHEN a read happens, which used to be a
- * trivial question and is not any more. See `standingOn` below.
+ * It is also the only file that decides WHEN the reading is asked for, which
+ * used to be a trivial question and is not any more. See `standingOn` below.
  *
  * ## The grace, and why there is one
  *
@@ -77,30 +77,40 @@ export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: st
 export interface Roadmap {
   sight: Sight
   /**
-   * Whether a read is in flight right now.
+   * Whether anything is being read right now: this page asking the host for
+   * its reading, a refresh this page asked for, or the host reading on its own
+   * account — `context.tracker.refreshing`, which a press in another container
+   * or the project's schedule sets.
    *
    * Held beside `sight` rather than inside it, and that separation is the whole
    * of "the container stays usable while the network is being waited on". A read that
    * happens over rows already on screen must not throw them away: the list goes
    * on scrolling, the filter goes on filtering, the selection goes on being the
-   * selection, and the only thing that changes is a word in the header. Folded
-   * into `sight` as a state, every refresh would blank the container for as long as
-   * GitHub took, which is the failure this flag exists to make impossible.
+   * selection, and the only thing that changes is the host's refresh icon.
+   * Folded into `sight` as a state, every refresh would blank the container for
+   * as long as the trackers took, which is the failure this flag exists to make
+   * impossible.
    *
    * `sight.at === 'asking'` is the other case — busy AND nothing to show — and
    * that one is a whole container, because there is genuinely nothing else to draw.
    */
   busy: boolean
   /**
-   * Read the tracker again, deliberately.
-   *
-   * `fresh` is what the Refresh control sends, and it is the only way past the
-   * cache. Everything else — a context arriving, a project changing — takes the
-   * cache when it is young enough, because a list that costs a network call
-   * every time somebody glances at a canvas is a list that spends a rate limit
-   * nobody agreed to. See the essay in `tracker/cache.ts`.
+   * Ask the host for its reading again, as it holds it now. Spends nothing at
+   * any tracker: `tracker.get` answers at once from what the host has.
    */
-  read: (fresh: boolean) => void
+  read: () => void
+  /**
+   * Ask the host to read the trackers again — `tracker.refresh`, for the whole
+   * project — and then ask for the reading. What the host's refresh control
+   * does. See `askRefresh` in `live/ask.ts`.
+   */
+  refresh: () => void
+  /**
+   * Why the last refresh did not read everything, in the host's words, or null.
+   * Cleared when another refresh is asked for and when the project changes.
+   */
+  refreshNote: string | null
   /** Say how tall this page would like its frame to be. Silent when nothing is framing it. */
   resize: (height: number) => void
   /**
@@ -121,7 +131,7 @@ export interface Roadmap {
    * local copy at all, and a click that produced no context produced no tick —
    * which is a visible symptom of a real problem rather than a hidden one.
    *
-   * Nothing about this changed when the rows started coming from GitHub, and
+   * Nothing about this changed when the rows started coming from elsewhere, and
    * that is the single most important sentence in this file. The refs are
    * spelled identically, the round trip is identical, and every module that
    * reacts to `gh#105` goes on reacting to it.
@@ -177,13 +187,9 @@ export interface Roadmap {
    * from a conversation that no longer exists.
    *
    * `at` is this module's fact about its own data and the host never guesses
-   * one, which is the whole reason the message exists. This app is the case that
-   * proves it: a reading can come out of the cache beside the project minutes or
-   * hours after it was taken, and a failed read leaves the previous reading on
-   * screen with its own older timestamp. A host dating the list from the moment
-   * it asked would be wrong in both, silently, in the one place this page is
-   * most careful to be honest — see the caching essay in `tracker/cache.ts`, and
-   * the three sentences the header used to draw.
+   * one, which is the whole reason the message exists. It is the shared
+   * reading's own `at` — when the reading last changed — never the moment this
+   * page asked for it.
    */
   refreshable: (state: { can?: boolean; at?: string | null; busy?: boolean }) => void
   /**
@@ -271,9 +277,12 @@ export interface Roadmap {
  */
 export type GotoHandler = NonNullable<HostEvents['onGoto']>
 
-export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = fetch): Roadmap {
+export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
   const [sight, setSight] = useState<Sight>({ at: 'listening' })
-  const [busy, setBusy] = useState(false)
+  const [asked, setAsked] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [hostReading, setHostReading] = useState(false)
+  const [refreshNote, setRefreshNote] = useState<string | null>(null)
   const [selection, setSelection] = useState<string[]>([])
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [chosen, setChosen] = useState<FilterChoice>({})
@@ -295,29 +304,26 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
   const goto = useRef(onGoto)
   goto.current = onGoto
 
-  /* Same reasoning, for the same reason: a caller that passed an inline
-     function would otherwise re-run every effect in this file on every render. */
-  const fetching = useRef(fetcher)
-  fetching.current = fetcher
+  /**
+   * The question in flight, by number.
+   *
+   * What stops a slow answer from BECOMING the page after a newer one already
+   * has: projects switch faster than a host answers, and without it the previous
+   * project's list arrives second and quietly replaces the current one. A list
+   * of the right length, under the right heading, about the wrong repository.
+   * There is nothing to abort any more — the question is a message, and the host
+   * answers it from what it holds.
+   */
+  const asking = useRef(0)
+  /** The same, for a refresh: only the newest one's answer is drawn. */
+  const refreshed = useRef(0)
 
   /**
-   * The read in flight, and the one before it.
-   *
-   * Two mechanisms and they do different jobs. `inFlight` is an
-   * `AbortController`, and aborting it stops a `fetch` the answer to which
-   * nobody wants — which also stops the subprocess behind it being waited on.
-   * `asking` is a counter, and it is what stops a slow answer from BECOMING the
-   * page after a newer one already has: projects switch faster than GitHub
-   * answers, and without it the previous project's list arrives second and
-   * quietly replaces the current one. A list of the right length, under the
-   * right heading, about the wrong repository.
-   *
-   * Both, rather than either. Aborting alone leaves the window where an answer
-   * has already been parsed; counting alone leaves a subprocess running for a
-   * project nobody is looking at.
+   * The `context.tracker.at` this page has drawn from, so that a context which
+   * moved it — the host read again, for whatever reason — is asked about, and
+   * one that did not is not. `undefined` before any context has said.
    */
-  const inFlight = useRef<AbortController | null>(null)
-  const asking = useRef(0)
+  const seenAt = useRef<string | null | undefined>(undefined)
 
   /**
    * The project the page is standing on, as the host last said it.
@@ -327,28 +333,25 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
    * Collapsing the last two would make the first context of a conversation that
    * names no project look like a repeat of a state the page was already in.
    *
-   * ## When a read happens, which is the question this whole file answers
+   * ## When the reading is asked for, which is the question this whole file answers
    *
-   * On the project CHANGING, and on the Refresh control. Not on a context
-   * arriving, and not on a timer, and never on a render.
+   * On the project CHANGING, on `context.tracker.at` moving, and after a
+   * refresh. Not on any other context, not on a timer, and never on a render.
    *
    * Context stopped being a message that only ever means "the reader moved". It
    * carries the canvas's selection, so the host sends one after every
-   * `selection.set` — including ours, a few milliseconds after a click. Reading
-   * the tracker on each of those would be a network call and a subprocess per
-   * tick of a checkbox, it would throw the reading away each time, and the click
-   * that caused it would look like a bug in the list.
+   * `selection.set` — including ours, a few milliseconds after a click. Asking
+   * for four hundred rows on each of those would rebuild the list per tick of a
+   * checkbox, and the click that caused it would look like a bug in the list.
    *
-   * So the read is keyed to the project changing. A repeated context about the
-   * same project is a normal event and the correct response to it is to read the
-   * parts that did change — the theme and the selection — and to leave the
-   * reading alone.
+   * So the question is keyed to the two things that change its answer: which
+   * project, and when the host's reading last changed. The second is the
+   * `tracker` this module's manifest says it reacts to — a refresh pressed in
+   * any container, or the project's own schedule, moves `at` for every module
+   * in the project, and this one re-asks.
    *
-   * There is no interval anywhere in this module, deliberately. An interval is a
-   * program spending somebody's GitHub rate limit while nobody is looking at the
-   * container, and it buys freshness that a timestamp beside a button buys honestly.
-   * The cache decides whether a project change costs a call at all; see
-   * `tracker/cache.ts`.
+   * There is no interval anywhere in this module, deliberately. Reading the
+   * trackers is the host's to schedule, once, for everybody.
    */
   const standingOn = useRef<string | null | undefined>(undefined)
 
@@ -392,29 +395,51 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
     })
   }, [])
 
-  const read = useCallback((fresh: boolean) => {
+  const read = useCallback(() => {
     const project = standingOn.current
-    if (!project) return
+    const current = host.current
+    if (!project || !current) return
 
     const mine = (asking.current += 1)
-    inFlight.current?.abort()
-    const stop = new AbortController()
-    inFlight.current = stop
-
-    setBusy(true)
-    /* Only when there is nothing to show. A read over rows already on screen
-       leaves them there and says what it is doing in the header — see `busy`
-       above, and the header in `app.tsx`. */
+    setAsked(true)
+    /* Only when there is nothing to show. A question over rows already on
+       screen leaves them there — see `busy` above. */
     setSight((was) => (was.at === 'read' && was.project === project ? was : { at: 'asking', project }))
 
-    void ask(project, fresh, stop.signal, fetching.current).then((next) => {
+    void askReading((method, params, options) => current.request(method, params, options)).then((answer) => {
+      /* A newer question is on its way, about this project or the next. */
       if (asking.current !== mine) return
-      setBusy(false)
-      /* `null` is an abort, which means a newer read is on its way and this
-         answer is about a project the reader has already left. */
-      if (next) setSight(next)
+      setAsked(false)
+      if (answer.ok) {
+        setSight({ at: 'read', project, reading: answer.reading, trouble: null })
+        return
+      }
+      /* Asking again failed over a reading already on screen: the rows stay,
+         and the sentence says they were not re-asked. */
+      setSight((was) =>
+        was.at === 'read' && was.project === project
+          ? { ...was, trouble: answer.trouble }
+          : { at: 'trouble', project, trouble: answer.trouble },
+      )
     })
   }, [])
+
+  const refresh = useCallback(() => {
+    const current = host.current
+    if (!standingOn.current || !current) return
+    const mine = (refreshed.current += 1)
+    setRefreshing(true)
+    setRefreshNote(null)
+    void askRefresh((method, params, options) => current.request(method, params, options)).then((note) => {
+      if (refreshed.current !== mine) return
+      setRefreshing(false)
+      setRefreshNote(note)
+      /* Asked for whatever the refresh did. `context.tracker.at` moves too
+         when a read lands, but a host that read nothing new does not move it,
+         and the reading is the only place a source's new error is said. */
+      read()
+    })
+  }, [read])
 
   useEffect(() => {
     /**
@@ -435,6 +460,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
         filters?: FilterChoice
         containers?: CanvasContainer[]
         dispositions?: Disposition[]
+        tracker?: { at?: string | null; refreshing?: boolean }
       },
       /**
        * Whether this was a greeting rather than a later context, which decides
@@ -466,6 +492,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       if (greeting) {
         standingOn.current = undefined
         epicOn.current = undefined
+        seenAt.current = undefined
         /* Set even when it is null, and that is the whole point of the third
            value on `kept`: `null` means the host answered and keeps nothing,
            which is a fact the view is entitled to act on, and it is a different
@@ -513,13 +540,21 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
 
       /* Read once, defensively, and treated as absent unless it is a non-empty
-         string. The protocol says the host vouches for it being absolute; this
-         page does not check that, because the door does and is the thing that
-         would act on it. */
+         string. It is only ever a key here — which project the reading is
+         about — and the host, which owns the folder, is the one that reads it. */
       const project = typeof context.projectPath === 'string' && context.projectPath ? context.projectPath : null
 
       const moved = project !== standingOn.current
       standingOn.current = project
+
+      /* The host's signal: when its reading last changed, and whether it is
+         reading now. Absent from a host that has never heard of it, which is
+         the honest `{ at: null, refreshing: false }`. */
+      const signal = context.tracker ?? {}
+      const readAt = typeof signal.at === 'string' ? signal.at : null
+      const changed = seenAt.current !== undefined && readAt !== seenAt.current
+      seenAt.current = readAt
+      setHostReading(signal.refreshing === true)
 
       /* The epic is asked about again when it changes, and when the project
          does: two projects can each have an epic with the same slug. */
@@ -529,13 +564,18 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
         readEpic()
       }
 
-      if (!moved) return
+      if (!moved) {
+        if (changed && project) read()
+        return
+      }
 
-      if (project) read(false)
+      setRefreshNote(null)
+      refreshed.current += 1
+      setRefreshing(false)
+      if (project) read()
       else {
-        inFlight.current?.abort()
         asking.current += 1
-        setBusy(false)
+        setAsked(false)
         setSight({ at: 'no-project' })
       }
     }
@@ -574,21 +614,19 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
        * The host's refresh control, or the interval somebody set for this
        * container. Both arrive here and neither says which it was.
        *
-       * `read(true)` — the same thing the deliberate Refresh in this app's own
-       * header used to do, which is the only honest reading of the request. The
-       * protocol is explicit that a module must not be told whether a tick was
-       * automatic, precisely so that it cannot take the cache on one and not on
-       * the other; and taking the cache on either would make this control a
-       * button that sometimes does nothing, which is the failure the whole
-       * caching essay in `tracker/cache.ts` is arranged around. Somebody asking
-       * for a fresh reading gets one.
+       * `tracker.refresh` for the project — the trackers read again, by the
+       * host, for every module standing in it — and then the reading asked
+       * for. The protocol is explicit that a module must not be told whether a
+       * tick was automatic, and nothing here would do anything different if it
+       * were: somebody asking for a fresh reading gets one, and the host joins
+       * two presses into one read.
        *
        * Handled here rather than passed in like `onGoto`, because everything it
-       * needs is already in this file: `read` is defined above, and the decision
-       * about WHEN a read happens has always lived here rather than in the view.
+       * needs is already in this file, and the decision about WHEN the reading
+       * is asked for has always lived here rather than in the view.
        */
       onRefresh: () => {
-        read(true)
+        refresh()
         readEpic()
       },
     })
@@ -601,17 +639,16 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
 
     return () => {
       clearTimeout(grace)
-      /* The read goes with the listener. A page being torn down has no use for
-         an answer, and leaving the fetch running would leave a subprocess being
-         waited on for a container that no longer exists. */
-      inFlight.current?.abort()
-      inFlight.current = null
+      /* The question goes with the listener. A page being torn down has no use
+         for an answer, and one arriving after a remount must not become it. */
+      asking.current += 1
+      refreshed.current += 1
       live.stop()
       /* Cleared only if it is still ours: under StrictMode the second mount has
          already assigned its own connection by the time some cleanups run. */
       if (host.current === live) host.current = null
     }
-  }, [id, read, readEpic])
+  }, [id, read, refresh, readEpic])
 
   const resize = useCallback((height: number) => host.current?.resize(height), [])
 
@@ -665,14 +702,12 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
    *
    * ## Refs, and deliberately nothing else
    *
-   * This page knows more than it sends. It read `gh#131` out of `ghIssues` and
-   * `gh#105` out of `ghPrs`, and the bag is the ONLY thing that says which of
-   * them is a pull request — see the essay in `collect.ts`. Passing that along
-   * would save the next module a lookup and is exactly what `selection.set`
-   * forbids: the host relays this into a context every framed module trusts, and
+   * This page knows more than it sends. The reading says `gh#131` is an issue
+   * and `gh#105` a pull request. Passing that along would save the next module
+   * a lookup and is exactly what `selection.set` forbids: the host relays this into a context every framed module trusts, and
    * a host can vouch that these are the refs somebody picked while it cannot
    * vouch that one of them is an issue, because it was told and never checked. A
-   * module that needs the kind reads the tracker where this page read it. So:
+   * module that needs the kind asks `tracker.get`, as this page did. So:
    * refs, spelled exactly as this list draws them, and nothing more.
    *
    * ## No state is set on the way out
@@ -720,11 +755,15 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
     void host.current?.request('state.set', { state }).catch(() => {})
   }, [])
 
+  const busy = asked || refreshing || hostReading
+
   return useMemo(
     () => ({
       sight,
       busy,
       read,
+      refresh,
+      refreshNote,
       resize,
       selection,
       select,
@@ -743,6 +782,8 @@ export function useRoadmap(id: string, onGoto: GotoHandler, fetcher: Fetcher = f
       sight,
       busy,
       read,
+      refresh,
+      refreshNote,
       resize,
       selection,
       select,

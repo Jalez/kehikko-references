@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ID } from '../manifest.ts'
-import type { Fetcher } from '@/live/ask.ts'
-import { collect, generatedAt } from '@/live/collect.ts'
+import { collect } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
 import {
@@ -30,12 +29,14 @@ import {
 } from '@/view/absence.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
+import { SourceTrouble } from '@/view/sources.tsx'
 
 /**
  * The composition, and only the composition.
  *
  * Every hard thing this app does is somewhere else: the wire in `wire/`, the
- * running of `gh` in `tracker/`, the reading of a reading in
+ * questions to the host's shared tracker reading in `src/live/ask.ts`, the
+ * reading of a reading in
  * `src/live/collect.ts`, the narrowing in `src/live/sift.ts`, the words for each
  * absence in `src/view/absence.tsx`. What is left here is the one job nothing
  * else can do — deciding which of them the reader is looking at — and that
@@ -62,14 +63,11 @@ const ROW_HEIGHT = 36
 const TALLEST = 720
 
 /**
- * The `fetch` this app reads its tracker with, handed in for tests.
- *
- * Defaulted, so nothing in the page or in `main.tsx` has to know it is a
- * parameter, and present at all so that `test/app.test.tsx` can drive the whole
- * composition — the read, the rows, the selection round trip through the real
- * bridge — with no server, no subprocess and no network.
+ * The whole page. It takes nothing: every row comes from the host, over the
+ * same bridge as everything else, so `test/app.test.tsx` drives the whole
+ * composition by being the host — no server, no subprocess and no network.
  */
-export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
+export function App() {
   /**
    * The order, which is the only setting this page still holds.
    *
@@ -127,6 +125,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     sight,
     busy,
     read,
+    refreshNote,
     resize,
     selection,
     select,
@@ -140,7 +139,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     epicRefs,
     aimed,
     marks,
-  } = useRoadmap(ID, onGoto, fetcher)
+  } = useRoadmap(ID, onGoto)
 
   /**
    * The whole narrowing, which is entirely the host's now.
@@ -196,35 +195,22 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
    * is why this message exists at all.
    *
    * **`can`** — there is something to read. False when no project has been
-   * named, because a read needs a folder to run `gh` in, and a refresh button
+   * named, because the host reads trackers for a project, and a refresh button
    * over a page that says "a roadmap is here and it named no project folder"
    * is a button that cannot work. It is also false while nothing has greeted us
    * yet, which is silent anyway.
    *
-   * **`at`** — when this reading was taken, and NOT when the host last asked.
-   * This app is the case that proves the difference is not academic: `from` on
-   * the door's answer says whether a reading came off GitHub or out of the
-   * cache beside the project, and a cached one can be ten minutes old at the
-   * moment it arrives. A failed read over a cache is worse again — the rows
-   * stay, the reading behind them keeps its own older date, and a host that
-   * stamped the moment it asked would print a fresh time over a stale list. The
-   * three sentences the old header drew — `read <when>`, `last read <when>`,
-   * `this reading is not dated` — are exactly this field plus the host's
-   * formatting.
+   * **`at`** — when the shared reading last changed, as the reading says, and
+   * NOT when this page last asked. A source that failed keeps its older rows,
+   * and the reading's `at` is the honest date of what is on screen; the
+   * per-source dates and errors are drawn under the heading.
    *
-   * Validated before it goes, because the protocol wants an instant and this
-   * one arrives from a subprocess's JSON. Anything unparseable is sent as
-   * `null`, which is the honest "I cannot say" — better than a message the host
-   * refuses whole, which would take the control away rather than the timestamp.
-   *
-   * **`busy`** — a read is in flight. The host disables its own button and
-   * spins its own icon on this; two reads racing is two subprocesses and one
-   * answer that wins for no reason anybody could predict, and this page is the
-   * only side that knows.
+   * **`busy`** — something is being read: this page's question, a refresh it
+   * asked for, or the host reading on its own account. The host disables its
+   * own button and spins its own icon on this.
    */
   useEffect(() => {
-    const generated = sight.at === 'read' ? generatedAt(sight.live) : null
-    const at = generated && !Number.isNaN(Date.parse(generated)) ? new Date(generated).toISOString() : null
+    const at = sight.at === 'read' ? sight.reading.at : null
     refreshable({ can: sight.at === 'read' || sight.at === 'trouble' || sight.at === 'asking', at, busy })
   }, [sight, busy, refreshable])
 
@@ -480,7 +466,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
      because `sight` changing to a different project has to REPLACE the rows
      rather than leave the previous project's on screen while the next arrives. */
   useEffect(() => {
-    setRows(sight.at === 'read' ? collect(sight.live) : [])
+    setRows(sight.at === 'read' ? collect(sight.reading.rows) : [])
     setLandedOn(null)
   }, [sight])
 
@@ -526,7 +512,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
     resize(Math.min(96 + shown.length * ROW_HEIGHT, TALLEST))
   }, [shown.length, resize])
 
-  const again = useCallback(() => read(true), [read])
+  const again = useCallback(() => read(), [read])
 
   if (sight.at === 'listening') return <Listening />
   if (sight.at === 'unhosted') return <Unhosted />
@@ -534,8 +520,14 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
   if (sight.at === 'asking') return <Asking project={sight.project} />
   if (sight.at === 'trouble') return <Troubled project={sight.project} trouble={sight.trouble} again={again} />
 
-  const generated = generatedAt(sight.live)
-  if (rows.length === 0 && !sight.trouble) return <NothingFound project={sight.project} generated={generated} />
+  const held = sight.reading
+  if (rows.length === 0 && !sight.trouble) {
+    /* Nothing read yet and a read under way is a wait, not an empty tracker:
+       the host answered at once with what it had, which was nothing, and the
+       context says when the read lands. */
+    if (held.at === null && (held.refreshing || busy)) return <Asking project={sight.project} />
+    return <NothingFound project={sight.project} reading={held} />
+  }
 
   return (
     /* `@container` is the one thing this element does beyond stacking three
@@ -569,25 +561,33 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
         showing={shown.length}
         total={rows.length}
         scope={sifting.scope?.from ?? null}
-        generated={generated}
+        at={held.at}
+        unread={held.missing}
       />
       {/*
-        A read that failed over rows that could still be shown.
+        A source that could not be read, over the rows it gave before.
 
-        This is the state the whole caching design exists to be able to draw, and
-        the sentence is what stops it being the quiet lie: the list below is
-        real, it is what was read at the time in the header, and the fresh read
-        did not happen for the reason given. Without this the container would show a
-        perfectly ordinary list that happened to be hours old, which is exactly
-        how a stale list gets believed.
+        This is the state the shared reading keeps exactly as the old cache did,
+        and the sentence is what stops it being the quiet lie: the rows below
+        are real, they are what that source said when it was last read, and the
+        newer read did not happen for the reason the host gives. Without this
+        the container would show a perfectly ordinary list that happened to be
+        hours old for one tracker, which is exactly how a stale list gets
+        believed. Per source, because "gitlab.example.org could not be reached"
+        is more use than "something failed" in a project that reads two.
 
-        It is drawn between the heading and the list rather than over them,
-        because it is a fact about the rows underneath it and belongs against
-        them.
+        Drawn between the heading and the list rather than over them, because
+        each is a fact about the rows underneath it and belongs against them.
       */}
+      <SourceTrouble sources={held.sources} />
       {sight.trouble && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
-          {sight.trouble.why} What is below is the last reading of this project, not a current one.
+          {sight.trouble.why} What is below is the reading as the roadmap last handed it over.
+        </p>
+      )}
+      {refreshNote && (
+        <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
+          {refreshNote}
         </p>
       )}
       {/* A refused `selection.set` gets a sentence, because the symptom without
@@ -618,7 +618,7 @@ export function App({ fetcher }: { fetcher?: Fetcher } = {}) {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {rows.length === 0 ? (
-          <NothingFound project={sight.project} generated={generated} />
+          <NothingFound project={sight.project} reading={held} />
         ) : shown.length === 0 && nothingPicked(rows, sifting) ? (
           /* Before `NothingMatches`, because when the pick alone reaches no row
              the menus are not what to change — see `NothingPicked`. */

@@ -1,135 +1,109 @@
 import { describe, expect, test } from 'bun:test'
+import { TRACKER_REFRESH_WITHIN_MS, methodParams, methodResults } from 'roadmap-module-protocol'
+import { HostRefused } from 'roadmap-module-protocol/client'
 
-import { ask, askUrl, type Fetcher } from '@/live/ask.ts'
+import { askReading, askRefresh, type Ask } from '@/live/ask.ts'
+import { reading, row } from './fixtures.ts'
 
 /**
- * The page's half of the read: one relative fetch, and every way its answer can
- * disappoint.
+ * The two questions this app asks of the host about trackers, against a host
+ * that is a function.
  *
- * The two halves of this program are separately deployable — the page is served
- * by Vite and reloads on save, the door is middleware that does not — so a page
- * talking to a door that has moved on is the ORDINARY state of a dev server
- * mid-edit rather than a contrived one. Every shape below has been on somebody's
- * screen at some point, and each of them has to read as a sentence rather than
- * as a blank container.
+ * The host side is Jalez/kehikko#25 and is not what is tested here. What is:
+ * that the questions are ones the protocol's own schemas accept, and that every
+ * answer — a reading, a refusal, a shape from a version apart — becomes a state
+ * the page draws rather than a throw.
  */
 
-const answering = (body: unknown, init: { status?: number; text?: string } = {}): Fetcher =>
-  () =>
-    Promise.resolve(
-      new Response(init.text ?? JSON.stringify(body), {
-        status: init.status ?? 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    )
-
-const reading = { generated: '2026-08-27T09:00:00Z', issues: {}, mrs: {}, ghIssues: {}, ghPrs: {} }
-const good = { ok: true, project: '/p', reading, from: 'gh', trouble: null, why: null, said: null }
-
-const live = () => new AbortController().signal
-
-describe('where the read goes', () => {
-  test('a relative path, so it works at whatever address a host framed this page at', () => {
-    expect(askUrl('/Users/x/p', false).startsWith('api/references?')).toBe(true)
-  })
-
-  test('the project is encoded, because a folder may contain an ampersand', () => {
-    const url = askUrl('/Users/x/a&b#c', false)
-    expect(url).toContain(encodeURIComponent('/Users/x/a&b#c'))
-    expect(new URLSearchParams(url.split('?')[1]).get('project')).toBe('/Users/x/a&b#c')
-  })
-
-  test('fresh is sent only when it is meant, so a log tells the two apart', () => {
-    expect(askUrl('/p', false)).not.toContain('fresh')
-    expect(askUrl('/p', true)).toContain('fresh=1')
-  })
-})
-
-describe('reading the answer', () => {
-  test('a reading becomes rows, carrying where they came from', async () => {
-    const got = await ask('/p', false, live(), answering(good))
-    expect(got).toMatchObject({ at: 'read', project: '/p', from: 'gh', trouble: null })
-  })
-
-  test('a cached reading says it is cached rather than leaving it to be inferred', async () => {
-    const got = await ask('/p', false, live(), answering({ ...good, from: 'cache' }))
-    expect(got).toMatchObject({ at: 'read', from: 'cache' })
-  })
-
-  test('a trouble with a reading beside it keeps both', async () => {
-    const got = await ask(
-      '/p',
-      true,
-      live(),
-      answering({ ...good, from: 'cache', trouble: 'offline', why: 'no network', said: 'dial tcp' }),
-    )
-    expect(got).toMatchObject({ at: 'read', from: 'cache' })
-    expect(got?.at === 'read' && got.trouble).toMatchObject({ kind: 'offline', why: 'no network', said: 'dial tcp' })
-  })
-
-  test('a trouble with no reading is the whole container', async () => {
-    const got = await ask(
-      '/p',
-      false,
-      live(),
-      answering({ ...good, reading: null, from: null, trouble: 'not-a-repo', why: 'no repository here' }),
-    )
-    expect(got).toMatchObject({ at: 'trouble' })
-    expect(got?.at === 'trouble' && got.trouble.kind).toBe('not-a-repo')
-  })
-
-  test('a kind this page has never heard of is not drawn as one it has', async () => {
-    const got = await ask('/p', false, live(), answering({ ...good, trouble: 'something-new', why: 'x' }))
-    expect(got).toMatchObject({ at: 'read', trouble: null })
-  })
-})
-
-describe('when the door is the thing that failed', () => {
-  test('a fetch that rejects is a sentence rather than a blank container', async () => {
-    const got = await ask('/p', false, live(), () => Promise.reject(new Error('Failed to fetch')))
-    expect(got).toMatchObject({ at: 'trouble' })
-    expect(got?.at === 'trouble' && got.trouble.kind).toBe('door')
-    expect(got?.at === 'trouble' && got.trouble.said).toBe('Failed to fetch')
-  })
-
-  test('a non-200 names the status, because this program disagreeing with itself is worth seeing', async () => {
-    const got = await ask('/p', false, live(), answering(null, { status: 502 }))
-    expect(got?.at === 'trouble' && got.trouble.why).toContain('502')
-  })
-
-  test('an answer that is not JSON says the two halves are different versions', async () => {
-    const got = await ask('/p', false, live(), answering(null, { text: '<!doctype html>' }))
-    expect(got?.at === 'trouble' && got.trouble.why).toContain('different versions')
-  })
-
-  test('a refusal from the door carries the door’s own words', async () => {
-    const got = await ask('/p', false, live(), answering({ ok: false, error: 'ask for a tracker by its path.' }))
-    expect(got?.at === 'trouble' && got.trouble.said).toBe('ask for a tracker by its path.')
-  })
-
-  test('no reading and no trouble is still a sentence, not a blank', async () => {
-    const got = await ask('/p', false, live(), answering({ ...good, reading: null, from: null }))
-    expect(got?.at === 'trouble' && got.trouble.why).toContain('without saying why')
-  })
-})
-
-describe('an abandoned read never becomes the page', () => {
-  test('an aborted fetch answers null rather than a trouble', async () => {
-    const stop = new AbortController()
-    stop.abort()
-    const got = await ask('/p', false, stop.signal, () => Promise.reject(new Error('aborted')))
-    expect(got).toBeNull()
-  })
-
-  test('an answer that lands after the abort is dropped rather than drawn', async () => {
-    /* The reader has moved to another project. This answer is about the old one,
-       and a page that took it would show a list of the right length under the
-       right heading about the wrong repository. */
-    const stop = new AbortController()
-    const slow: Fetcher = () => {
-      stop.abort()
-      return Promise.resolve(new Response(JSON.stringify(good)))
+/** A host answering one way, and a record of what it was asked. */
+function host(answer: (method: string) => unknown) {
+  const asked: { method: string; params?: Record<string, unknown>; within?: number }[] = []
+  const ask: Ask = (method, params, options) => {
+    asked.push({ method, params, within: options?.within })
+    try {
+      return Promise.resolve(answer(method))
+    } catch (error) {
+      return Promise.reject(error)
     }
-    expect(await ask('/p', false, stop.signal, slow)).toBeNull()
+  }
+  return { ask, asked }
+}
+
+const refuse = (reason: 'unknown-method' | 'failed', error: string) => () => {
+  throw new HostRefused({ reason, error })
+}
+
+describe('asking for the reading', () => {
+  test('the question is the whole project, in a shape the protocol accepts', async () => {
+    const stub = host(() => reading([row('gh#1')]))
+    await askReading(stub.ask)
+    expect(stub.asked).toEqual([{ method: 'tracker.get', params: { project: true }, within: undefined }])
+    expect(methodParams['tracker.get'].safeParse(stub.asked[0]!.params).success).toBe(true)
+  })
+
+  test('a reading comes back whole, with its rows left for collect to read', async () => {
+    const answer = reading([row('gh#1'), row('!2'), { ref: 'odd' }], {
+      missing: [{ ref: '#9', reason: 'pending' }],
+    })
+    /* The fixture is a reading the protocol's own result schema accepts, apart
+       from the one odd row — which is the point of not parsing rows here. */
+    expect(methodResults['tracker.get']!.safeParse({ ...answer, rows: [row('gh#1')] }).success).toBe(true)
+    const got = await askReading(host(() => answer).ask)
+    expect(got.ok).toBe(true)
+    if (!got.ok) return
+    expect(got.reading.at).toBe('2026-08-27T09:12:00Z')
+    expect(got.reading.rows).toHaveLength(3)
+    expect(got.reading.sources.map((source) => source.repo)).toEqual(['example/repo'])
+    expect(got.reading.missing).toEqual([{ ref: '#9', reason: 'pending' }])
+  })
+
+  test('an empty answer is the honest nothing-read-yet, not a failure', async () => {
+    const got = await askReading(host(() => ({})).ask)
+    expect(got).toEqual({ ok: true, reading: { at: null, refreshing: false, sources: [], missing: [], rows: [] } })
+  })
+
+  test('a source or a gap a version ahead is left out, not the whole reading', async () => {
+    const got = await askReading(
+      host(() => reading([], { sources: [{ tracker: 'jira' }] as never, missing: [{ ref: '#1', reason: 'mystery' }] as never })).ask,
+    )
+    expect(got.ok && got.reading.sources).toEqual([])
+    expect(got.ok && got.reading.missing).toEqual([])
+  })
+
+  test('a host that has never heard of the question says so, and is not worth asking again', async () => {
+    const got = await askReading(host(refuse('unknown-method', 'no such method: tracker.get')).ask)
+    expect(got).toMatchObject({ ok: false, trouble: { kind: 'unknown-method', said: 'no such method: tracker.get' } })
+  })
+
+  test('a host that says no is quoted', async () => {
+    const got = await askReading(host(refuse('failed', 'roadmap.references may not read trackers.')).ask)
+    expect(got).toMatchObject({ ok: false, trouble: { kind: 'refused', why: 'roadmap.references may not read trackers.' } })
+  })
+
+  test('an answer that is not a reading is a version mismatch, in words', async () => {
+    for (const odd of [null, 'a string', { rows: 'nope' }, { at: 'yesterday' }]) {
+      const got = await askReading(host(() => odd).ask)
+      expect(got).toMatchObject({ ok: false, trouble: { kind: 'unreadable' } })
+    }
+  })
+})
+
+describe('asking for a refresh', () => {
+  test('the whole project, with the patience a read of two trackers needs', async () => {
+    const stub = host(() => ({ outcome: 'read', at: '2026-08-27T09:13:00Z', why: '' }))
+    expect(await askRefresh(stub.ask)).toBeNull()
+    expect(stub.asked).toEqual([{ method: 'tracker.refresh', params: { project: true }, within: TRACKER_REFRESH_WITHIN_MS }])
+    expect(methodParams['tracker.refresh'].safeParse(stub.asked[0]!.params).success).toBe(true)
+  })
+
+  test('a read that failed or was declined comes back as the host’s sentence', async () => {
+    expect(await askRefresh(host(() => ({ outcome: 'failed', why: 'gitlab.com could not be reached.' })).ask)).toBe(
+      'gitlab.com could not be reached.',
+    )
+    expect(await askRefresh(host(() => ({ outcome: 'declined', why: '' })).ask)).toContain('declined')
+  })
+
+  test('a refusal is a sentence too, never a throw', async () => {
+    expect(await askRefresh(host(refuse('failed', 'not on this kehikko')).ask)).toBe('not on this kehikko')
   })
 })

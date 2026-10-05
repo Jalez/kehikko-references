@@ -4,6 +4,7 @@ import { cleanup, render } from '@testing-library/react'
 import { collect } from '@/live/collect.ts'
 import { sift, EVERYTHING } from '@/live/sift.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
+import { row } from './fixtures.ts'
 
 /**
  * The promise again, one layer up.
@@ -17,20 +18,18 @@ import { ReferenceList } from '@/view/reference-list.tsx'
 
 afterEach(cleanup)
 
-/** A reading with `count` GitHub issues in it, as a refresh would file them. */
+/** The rows of a reading with `count` GitHub issues in it, as the host hands them over. */
 function reading(count: number) {
-  const ghIssues: Record<string, unknown> = {}
-  for (let n = 1; n <= count; n += 1) {
-    ghIssues[`gh#${n}`] = {
-      state: n % 3 === 0 ? 'closed' : 'opened',
+  return Array.from({ length: count }, (_, at) => {
+    const n = at + 1
+    return row(`gh#${n}`, {
+      state: n % 3 === 0 ? 'closed' : 'open',
       title: `something that has to be done, number ${n}`,
-      at: `2026-08-${String((n % 28) + 1).padStart(2, '0')}T10:00:00Z`,
-      url: `https://github.com/example/repo/issues/${n}`,
+      updatedAt: `2026-08-${String((n % 28) + 1).padStart(2, '0')}T10:00:00Z`,
       labels: ['area::db', 'importance::P1'],
       assignees: ['ada'],
-    }
-  }
-  return { generated: '2026-08-27T10:00:00Z', ghIssues }
+    })
+  })
 }
 
 describe('four hundred rows', () => {
@@ -62,7 +61,7 @@ describe('four hundred rows', () => {
 
 describe('what a row shows when the reading is thin', () => {
   test('a row with no title says which kind of nothing it is', () => {
-    const rows = collect({ issues: { '1': {}, '2': null } })
+    const rows = collect([row('#1', { title: '' }), { ref: '#2' }])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const text = container.textContent ?? ''
     expect(text).toContain('no title in the reading')
@@ -70,20 +69,20 @@ describe('what a row shows when the reading is thin', () => {
   })
 
   test('an unreadable state is drawn as unseen, never as open', () => {
-    const rows = collect({ issues: { '1': { state: 'something-else', title: 'x' } } })
+    const rows = collect([{ ref: '#1', state: 'something-else', title: 'x' }])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.textContent).toContain('unseen')
     expect(container.textContent).not.toContain('open')
   })
 
   test('a row with nobody on it says nobody rather than nothing', () => {
-    const rows = collect({ issues: { '1': { state: 'opened', title: 'x' } } })
+    const rows = collect([row('#1', { title: 'x' })])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.textContent).toContain('nobody')
   })
 
   test('a reference with no readable link is not a link', () => {
-    const rows = collect({ issues: { '1': { state: 'opened', title: 'x', url: 'javascript:alert(1)' } } })
+    const rows = collect([row('#1', { title: 'x', url: 'javascript:alert(1)' })])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelector('a')).toBeNull()
   })
@@ -93,10 +92,7 @@ describe('what a row shows when the reading is thin', () => {
        not, because GitHub numbers issues and pull requests in one sequence and
        spells them the same — so a merged pull request was only distinguishable
        by the word `merged`, and an OPEN one was not distinguishable at all. */
-    const rows = collect({
-      ghIssues: { 'gh#131': { state: 'opened', title: 'an issue' } },
-      ghPrs: { 'gh#105': { state: 'opened', title: 'a pull request' } },
-    })
+    const rows = collect([row('gh#131', { title: 'an issue' }), row('gh#105', { kind: 'change', title: 'a pull request' })])
     const { container } = render(
       <ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />,
     )
@@ -111,7 +107,7 @@ describe('what a row shows when the reading is thin', () => {
   })
 
   test('the same distinction on GitLab uses GitLab’s word', () => {
-    const rows = collect({ mrs: { '17': { state: 'opened', title: 'a merge request' } } })
+    const rows = collect([row('!17', { title: 'a merge request' })])
     const { container } = render(
       <ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />,
     )
