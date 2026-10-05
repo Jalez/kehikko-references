@@ -1,4 +1,4 @@
-import type { TrackerMissing, TrackerSource } from 'roadmap-module-protocol'
+import type { TrackerMissing, TrackerSource } from 'kehikot-module-protocol'
 
 /**
  * What this app can see, and how it came to see it.
@@ -19,7 +19,7 @@ import type { TrackerMissing, TrackerSource } from 'roadmap-module-protocol'
  *
  * ## What moved when the rows started coming from the host's shared reading
  *
- * Twice now. The rows came from the roadmap's `live.get`, then from this app's
+ * Twice now. The rows came from the host's `live.get`, then from this app's
  * own server running `gh` — which failed in eight interesting ways, each with
  * its own sentence, and saw GitHub only. Since issue #4 they come from
  * `tracker.get`, the reading the host keeps for every module in a project, and
@@ -37,7 +37,7 @@ import type { TrackerMissing, TrackerSource } from 'roadmap-module-protocol'
 /**
  * Why asking the host for the reading produced nothing to draw.
  *
- * - `unknown-method` — the host has never heard of `tracker.get`: a roadmap
+ * - `unknown-method` — the host has never heard of `tracker.get`: a host
  *   older than the shared reading. Asking again will not change it.
  * - `refused` — the host answered no, in a sentence of its own: no tracker
  *   permission for this module, no project, a failure on its side.
@@ -81,14 +81,14 @@ export interface Held {
  * - `unhosted` — the grace has passed and nothing greeted us. This is the
  *   standalone state, the one an app running on its own port is in forever, and
  *   the one it must not draw as an empty list.
- * - `no-project` — a roadmap is there and its context names no project folder.
+ * - `no-project` — a host is there and its context names no project folder.
  *   The protocol says that is a real state rather than an oversight: a host with
  *   no filesystem of its own knows a project's name and has no folder to point
  *   at. There is nothing for a list to be about; there is also nothing wrong.
  * - `asking` — the read is out, nothing has come back, AND there is nothing
  *   already on screen. The one state in which a whole container of waiting is honest.
  *   A read that happens while rows are already drawn is NOT this state — see
- *   `busy` on `Roadmap`, which is what keeps the container usable in flight.
+ *   `busy` on `Kehikot`, which is what keeps the container usable in flight.
  * - `trouble` — the host was asked for the reading and gave nothing this page
  *   can draw, for one of the reasons above. Each draws its own paragraph.
  * - `read` — a reading, which may itself contain no references, and that is the

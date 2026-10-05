@@ -18,7 +18,7 @@ import { createRoot } from 'react-dom/client'
  * bundler's clothes. The package's `sideEffects` field names the client files
  * for the same reason.
  */
-import 'roadmap-module-protocol/client'
+import 'kehikot-module-protocol/client'
 
 import { App } from './app.tsx'
 import './index.css'
@@ -29,7 +29,7 @@ import './index.css'
  * The one thing here worth a sentence is `h-full` on the document: this page is
  * a frame's whole contents as often as it is a tab's, and a body sized to its
  * content inside a frame leaves the list with no height to scroll within — so
- * it grows instead, and the roadmap's own page ends up scrolling a list that
+ * it grows instead, and the host's own page ends up scrolling a list that
  * was supposed to scroll itself.
  */
 document.documentElement.classList.add('h-full')

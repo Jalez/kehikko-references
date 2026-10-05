@@ -26,7 +26,7 @@ export function ReferenceList({
   rows: readonly Reference[]
   landedOn: string | null
   /**
-   * The canvas's selection, as refs, straight from `roadmap.context`.
+   * The canvas's selection, as refs, straight from `kehikot.context`.
    *
    * A `Set` is built once here rather than an `includes` per row: a selection
    * of forty against four hundred rows is sixteen thousand string comparisons

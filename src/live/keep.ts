@@ -1,7 +1,7 @@
 import { DEFAULT_ORDER, ORDER_LABELS, type Ordering } from './order.ts'
 
 /**
- * What this page asks the roadmap to remember for it, and how it reads it back.
+ * What this page asks the host to remember for it, and how it reads it back.
  *
  * ## Why the host holds it and this app does not
  *
@@ -64,7 +64,7 @@ import { DEFAULT_ORDER, ORDER_LABELS, type Ordering } from './order.ts'
  *
  * The order is here. The kind, the state and the query are the container's,
  * stored by the host per placement. The selection is the canvas's. The
- * auto-refresh interval is the container's too — see `roadmap.refreshable`. The
+ * auto-refresh interval is the container's too — see `kehikot.refreshable`. The
  * only thing in this list that is a fact about the MODULE rather than about a
  * container or a canvas is the order, which is why it is the only thing left.
  */

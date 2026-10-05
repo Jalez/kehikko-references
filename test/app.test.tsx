@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
-import { mailbox } from 'roadmap-module-protocol/client'
+import { MESSAGE, PROTOCOL } from 'kehikot-module-protocol'
+import { mailbox } from 'kehikot-module-protocol/client'
 
 import { App } from '@/app.tsx'
 import { reading as readingOf, row } from './fixtures.ts'
 
 /**
- * The whole app, against a roadmap that is not there and then one that is.
+ * The whole app, against a host that is not there and then one that is.
  *
  * Every other file here tests a part. This one is the only place the parts are
  * wired the way a browser wires them — the real bridge listening on the real
@@ -39,7 +39,7 @@ afterEach(() => {
   mailbox.forget?.()
 })
 
-const PROJECT = '/Users/somebody/Projects/roadmap'
+const PROJECT = '/Users/somebody/Projects/harbour'
 const OTHER = '/Users/somebody/Projects/kehikko'
 
 /** What a host holds for a container: a word per choice group, a list per toggles group. */
@@ -56,7 +56,7 @@ type Answer = { ok: true; data: unknown } | { ok: false; reason?: 'failed' | 'un
  * test can move the reader between two projects and prove the list moved with
  * them. A project nobody listed answers with a reading of no sources, which is
  * the honest thing for a folder nobody set a tracker up for. `'hold'` answers
- * nothing, so a case can answer late with `roadmap.answer`.
+ * nothing, so a case can answer late with `host.answer`.
  */
 function stubDoor(answers: Record<string, Answer | 'hold'>, refresh: Answer | 'hold' = REFRESHED) {
   const seen: { project: string | null }[] = []
@@ -68,7 +68,7 @@ type Door = ReturnType<typeof stubDoor>
 const REFRESHED: Answer = { ok: true, data: { outcome: 'read', at: '2026-08-27T09:13:00Z', why: '' } }
 
 /** Something to be greeted by, and to read what the page says back to it. */
-function stubRoadmap(door: Door = stubDoor({})) {
+function stubHost(door: Door = stubDoor({})) {
   const said: Record<string, unknown>[] = []
   /* Which project the host last said it was standing in: `tracker.get` asks
      for `project: true`, and the host knows which project that is. */
@@ -122,7 +122,7 @@ function stubRoadmap(door: Door = stubDoor({})) {
         type: MESSAGE.HELLO,
         protocol: PROTOCOL,
         session: 'test-1',
-        context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection, filters, ...more },
+        context: { epic: 'an-epic', project: 'harbour', projectPath, theme: 'light', selection, filters, ...more },
         state: kept,
       })
     },
@@ -144,7 +144,7 @@ function stubRoadmap(door: Door = stubDoor({})) {
         type: MESSAGE.CONTEXT,
         protocol: PROTOCOL,
         epic,
-        project: 'roadmap',
+        project: 'harbour',
         projectPath,
         theme: 'light',
         selection,
@@ -228,26 +228,26 @@ describe('with nothing on the other end', () => {
   })
 })
 
-describe('with a roadmap answering', () => {
+describe('with a host answering', () => {
   test('the greeting is answered and the host’s reading of the project is asked for', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
-    expect(roadmap.said[0]).toMatchObject({ type: MESSAGE.READY, id: 'roadmap.references' })
+    act(() => host.greet(PROJECT))
+    expect(host.said[0]).toMatchObject({ type: MESSAGE.READY, id: 'kehikot.references' })
     /* The rows are the host's shared reading, asked for the whole project; the
        epic's refs are asked for the scope. `live.get` is gone, and nothing reads
        a tracker from this page. */
-    expect(roadmap.asked().sort()).toEqual(['epic.get', 'steps.list', 'tracker.get'])
-    expect(roadmap.calls('tracker.get')).toEqual([{ project: true }])
+    expect(host.asked().sort()).toEqual(['epic.get', 'steps.list', 'tracker.get'])
+    expect(host.calls('tracker.get')).toEqual([{ project: true }])
     expect(door.seen).toEqual([{ project: PROJECT }])
-    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
+    expect(screen.getByText('Reading the trackers for harbour.')).toBeTruthy()
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
   })
 
   test('GitHub and GitLab refs list together, from the one reading', async () => {
-    const roadmap = stubRoadmap(
+    const host = stubHost(
       stubDoor({
         [PROJECT]: {
           ok: true,
@@ -256,7 +256,7 @@ describe('with a roadmap answering', () => {
       }),
     )
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect([...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref')).sort()).toEqual([
       '!3',
@@ -267,9 +267,9 @@ describe('with a roadmap answering', () => {
   })
 
   test('four hundred references become four hundred rows, with the count on screen', async () => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(400) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(400) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li')).toHaveLength(400)
     /* The count is the one thing on this surface a host could not have drawn,
@@ -278,11 +278,11 @@ describe('with a roadmap answering', () => {
   })
 
   test('the reading’s own date is announced to the host, not the moment it was asked', async () => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(3) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(3) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    const said = roadmap.refreshable()
+    const said = host.refreshable()
     expect(said?.can).toBe(true)
     expect(said?.busy).toBe(false)
     expect(said?.at).toBe('2026-08-27T09:12:00Z')
@@ -290,41 +290,41 @@ describe('with a roadmap answering', () => {
 
   test('a context with no project folder says so rather than drawing an empty list', async () => {
     const door = stubDoor({})
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(null))
+    act(() => host.greet(null))
     await settle()
-    expect(screen.getByText('A roadmap is here, and it named no project folder.')).toBeTruthy()
+    expect(screen.getByText('A host is here, and it named no project folder.')).toBeTruthy()
     expect(door.reads()).toBe(0)
     expect(document.querySelectorAll('li')).toHaveLength(0)
   })
 
   test('a tracker with nothing in it is an answer rather than a gap', async () => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(0) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(0) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(screen.getByText('This project’s tracker has nothing in it.')).toBeTruthy()
   })
 
   test('a reading with nothing in it YET, and a read under way, is a wait rather than an empty tracker', async () => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: { ok: true, data: readingOf([], { at: null, refreshing: true }) } }))
+    const host = stubHost(stubDoor({ [PROJECT]: { ok: true, data: readingOf([], { at: null, refreshing: true }) } }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
+    expect(screen.getByText('Reading the trackers for harbour.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('has nothing in it')
   })
 
   test('a host that will not hand over its reading is quoted, with a way to ask again', async () => {
-    const roadmap = stubRoadmap(
-      stubDoor({ [PROJECT]: { ok: false, error: 'roadmap.references may not read trackers.' } }),
+    const host = stubHost(
+      stubDoor({ [PROJECT]: { ok: false, error: 'kehikot.references may not read trackers.' } }),
     )
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    expect(screen.getByText('The roadmap would not hand over its tracker reading.')).toBeTruthy()
-    expect(document.body.textContent).toContain('roadmap.references may not read trackers.')
+    expect(screen.getByText('The host would not hand over its tracker reading.')).toBeTruthy()
+    expect(document.body.textContent).toContain('kehikot.references may not read trackers.')
     expect(document.querySelectorAll('li')).toHaveLength(0)
     expect(screen.getByRole('button', { name: 'Ask again' })).toBeTruthy()
   })
@@ -332,13 +332,13 @@ describe('with a roadmap answering', () => {
   test('a host older than the shared reading says so, and offers nothing to press', async () => {
     /* Jalez/kehikko#25 is the host side. A host without it answers
        `unknown-method`, and asking twice will not teach it. */
-    const roadmap = stubRoadmap(
+    const host = stubHost(
       stubDoor({ [PROJECT]: { ok: false, reason: 'unknown-method', error: 'no such method: tracker.get' } }),
     )
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    expect(screen.getByText('This roadmap has no shared tracker reading.')).toBeTruthy()
+    expect(screen.getByText('This host has no shared tracker reading.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Ask again' })).toBeNull()
   })
 
@@ -356,11 +356,11 @@ describe('with a roadmap answering', () => {
       error: 'gitlab.example.org could not be reached.',
       refreshing: false,
     }
-    const roadmap = stubRoadmap(
+    const host = stubHost(
       stubDoor({ [PROJECT]: { ok: true, data: readingOf([...issues(3), row('#7')], { sources: [failing] as never }) } }),
     )
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
     expect(document.body.textContent).toContain('gitlab.example.org/group/project could not be read')
@@ -371,13 +371,13 @@ describe('with a roadmap answering', () => {
 describe('when the reading is asked for, and when it is not', () => {
   test('moving to another project asks for that project', async () => {
     const door = stubDoor({ [PROJECT]: answered(3), [OTHER]: answered(6) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
 
-    act(() => roadmap.context(OTHER, []))
+    act(() => host.context(OTHER, []))
     await settle()
     expect(door.seen.map((one) => one.project)).toEqual([PROJECT, OTHER])
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(6)
@@ -389,12 +389,12 @@ describe('when the reading is asked for, and when it is not', () => {
        for four hundred rows on each would rebuild the list per tick of a
        checkbox, and the click would look like a bug in the list. */
     const door = stubDoor({ [PROJECT]: answered(5) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(door.reads()).toBe(1)
-    act(() => roadmap.context(PROJECT, ['gh#1']))
+    act(() => host.context(PROJECT, ['gh#1']))
     await settle()
     expect(door.reads()).toBe(1)
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(5)
@@ -402,53 +402,53 @@ describe('when the reading is asked for, and when it is not', () => {
 
   test('a context naming a different epic in the same project asks nothing either', async () => {
     const door = stubDoor({ [PROJECT]: answered(5) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    act(() => roadmap.context(PROJECT, [], 'another-epic'))
+    act(() => host.context(PROJECT, [], 'another-epic'))
     await settle()
     expect(door.reads()).toBe(1)
   })
 
   test('the host’s reading moving is what asks again — the tracker this module reacts to', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, [], {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: false } }))
+    act(() => host.greet(PROJECT, null, [], {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: false } }))
     await settle()
     expect(door.reads()).toBe(1)
 
     /* A refresh pressed in another container: the host is reading, and says so. */
-    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: true } }))
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: true } }))
     await settle()
     expect(door.reads()).toBe(1)
-    expect(roadmap.refreshable()?.busy).toBe(true)
+    expect(host.refreshable()?.busy).toBe(true)
 
     /* It landed: `at` moved, so the reading is asked for again. */
     door.answers[PROJECT] = answered(5, { at: '2026-08-27T10:00:00Z' })
-    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T10:00:00Z', refreshing: false } }))
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T10:00:00Z', refreshing: false } }))
     await settle()
     expect(door.reads()).toBe(2)
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(5)
-    expect(roadmap.refreshable()).toMatchObject({ busy: false, at: '2026-08-27T10:00:00Z' })
+    expect(host.refreshable()).toMatchObject({ busy: false, at: '2026-08-27T10:00:00Z' })
   })
 
   test('the host’s refresh asks the host to read the trackers again, then asks for the reading', async () => {
-    /* The button is the host's, drawn from `roadmap.refreshable`. What it does
+    /* The button is the host's, drawn from `kehikot.refreshable`. What it does
        is `tracker.refresh` for the project — every module in it is told — and
        the protocol forbids telling this page whether the press was a person or
        an interval, so both do the same. */
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    expect(roadmap.calls('tracker.refresh')).toEqual([])
+    expect(host.calls('tracker.refresh')).toEqual([])
 
-    act(() => roadmap.refresh())
+    act(() => host.refresh())
     await settle()
-    expect(roadmap.calls('tracker.refresh')).toEqual([{ project: true }])
+    expect(host.calls('tracker.refresh')).toEqual([{ project: true }])
     expect(door.reads()).toBe(2)
   })
 
@@ -456,34 +456,34 @@ describe('when the reading is asked for, and when it is not', () => {
     /* The container has to be usable during a read of two trackers. A list
        that blanks for ten seconds is a list that looks broken, and this is the
        assertion that keeps `busy` from being folded back into `Sight`. */
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(4) }, 'hold'))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(4) }, 'hold'))
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
 
-    act(() => roadmap.refresh())
+    act(() => host.refresh())
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
-    expect(roadmap.refreshable()?.busy).toBe(true)
+    expect(host.refreshable()?.busy).toBe(true)
 
-    act(() => roadmap.answer('tracker.refresh', REFRESHED))
+    act(() => host.answer('tracker.refresh', REFRESHED))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
-    expect(roadmap.refreshable()?.busy).toBe(false)
+    expect(host.refreshable()?.busy).toBe(false)
   })
 
   test('a refresh that could not read everything says so, in the host’s words', async () => {
-    const roadmap = stubRoadmap(
+    const host = stubHost(
       stubDoor(
         { [PROJECT]: answered(4) },
         { ok: true, data: { outcome: 'failed', at: '2026-08-27T09:12:00Z', why: 'gitlab.com could not be reached.' } },
       ),
     )
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    act(() => roadmap.refresh())
+    act(() => host.refresh())
     await settle()
     expect(document.body.textContent).toContain('gitlab.com could not be reached.')
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
@@ -491,9 +491,9 @@ describe('when the reading is asked for, and when it is not', () => {
 
   test('nothing is asked on a timer', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
     await act(async () => {
       await new Promise((done) => setTimeout(done, 900))
@@ -506,27 +506,27 @@ describe('picking references out', () => {
   /** Greet, read `count` rows, and hand back the stub. */
   const listed = async (count: number, kept: string | null = null) => {
     const door = stubDoor({ [PROJECT]: answered(count) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT, kept))
+    act(() => host.greet(PROJECT, kept))
     await settle()
-    return roadmap
+    return host
   }
 
   const rowButton = (ref: string) =>
     document.querySelector(`li[data-ref="${ref}"] > button`) as HTMLButtonElement | null
 
   test('a plain click asks the host to select that row, and nothing is ticked until it answers', async () => {
-    const roadmap = await listed(5)
+    const host = await listed(5)
     act(() => rowButton('gh#3')?.click())
     /* The request went. The tick has NOT: the selection this page draws is the
        one the host stated, and the host has not stated anything yet. An
        optimistic tick here would be a page claiming a canvas-wide fact on its
        own authority. */
-    expect(roadmap.calls('selection.set')).toEqual([{ refs: ['gh#3'] }])
+    expect(host.calls('selection.set')).toEqual([{ refs: ['gh#3'] }])
     expect(ticked()).toEqual([])
 
-    act(() => roadmap.context(PROJECT, ['gh#3']))
+    act(() => host.context(PROJECT, ['gh#3']))
     await settle()
     expect(ticked()).toEqual(['gh#3'])
   })
@@ -535,47 +535,47 @@ describe('picking references out', () => {
     /* Protocol-visible, and the single most important assertion in this file.
        The rows come from somewhere else now; what leaves this module for every
        other container on the canvas is unchanged. */
-    const roadmap = await listed(5)
+    const host = await listed(5)
     act(() => rowButton('gh#3')?.click())
-    expect(roadmap.calls('selection.set')).toEqual([{ refs: ['gh#3'] }])
+    expect(host.calls('selection.set')).toEqual([{ refs: ['gh#3'] }])
   })
 
   test('the call carries refs and nothing else, though the page knows more', async () => {
     /* This page read `gh#2` out of `ghIssues` and knows it is an issue. The
        protocol is explicit that the knowledge must not travel: the host relays
        this to every module and can vouch for the refs, not for what they are. */
-    const roadmap = await listed(3)
+    const host = await listed(3)
     act(() => rowButton('gh#2')?.click())
-    const [params] = roadmap.calls('selection.set')
+    const [params] = host.calls('selection.set')
     expect(Object.keys(params as object)).toEqual(['refs'])
   })
 
   test('a checkbox adds to the selection and takes away from it', async () => {
-    const roadmap = await listed(5)
-    act(() => roadmap.context(PROJECT, ['gh#1']))
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#1']))
     await settle()
 
     const box = (ref: string) =>
       document.querySelector(`li[data-ref="${ref}"] [data-slot="checkbox"]`) as HTMLElement | null
     act(() => box('gh#4')?.click())
-    expect(roadmap.calls('selection.set').at(-1)).toEqual({ refs: ['gh#1', 'gh#4'] })
+    expect(host.calls('selection.set').at(-1)).toEqual({ refs: ['gh#1', 'gh#4'] })
 
-    act(() => roadmap.context(PROJECT, ['gh#1', 'gh#4']))
+    act(() => host.context(PROJECT, ['gh#1', 'gh#4']))
     await settle()
     expect(ticked()).toEqual(['gh#1', 'gh#4'])
 
     act(() => box('gh#1')?.click())
-    expect(roadmap.calls('selection.set').at(-1)).toEqual({ refs: ['gh#4'] })
+    expect(host.calls('selection.set').at(-1)).toEqual({ refs: ['gh#4'] })
   })
 
   test('clicking the one selected row again clears the selection', async () => {
-    const roadmap = await listed(3)
-    act(() => roadmap.context(PROJECT, ['gh#2']))
+    const host = await listed(3)
+    act(() => host.context(PROJECT, ['gh#2']))
     await settle()
     act(() => rowButton('gh#2')?.click())
     /* An empty list is a real call, not an absence — it is the only way to say
        "nothing is selected", and it is why there is no clear button. */
-    expect(roadmap.calls('selection.set').at(-1)).toEqual({ refs: [] })
+    expect(host.calls('selection.set').at(-1)).toEqual({ refs: [] })
   })
 
   test('a context for another project clears the ticks rather than leaving stale ones', async () => {
@@ -583,15 +583,15 @@ describe('picking references out', () => {
        everywhere. Carrying a tick across a project change would be the expected
        case rather than a contrived one. */
     const door = stubDoor({ [PROJECT]: answered(5), [OTHER]: answered(5) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
-    act(() => roadmap.context(PROJECT, ['gh#2']))
+    act(() => host.context(PROJECT, ['gh#2']))
     await settle()
     expect(ticked()).toEqual(['gh#2'])
 
-    act(() => roadmap.context(OTHER, []))
+    act(() => host.context(OTHER, []))
     await settle()
     expect(ticked()).toEqual([])
   })
@@ -610,11 +610,11 @@ describe('picking references out', () => {
 describe('remembering the order, which is all this module keeps for itself', () => {
   const shown = async (kept: string | null, rows = 8) => {
     const door = stubDoor({ [PROJECT]: answered(rows) })
-    const roadmap = stubRoadmap(door)
+    const host = stubHost(door)
     render(<App />)
-    act(() => roadmap.greet(PROJECT, kept))
+    act(() => host.greet(PROJECT, kept))
     await settle()
-    return roadmap
+    return host
   }
 
   /** Which column heading is currently carrying the sort. */
@@ -649,21 +649,21 @@ describe('remembering the order, which is all this module keeps for itself', () 
   })
 
   test('a change to the order is handed to the host to keep, once it settles', async () => {
-    const roadmap = await shown(null)
+    const host = await shown(null)
     fireEvent.click(screen.getByRole('button', { name: /identifier/i }))
     /* Nothing yet. The delay was chosen for a query that changed on every
        keystroke and is kept for a smaller reason: two orders tried in a row
        should be one write, and nothing is waiting on it. */
-    expect(roadmap.calls('state.set')).toHaveLength(0)
+    expect(host.calls('state.set')).toHaveLength(0)
     await act(async () => {
       await new Promise((done) => setTimeout(done, 500))
     })
-    const written = roadmap.calls('state.set').at(-1) as { state: string }
+    const written = host.calls('state.set').at(-1) as { state: string }
     expect(JSON.parse(written.state)).toEqual({ v: 3, o: 'ref' })
   })
 
   test('nothing is written before the greeting has been read, or the memory erases itself', async () => {
-    const roadmap = stubRoadmap(stubDoor({}))
+    const host = stubHost(stubDoor({}))
     render(<App />)
     /* The page starts in its defaults and the host has not yet said what it
        kept. A write here would save those defaults over the settings that are
@@ -671,40 +671,40 @@ describe('remembering the order, which is all this module keeps for itself', () 
     await act(async () => {
       await new Promise((done) => setTimeout(done, 500))
     })
-    expect(roadmap.calls('state.set')).toHaveLength(0)
+    expect(host.calls('state.set')).toHaveLength(0)
   })
 })
 
 /**
  * The two thirds of the filter that the container's header draws.
  *
- * `kind` and `state` are offered as `roadmap.filters`, the choice comes back in
+ * `kind` and `state` are offered as `kehikot.filters`, the choice comes back in
  * `context.filters`, and the page asks for it back with `filters.set` when
  * somebody presses `Clear` or a host walks it to a reference. The essay is at
  * the top of `live/sift.ts`; these are the four things that would break quietly.
  */
 describe('the filters the header holds', () => {
   const listed = async (count: number, filters: Choice = {}) => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(count) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(count) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, [], filters))
+    act(() => host.greet(PROJECT, null, [], filters))
     await settle()
-    return roadmap
+    return host
   }
 
   test('nothing is offered before there is a reading, and then the counts are in the labels', async () => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
     render(<App />)
     /* An empty offer is a CLAIM the host acts on by pruning this container's
        stored choice. Making it before a reading has arrived erases the
        remembered filter on every load, which is a bug that looks like the
        feature working perfectly and then forgetting. */
-    expect(roadmap.offered()).toBeUndefined()
+    expect(host.offered()).toBeUndefined()
 
-    act(() => roadmap.greet(PROJECT))
+    act(() => host.greet(PROJECT))
     await settle()
 
-    const groups = roadmap.offered() as {
+    const groups = host.offered() as {
       id: string
       kind?: string
       options: { id: string; label: string }[]
@@ -739,27 +739,27 @@ describe('the filters the header holds', () => {
        empty string is how a text group says it is at rest. The Clear beside the
        count is gone with the toolbar; the host's own "Show everything" is the
        other way to the same call. */
-    const roadmap = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
+    const host = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
     expect(document.body.textContent).toContain('Nothing here matches what you asked for')
 
     fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
+    expect(host.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
 
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
-    act(() => roadmap.context(PROJECT, [], 'an-epic', { scope: 'all' }))
+    act(() => host.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
+    act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }))
     await settle()
     expect(document.body.textContent).toContain('8 references')
   })
 
   test('a host that declines is quoted, rather than the press quietly doing nothing', async () => {
-    const roadmap = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
+    const host = await listed(8, { hide: ['issue:open'], search: 'nothing matches this' })
     fireEvent.click(screen.getByRole('button', { name: 'Show all 8' }))
     await settle()
     act(() =>
-      roadmap.answer('filters.set', {
+      host.answer('filters.set', {
         ok: false,
-        error: 'roadmap.references is pinned, so it would not be told about the change it is asking for.',
+        error: 'kehikot.references is pinned, so it would not be told about the change it is asking for.',
       }),
     )
     await settle()
@@ -781,11 +781,11 @@ describe('the filters the header holds', () => {
 describe('narrowed to what the kehikko has picked', () => {
   const ON = { kehikko: 'picked' }
   const listed = async (selection: string[], filters: Choice = {}) => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, selection, filters))
+    act(() => host.greet(PROJECT, null, selection, filters))
     await settle()
-    return roadmap
+    return host
   }
 
   test('on, the rows are the ones picked on the canvas, in the list’s own order', async () => {
@@ -798,11 +798,11 @@ describe('narrowed to what the kehikko has picked', () => {
   })
 
   test('and follows the pick as it changes, which is the whole of what "reacts" means', async () => {
-    const roadmap = await listed(['gh#7'], ON)
+    const host = await listed(['gh#7'], ON)
     expect(document.body.textContent).toContain('1 of 8 shown')
     /* A step ticked in another container, say. Nothing in THIS container was
        pressed; the context is the only thing that changed. */
-    act(() => roadmap.context(PROJECT, ['gh#7', 'gh#3', 'gh#4'], 'an-epic', ON))
+    act(() => host.context(PROJECT, ['gh#7', 'gh#3', 'gh#4'], 'an-epic', ON))
     await settle()
     expect(document.body.textContent).toContain('3 of 8 shown')
   })
@@ -828,48 +828,48 @@ describe('narrowed to what the kehikko has picked', () => {
   })
 
   test('the one press turns off only this group, and leaves the others as the reader set them', async () => {
-    const roadmap = await listed([], { ...ON, hide: ['issue:open'] })
+    const host = await listed([], { ...ON, hide: ['issue:open'] })
     fireEvent.click(screen.getByRole('button', { name: 'Show everything' }))
     await settle()
     /* The state the reader chose is asked for again; only the kehikko group is
        left out, which is how a group is put back to its fallback. */
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { hide: ['issue:open'] } }])
+    expect(host.calls('filters.set')).toEqual([{ filters: { hide: ['issue:open'] } }])
   })
 
   test('the offer is re-sent as the pick changes, because its count is of rows the pick reaches', async () => {
-    const roadmap = await listed([])
-    const first = roadmap.offered() as { id: string; options: { label: string }[] }[]
+    const host = await listed([])
+    const first = host.offered() as { id: string; options: { label: string }[] }[]
     expect(first[1]?.options[1]?.label).toBe('Picked here 0')
-    act(() => roadmap.context(PROJECT, ['gh#1', 'gh#2', 'gh#31337']))
+    act(() => host.context(PROJECT, ['gh#1', 'gh#2', 'gh#31337']))
     await settle()
-    const next = roadmap.offered() as { id: string; options: { label: string }[] }[]
+    const next = host.offered() as { id: string; options: { label: string }[] }[]
     expect(next[1]?.options[1]?.label).toBe('Picked here 2')
   })
 })
 
 describe('being walked to a reference', () => {
   const listed = async (count: number, filters: Choice = {}) => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(count) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(count) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, [], filters))
+    act(() => host.greet(PROJECT, null, [], filters))
     await settle()
-    return roadmap
+    return host
   }
 
   test('a reference that is here is answered found', async () => {
-    const roadmap = await listed(20)
-    act(() => roadmap.goto('gh#7'))
+    const host = await listed(20)
+    act(() => host.goto('gh#7'))
     await act(async () => {
       await new Promise((done) => setTimeout(done, 50))
     })
-    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    const went = host.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ id: 'walk-1', found: true })
   })
 
   test('a reference that is not here is answered with a sentence, not silence', async () => {
-    const roadmap = await listed(3)
-    act(() => roadmap.goto('gh#999'))
-    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    const host = await listed(3)
+    act(() => host.goto('gh#999'))
+    const went = host.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ found: false })
     expect(String(went?.why)).toContain('gh#999')
   })
@@ -879,31 +879,31 @@ describe('being walked to a reference', () => {
        is not drawn. This is the case the whole move had to not break: a module
        that could not clear a host-held filter would have to answer `found: true`
        about a row nobody can see, or refuse a reference it is looking at. */
-    const roadmap = await listed(20, { hide: ['issue:open'] })
-    act(() => roadmap.goto('gh#7'))
+    const host = await listed(20, { hide: ['issue:open'] })
+    act(() => host.goto('gh#7'))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
+    expect(host.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
     /* Nothing is answered yet: the walk is not over until it is known whether
        the host did it. */
-    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toBeUndefined()
+    expect(host.said.findLast((message) => message.type === MESSAGE.WENT)).toBeUndefined()
 
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
+    act(() => host.answer('filters.set', { ok: true, data: { filters: { scope: 'all' } } }))
     await settle()
-    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
+    expect(host.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
   })
 
   test('a host that declines the filter gets the honest refusal, not a walk to an invisible row', async () => {
-    const roadmap = await listed(20, { hide: ['issue:open'] })
-    act(() => roadmap.goto('gh#7'))
+    const host = await listed(20, { hide: ['issue:open'] })
+    act(() => host.goto('gh#7'))
     await settle()
     act(() =>
-      roadmap.answer('filters.set', {
+      host.answer('filters.set', {
         ok: false,
-        error: 'roadmap.references is not on the kehikko that is open, so it has no filters here to move.',
+        error: 'kehikot.references is not on the kehikko that is open, so it has no filters here to move.',
       }),
     )
     await settle()
-    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    const went = host.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ found: false })
     expect(String(went?.why)).toContain('gh#7')
     expect(String(went?.why)).toContain('not on the kehikko that is open')
@@ -914,12 +914,12 @@ describe('being walked to a reference', () => {
        what was asked for. A page that assumed otherwise would draw one thing and
        be told another on the next context — so the settled choice is put back
        through the same narrowing the list uses, against the actual row. */
-    const roadmap = await listed(20, { hide: ['issue:open'] })
-    act(() => roadmap.goto('gh#7'))
+    const host = await listed(20, { hide: ['issue:open'] })
+    act(() => host.goto('gh#7'))
     await settle()
-    act(() => roadmap.answer('filters.set', { ok: true, data: { filters: { hide: ['issue:open'] } } }))
+    act(() => host.answer('filters.set', { ok: true, data: { filters: { hide: ['issue:open'] } } }))
     await settle()
-    const went = roadmap.said.findLast((message) => message.type === MESSAGE.WENT)
+    const went = host.said.findLast((message) => message.type === MESSAGE.WENT)
     expect(went).toMatchObject({ found: false })
     expect(String(went?.why)).toContain('still hiding it')
   })
@@ -935,25 +935,25 @@ describe('being walked to a reference', () => {
  */
 describe('narrowed to the open epic', () => {
   const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, [], filters, more))
+    act(() => host.greet(PROJECT, null, [], filters, more))
     await settle()
-    return roadmap
+    return host
   }
-  const named = (roadmap: ReturnType<typeof stubRoadmap>) => {
-    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }, { refs: ['#77'] }] } }))
-    act(() => roadmap.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#5', steps: [] } }))
+  const named = (host: ReturnType<typeof stubHost>) => {
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }, { refs: ['#77'] }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#5', steps: [] } }))
   }
 
   test('asks the host what the epic names, and narrows to it once answered', async () => {
-    const roadmap = await listed()
-    expect(roadmap.calls('steps.list')).toEqual([{ epic: 'an-epic' }])
-    expect(roadmap.calls('epic.get')).toEqual([{ epic: 'an-epic' }])
+    const host = await listed()
+    expect(host.calls('steps.list')).toEqual([{ epic: 'an-epic' }])
+    expect(host.calls('epic.get')).toEqual([{ epic: 'an-epic' }])
     /* Not read yet: the whole project, never an empty list. */
     expect(document.body.textContent).toContain('8 references')
 
-    named(roadmap)
+    named(host)
     await settle()
     expect(document.body.textContent).toContain('3 of 8 shown')
     expect(document.body.textContent).toContain('this epic')
@@ -962,48 +962,48 @@ describe('narrowed to the open epic', () => {
       'gh#3',
       'gh#5',
     ])
-    const scope = (roadmap.offered() as { options: { label: string }[] }[])[0]!
+    const scope = (host.offered() as { options: { label: string }[] }[])[0]!
     expect(scope.options.map((option) => option.label)).toEqual(['This epic 3', 'Everything 8'])
   })
 
   test('Everything is one choice away', async () => {
-    const roadmap = await listed({ scope: 'all' })
-    named(roadmap)
+    const host = await listed({ scope: 'all' })
+    named(host)
     await settle()
     expect(document.body.textContent).toContain('8 references')
     expect(document.body.textContent).not.toContain('this epic')
   })
 
   test('a host that refuses both questions leaves the whole project, not an empty list', async () => {
-    const roadmap = await listed()
-    act(() => roadmap.answer('steps.list', { ok: false, error: 'roadmap.references may not read steps.' }))
-    act(() => roadmap.answer('epic.get', { ok: false, error: 'roadmap.references may not read epics.' }))
+    const host = await listed()
+    act(() => host.answer('steps.list', { ok: false, error: 'kehikot.references may not read steps.' }))
+    act(() => host.answer('epic.get', { ok: false, error: 'kehikot.references may not read epics.' }))
     await settle()
     expect(document.body.textContent).toContain('8 references')
   })
 
   test('an epic that names nothing in this tracker says so, and its press asks for Everything alone', async () => {
-    const roadmap = await listed({ hide: ['change:closed'] })
-    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['#77'] }] } }))
-    act(() => roadmap.answer('epic.get', { ok: true, data: { umbrella: null } }))
+    const host = await listed({ hide: ['change:closed'] })
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['#77'] }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: { umbrella: null } }))
     await settle()
     expect(screen.getByText('Nothing this epic names is in this list.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('Nothing here matches')
     fireEvent.click(screen.getByRole('button', { name: 'Show everything' }))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { hide: ['change:closed'], scope: 'all' } }])
+    expect(host.calls('filters.set')).toEqual([{ filters: { hide: ['change:closed'], scope: 'all' } }])
   })
 
   test('picked-out containers win over the epic, and this container is not one of them', async () => {
-    const roadmap = await listed()
-    named(roadmap)
+    const host = await listed()
+    named(host)
     act(() =>
-      roadmap.context(PROJECT, [], 'an-epic', {}, {
+      host.context(PROJECT, [], 'an-epic', {}, {
         containers: [
-          { module: 'roadmap.journeys', selected: true, showing: { refs: ['gh#7', 'gh#8'] } },
-          { module: 'roadmap.paper', selected: false, showing: { refs: ['gh#1'] } },
+          { module: 'kehikot.journeys', selected: true, showing: { refs: ['gh#7', 'gh#8'] } },
+          { module: 'kehikot.paper', selected: false, showing: { refs: ['gh#1'] } },
           /* Its own ticks would narrow it to its own clicks. */
-          { module: 'roadmap.references', selected: true, showing: { refs: ['gh#6'] } },
+          { module: 'kehikot.references', selected: true, showing: { refs: ['gh#6'] } },
         ],
       }),
     )
@@ -1011,71 +1011,71 @@ describe('narrowed to the open epic', () => {
     expect(document.body.textContent).toContain('2 of 8 shown')
     expect(document.body.textContent).toContain('picked containers')
     /* And unticking them puts the epic back. */
-    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { containers: [] }))
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { containers: [] }))
     await settle()
     expect(document.body.textContent).toContain('3 of 8 shown')
   })
 
   test('a new epic is asked about again, and a slow answer about the old one is ignored', async () => {
-    const roadmap = await listed()
-    act(() => roadmap.context(PROJECT, [], 'another-epic'))
+    const host = await listed()
+    act(() => host.context(PROJECT, [], 'another-epic'))
     await settle()
-    expect(roadmap.calls('steps.list')).toEqual([{ epic: 'an-epic' }, { epic: 'another-epic' }])
+    expect(host.calls('steps.list')).toEqual([{ epic: 'an-epic' }, { epic: 'another-epic' }])
     /* The answer about the new epic arrives first, then the old one's. */
-    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#1'] }] } }))
-    act(() => roadmap.answer('epic.get', { ok: true, data: {} }))
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#1'] }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: {} }))
     await settle()
     expect(document.body.textContent).toContain('1 of 8 shown')
-    act(() => roadmap.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }] } }, 'first'))
-    act(() => roadmap.answer('epic.get', { ok: true, data: {} }, 'first'))
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3'] }] } }, 'first'))
+    act(() => host.answer('epic.get', { ok: true, data: {} }, 'first'))
     await settle()
     expect(document.body.textContent).toContain('1 of 8 shown')
   })
 
   test('a walk to a ref the scope hides turns the scope to Everything; one it keeps asks for nothing', async () => {
-    const roadmap = await listed()
-    named(roadmap)
+    const host = await listed()
+    named(host)
     await settle()
-    act(() => roadmap.goto('gh#2'))
+    act(() => host.goto('gh#2'))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([])
-    expect(roadmap.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
+    expect(host.calls('filters.set')).toEqual([])
+    expect(host.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
 
-    act(() => roadmap.goto('gh#7'))
+    act(() => host.goto('gh#7'))
     await settle()
-    expect(roadmap.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
+    expect(host.calls('filters.set')).toEqual([{ filters: { scope: 'all' } }])
   })
 })
 
 describe('the shared facets, with the marks people put on them', () => {
   const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
-    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
     render(<App />)
-    act(() => roadmap.greet(PROJECT, null, [], filters, more))
+    act(() => host.greet(PROJECT, null, [], filters, more))
     await settle()
-    return roadmap
+    return host
   }
 
   test('a container stored under the old kind and state groups narrows nothing', async () => {
     /* What a host holding a 2.2.0 choice sends in the greeting, before this
        version has offered anything for it to reconcile against. */
-    const roadmap = await listed({ kind: 'change', state: 'merged' })
+    const host = await listed({ kind: 'change', state: 'merged' })
     expect(document.body.textContent).toContain('8 references')
-    expect((roadmap.offered() as { id: string }[]).map((group) => group.id)).not.toContain('kind')
+    expect((host.offered() as { id: string }[]).map((group) => group.id)).not.toContain('kind')
   })
 
   test('a mark from somebody moves a closed ref under the facet they chose', async () => {
     /* gh#4 and gh#8 are closed with no reason. Marked `wont-do`, gh#4 is
        hidden with the won't-do facet on, and gh#8 is not. */
     const marks = [{ ref: 'gh#4', value: 'wont-do' }]
-    const roadmap = await listed({ hide: ['closed:wont-do'] }, { dispositions: marks })
+    const host = await listed({ hide: ['closed:wont-do'] }, { dispositions: marks })
     expect(document.body.textContent).toContain('7 of 8 shown')
     expect(document.querySelector('li[data-ref="gh#4"]')).toBeNull()
-    const hide = (roadmap.offered() as { id: string; options: { label: string }[] }[]).find((g) => g.id === 'hide')!
+    const hide = (host.offered() as { id: string; options: { label: string }[] }[]).find((g) => g.id === 'hide')!
     expect(hide.options.map((option) => option.label)).toContain('won’t do (1)')
 
     /* And unmarked, it is back to "reason unknown", which nothing is hiding. */
-    act(() => roadmap.context(PROJECT, [], 'an-epic', { hide: ['closed:wont-do'] }, { dispositions: [] }))
+    act(() => host.context(PROJECT, [], 'an-epic', { hide: ['closed:wont-do'] }, { dispositions: [] }))
     await settle()
     expect(document.body.textContent).toContain('8 references')
   })

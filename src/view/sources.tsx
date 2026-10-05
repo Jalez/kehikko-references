@@ -1,4 +1,4 @@
-import type { TrackerSource } from 'roadmap-module-protocol'
+import type { TrackerSource } from 'kehikot-module-protocol'
 
 import { ageOf } from './heading.tsx'
 

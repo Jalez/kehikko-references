@@ -15,7 +15,7 @@ import {
   sift,
   siftingOf,
 } from '@/live/sift.ts'
-import { useRoadmap, type GotoHandler, type Settled } from '@/wire/use-roadmap.ts'
+import { useKehikot, type GotoHandler, type Settled } from '@/wire/use-kehikot.ts'
 import {
   Asking,
   Listening,
@@ -54,7 +54,7 @@ const ROW_HEIGHT = 36
  * A module can ask for its full content height, and with four hundred rows that
  * is fourteen thousand pixels — a host page with a scrollbar the length of a
  * street, inside which this list has no scrollbar of its own, so the reader
- * scrolls the roadmap to read the module and loses the container's own header —
+ * scrolls the host to read the module and loses the container's own header —
  * and its filter control — off the top on the way. Asking for a height the list
  * is worth reading in, and scrolling inside it, keeps the count and the column
  * headings on screen while somebody works through four hundred rows. The host clamps whatever we ask for regardless;
@@ -72,7 +72,7 @@ export function App() {
    * The order, which is the only setting this page still holds.
    *
    * The scope, the toggles and the typed query are all the host's now — offered as
-   * `roadmap.filters`, drawn in the container's own header, and sent back in
+   * `kehikot.filters`, drawn in the container's own header, and sent back in
    * `context.filters`. There is no local copy of any of them, for the same
    * reason there is no local copy of the selection: a second answer would go
    * stale on its own schedule, and a page that drew what it asked for rather
@@ -110,9 +110,9 @@ export function App() {
    * The `goto` handler, reached through a ref so that the bridge can be
    * connected before the handler exists.
    *
-   * Answering a walk now needs `setFilters`, which comes out of `useRoadmap`,
+   * Answering a walk now needs `setFilters`, which comes out of `useKehikot`,
    * which is handed the handler — so one of the two has to be indirect. It is
-   * this one, because `use-roadmap.ts` already reads the newest handler out of a
+   * this one, because `use-kehikot.ts` already reads the newest handler out of a
    * ref on every `goto` for its own reason (a listener rebuilt on every render
    * would be a torn-down listener during the millisecond a host chose to greet
    * in). This trampoline is stable and the thing it calls is not, which is
@@ -139,7 +139,7 @@ export function App() {
     epicRefs,
     aimed,
     marks,
-  } = useRoadmap(ID, onGoto)
+  } = useKehikot(ID, onGoto)
 
   /**
    * The whole narrowing, which is entirely the host's now.
@@ -196,7 +196,7 @@ export function App() {
    *
    * **`can`** — there is something to read. False when no project has been
    * named, because the host reads trackers for a project, and a refresh button
-   * over a page that says "a roadmap is here and it named no project folder"
+   * over a page that says "a host is here and it named no project folder"
    * is a button that cannot work. It is also false while nothing has greeted us
    * yet, which is silent anyway.
    *
@@ -340,7 +340,7 @@ export function App() {
         setFilterRefused(settled.why)
         answer(
           false,
-          `${message.ref} is in this list, and the roadmap would not move this container’s filters off it: ${settled.why}`,
+          `${message.ref} is in this list, and the host would not move this container’s filters off it: ${settled.why}`,
         )
         return
       }
@@ -362,7 +362,7 @@ export function App() {
    * It holds the VALUE rather than a "have we done it yet" flag, and the
    * difference is what happens when a second greeting arrives. A boolean would
    * make the first greeting the only one that could ever restore anything; a
-   * greeting means the conversation is new — see the note in `use-roadmap.ts` —
+   * greeting means the conversation is new — see the note in `use-kehikot.ts` —
    * and the string that comes with it is authoritative again. Comparing values
    * means a repeated greeting carrying the same string does nothing, which is
    * the behaviour a boolean was reaching for, and a greeting carrying a
@@ -548,8 +548,8 @@ export function App() {
         buttons, the order trigger, the count and Clear. At 220 pixels they came
         to about a hundred pixels over a list that had three hundred to divide.
         Every one of those things is somewhere better now — the filters and the
-        query in the container's own header as `roadmap.filters`, the refresh
-        and the freshness line as `roadmap.refreshable`, the order on the
+        query in the container's own header as `kehikot.filters`, the refresh
+        and the freshness line as `kehikot.refreshable`, the order on the
         columns it orders — except the count, which could not go, because the
         host cannot count rows it does not render. `view/heading.tsx` has the
         whole argument.
@@ -582,7 +582,7 @@ export function App() {
       <SourceTrouble sources={held.sources} />
       {sight.trouble && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
-          {sight.trouble.why} What is below is the reading as the roadmap last handed it over.
+          {sight.trouble.why} What is below is the reading as the host last handed it over.
         </p>
       )}
       {refreshNote && (
@@ -595,7 +595,7 @@ export function App() {
           is drawn between the heading and the list rather than over them: this
           is a fact about what just happened to a click, and it belongs where the
           click was, not in a corner. It disappears the moment the next set is
-          asked for — see `selectionRefused` in `use-roadmap.ts`. */}
+          asked for — see `selectionRefused` in `use-kehikot.ts`. */}
       {/* A refused `filters.set` gets a sentence for the same reason a refused
           `selection.set` does, and a sharper one: the symptom without it is a
           `Clear` that empties the query box and leaves the list exactly as short
@@ -606,13 +606,13 @@ export function App() {
           above the list, against the rows it is about. */}
       {filterRefused && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
-          The roadmap would not put this container’s filters back ({filterRefused}) The typed filter has been
+          The host would not put this container’s filters back ({filterRefused}) The typed filter has been
           cleared; whatever the header is narrowing by is still narrowing this list.
         </p>
       )}
       {selectionRefused && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
-          The roadmap would not record that selection ({selectionRefused.reason}). Nothing on this list has
+          The host would not record that selection ({selectionRefused.reason}). Nothing on this list has
           changed, and the rows are still exactly what the last reading found.
         </p>
       )}

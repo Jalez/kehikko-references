@@ -1,4 +1,4 @@
-import { readTrackerRef, type TrackerReading } from 'roadmap-module-protocol'
+import { readTrackerRef, type TrackerReading } from 'kehikot-module-protocol'
 
 /**
  * Rows and readings in the shape the host's `tracker.get` answers with.

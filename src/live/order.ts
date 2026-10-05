@@ -22,7 +22,7 @@ import type { Reference } from './reference.ts'
  *
  * A `Reference` carries a ref, a kind, an origin, a state, a title, a date, some
  * labels and some people — and each of those is either something read out of the
- * roadmap's answer or an honest blank. So those are the only things an order may
+ * host's answer or an honest blank. So those are the only things an order may
  * be built from. "By priority" and "by size" are the tempting ones and they are
  * not here, because nothing in the reading says either, and an order that quietly
  * stood in something else for them would be this page inventing a ranking and

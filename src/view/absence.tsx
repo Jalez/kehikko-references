@@ -79,7 +79,7 @@ export function Listening() {
   return (
     <Panel title="Waiting to be greeted.">
       <p>
-        A roadmap greets a frame as that frame loads. If one is out there, this page fills in by itself in a
+        A host greets a frame as that frame loads. If one is out there, this page fills in by itself in a
         moment.
       </p>
     </Panel>
@@ -94,9 +94,9 @@ export function Unhosted() {
   return (
     <Panel title="Nothing has told me anything.">
       <p>
-        This app holds no references of its own. Every row on this list is the roadmap’s reading of one
-        project’s trackers — GitHub and GitLab, read once by the roadmap for every module on its canvas —
-        and which project that is comes from the roadmap that frames this page and says where it is
+        This app holds no references of its own. Every row on this list is the host’s reading of one
+        project’s trackers — GitHub and GitLab, read once by the host for every module on its canvas —
+        and which project that is comes from the host that frames this page and says where it is
         standing.
       </p>
       <p>
@@ -105,7 +105,7 @@ export function Unhosted() {
         looked.
       </p>
       <p>
-        Frame this page from a roadmap and the rows arrive after the greeting. Until then this is the whole of
+        Frame this page from a host and the rows arrive after the greeting. Until then this is the whole of
         what the app honestly knows.
       </p>
     </Panel>
@@ -113,7 +113,7 @@ export function Unhosted() {
 }
 
 /**
- * A roadmap is there; its context names no project folder.
+ * A host is there; its context names no project folder.
  *
  * The protocol is explicit that this is a real state rather than an oversight: a
  * host with no filesystem of its own knows the name of the project somebody is
@@ -126,15 +126,15 @@ export function Unhosted() {
  */
 export function NoProject() {
   return (
-    <Panel title="A roadmap is here, and it named no project folder.">
+    <Panel title="A host is here, and it named no project folder.">
       <p>
         The greeting arrived and the context it carried had no{' '}
-        <code className="font-mono text-foreground">projectPath</code> in it. This list is the roadmap’s
+        <code className="font-mono text-foreground">projectPath</code> in it. This list is the host’s
         reading of a project’s own trackers, so with no project there is nothing to read and nothing to be
         about.
       </p>
       <p>
-        That is not a fault. A roadmap with no filesystem of its own knows which project you are looking at
+        That is not a fault. A host with no filesystem of its own knows which project you are looking at
         and has no folder to point at, and the protocol says so. Open a project with a folder behind it and
         this fills in.
       </p>
@@ -148,13 +148,13 @@ export function NoProject() {
  * The one state on this page where a whole container of waiting is honest, and the
  * only one — a read that happens over rows that are already drawn leaves them
  * there and says what it is doing in the header instead. See `busy` in
- * `use-roadmap.ts`.
+ * `use-kehikot.ts`.
  */
 export function Asking({ project }: { project: string }) {
   return (
     <Panel title={`Reading the trackers for ${projectName(project)}.`}>
       <p>
-        The roadmap is being asked for this project’s issues, merge requests and pull requests, or is reading
+        The host is being asked for this project’s issues, merge requests and pull requests, or is reading
         them from GitHub and GitLab for the first time. This is the one wait on this page that means an
         answer is coming.
       </p>
@@ -173,11 +173,11 @@ export function Asking({ project }: { project: string }) {
  */
 const WHAT_IT_MEANS: Record<TroubleKind, string> = {
   'unknown-method':
-    'This is not an empty list and it is not a failed read: nothing was read, because the roadmap framing this page is older than the shared tracker reading. A roadmap that answers `tracker.get` fills this list in; asking this one again will not.',
+    'This is not an empty list and it is not a failed read: nothing was read, because the host framing this page is older than the shared tracker reading. A host that answers `tracker.get` fills this list in; asking this one again will not.',
   refused:
-    'The roadmap was asked for its reading of this project’s trackers and said no, in the words above. Nothing is wrong with the trackers themselves; whether it is worth asking again depends on what it said.',
+    'The host was asked for its reading of this project’s trackers and said no, in the words above. Nothing is wrong with the trackers themselves; whether it is worth asking again depends on what it said.',
   unreadable:
-    'This is the roadmap and this app being a version apart rather than anything about the project or the trackers. Updating whichever of the two is older is what fixes it.',
+    'This is the host and this app being a version apart rather than anything about the project or the trackers. Updating whichever of the two is older is what fixes it.',
 }
 
 /**
@@ -216,30 +216,30 @@ export function Troubled({ project, trouble, again }: { project: string; trouble
  * 220-pixel container before deciding whether to read the rest.
  */
 const TITLES: Record<TroubleKind, string> = {
-  'unknown-method': 'This roadmap has no shared tracker reading.',
-  refused: 'The roadmap would not hand over its tracker reading.',
-  unreadable: 'The roadmap’s tracker reading could not be read.',
+  'unknown-method': 'This host has no shared tracker reading.',
+  refused: 'The host would not hand over its tracker reading.',
+  unreadable: 'The host’s tracker reading could not be read.',
 }
 
 /**
  * A reading, containing nothing. The one genuinely empty list on this page, and
  * the only place the word "found" is honest — or, with no sources at all, the
- * roadmap saying it reads no tracker for this project, which is a different
+ * host saying it reads no tracker for this project, which is a different
  * sentence because it sends somebody somewhere different.
  */
 export function NothingFound({ project, reading }: { project: string; reading: Held }) {
   const name = <code className="font-mono text-foreground">{projectName(project)}</code>
   if (!reading.sources.length) {
     return (
-      <Panel title="The roadmap reads no tracker for this project.">
+      <Panel title="The host reads no tracker for this project.">
         <p>
           It was asked for everything it reads for {name}, and it named no GitHub repository and no GitLab
           project to read. That is not a failure — a project can be a folder of writing with no tracker
           behind it — and nothing is being waited for.
         </p>
         <p>
-          If this project does have a tracker, it is the roadmap that has to be told where it is; this list
-          shows whatever the roadmap reads.
+          If this project does have a tracker, it is the host that has to be told where it is; this list
+          shows whatever the host reads.
         </p>
       </Panel>
     )
@@ -248,7 +248,7 @@ export function NothingFound({ project, reading }: { project: string; reading: H
   return (
     <Panel title="This project’s tracker has nothing in it.">
       <p>
-        This one is an answer rather than a gap. The roadmap read{' '}
+        This one is an answer rather than a gap. The host read{' '}
         {reading.sources.map((source) => `${source.host}/${source.repo}`).join(', ')}
         {reading.at ? ` — the reading is dated ${reading.at} — ` : ' '}
         for {name}, and it named no issue, merge request or pull request.
@@ -354,7 +354,7 @@ export function NothingPicked({
  * is: the remedy is not to loosen a menu somebody set, because nobody set this
  * one — the scope is on by default. Two cases with two sentences. An epic whose
  * refs are all elsewhere is the common one: its steps cite a tracker the
- * roadmap does not read for this project, or the epic simply names nothing yet.
+ * host does not read for this project, or the epic simply names nothing yet.
  * Picked containers that show nothing here is the other, and the sentence says
  * where to look instead.
  *

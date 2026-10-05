@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, GitPullRequest } from 'lucide-react'
 
-import type { TrackerMissing } from 'roadmap-module-protocol'
+import type { TrackerMissing } from 'kehikot-module-protocol'
 
 import { cn } from '@/lib/utils'
 import { ORDER_LABELS, type Ordering } from '@/live/order.ts'
@@ -21,14 +21,14 @@ import { projectName } from './absence.tsx'
  * because the question it was answering has been dissolved rather than answered
  * better:
  *
- * - **The kind and state filters** are `roadmap.filters` groups now — one
+ * - **The kind and state filters** are `kehikot.filters` groups now — one
  *   `hide` group of the shared ref facets since 2.3.0 — drawn in
  *   the container's own header beside every other module's.
  * - **The query** is a `text` filter group, drawn as an input inside the same
  *   menu. The protocol refused free text twice and the refusal is now written
  *   down as what it was — an argument about a text box in a header STRIP,
  *   applied to a control that is a MENU. See `LIMITS.FILTER_TEXT`.
- * - **Refresh, and the freshness line**, are `roadmap.refreshable`: the module
+ * - **Refresh, and the freshness line**, are `kehikot.refreshable`: the module
  *   says it can be read again and when it last read, and the host draws the
  *   control, the sentence and an auto-refresh interval it stores per container.
  * - **The order** is here, on the columns it orders, which is where a person
@@ -108,7 +108,7 @@ import { projectName } from './absence.tsx'
  * count then is the project's, which is what a bare count has always meant.
  *
  * `read 6 d ago` says how old the reading is. The host draws its own freshness
- * line from `roadmap.refreshable`, but only where it has room for one and only
+ * line from `kehikot.refreshable`, but only where it has room for one and only
  * in its header, and a list a day old looks exactly like a live one unless the
  * list itself says otherwise. It is the shared reading's own `at` — when the
  * host's reading last changed — never the moment the page asked. It used to be

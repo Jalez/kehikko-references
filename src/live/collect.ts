@@ -1,4 +1,4 @@
-import { trackerRowSchema, type TrackerRow } from 'roadmap-module-protocol'
+import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
 import type { Reference } from './reference.ts'
 

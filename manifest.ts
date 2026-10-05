@@ -1,9 +1,9 @@
-import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-module-protocol'
+import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-module-protocol'
 
 /**
- * What this app says about itself when a roadmap asks.
+ * What this app says about itself when a host asks.
  *
- * The manifest is the smaller half of this program and the only half a roadmap
+ * The manifest is the smaller half of this program and the only half a host
  * ever reads before deciding whether to frame it. Read it as a description of
  * the ENRICHMENT rather than of the app: it says which tab to give the page,
  * and which questions the app would like to ask if there is anybody there to
@@ -12,7 +12,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * ## What changed, and what a reader of the old manifest should know
  *
  * This file used to declare four capabilities and the data came through one of
- * them. Every row was an answer to `live.get` — the roadmap app's cached reading
+ * them. Every row was an answer to `live.get` — the host app's cached reading
  * of the trackers, refreshed by somebody remembering to run a refresher — so the
  * list was as current as the last time a person thought about it. The owner
  * asked the obvious question:
@@ -44,7 +44,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * - `filters:set`, which is the newest and the one worth a paragraph of its own.
  *   None of this app's filtering is drawn in this app any more. The scope, the
  *   `hide` toggles, the kehikko pick AND the typed query are offered as
- *   `roadmap.filters` — the last of them as a `text` group, which the protocol
+ *   `kehikot.filters` — the last of them as a `text` group, which the protocol
  *   grew for exactly this module — and all four are drawn in the container's
  *   own header beside every other module's. That is what the owner asked for, twice, and it is how the rest of
  *   this family already behaves.
@@ -63,7 +63,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   the whole move is at the top of `src/live/sift.ts`.
  * - `state:keep`, which is how the ORDER survives a reload, and nothing else any
  *   more. The host keeps one opaque string for this module and never reads it —
- *   the sentence in the protocol is "the roadmap does not read it", and the
+ *   the sentence in the protocol is "the host does not read it", and the
  *   format lives entirely in `src/live/keep.ts`. It used to carry the kind, the
  *   state and the query; the host holds all three per container now, so a copy
  *   here would be a second memory of one setting. What is left is the order,
@@ -77,8 +77,8 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   from what the host holds, so asking spends nothing at any tracker. See
  *   `src/live/ask.ts`.
  * - `trackers:refresh`, which is what the refresh control now does. The host
- *   still draws the button from `roadmap.refreshable` and the press still comes
- *   back as `roadmap.refresh`; what changed is the answer to it, which is
+ *   still draws the button from `kehikot.refreshable` and the press still comes
+ *   back as `kehikot.refresh`; what changed is the answer to it, which is
  *   `tracker.refresh` — the host reading GitHub and GitLab again for every
  *   module in the project. Declared apart from reading because it SPENDS
  *   something: the person's rate limit, on behalf of everybody on the canvas.
@@ -98,8 +98,8 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * those are an epic's steps' refs and its umbrella: `steps.list` answers the
  * first under `steps:read` and `epic.get` the second under `epics:read`. They
  * are asked of the host rather than read off `.kehikot/roadmap/epics/` by this
- * app's server, because those files are the roadmap's and the host already
- * answers out of them — see `epicRefs` in `src/wire/use-roadmap.ts`. Either
+ * app's server, because those files are the host's and the host already
+ * answers out of them — see `epicRefs` in `src/wire/use-kehikot.ts`. Either
  * refused alone still narrows to what the other granted; both refused leaves
  * the whole project on screen with the heading saying so, never an empty list.
  *
@@ -191,7 +191,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * survives somebody clearing site data differently from how they expect; the
  * capability was never a workaround for the sandbox, it was the right shape.
  */
-export const ID = 'roadmap.references'
+export const ID = 'kehikot.references'
 
 /**
  * Three, because the data source moved again; before it two, for the same
@@ -224,13 +224,13 @@ export const ID = 'roadmap.references'
  * one heading row carrying the column sorts and the count. Every one of those
  * things is somewhere better — the three filters and the query in the
  * container's own header, the refresh and the freshness line as
- * `roadmap.refreshable`, the order on the columns it orders — except the count,
+ * `kehikot.refreshable`, the order on the columns it orders — except the count,
  * which could not move, because the host cannot count rows it does not render.
  *
  * Still a minor rather than a major, because nothing this module answers or
  * promises has been withdrawn: the refs are spelled the same, `view.goto` still
  * clears what is hiding its target, and one press still puts everything back. It
- * needs a host that speaks `roadmap.refreshable` and `text` filter groups to
+ * needs a host that speaks `kehikot.refreshable` and `text` filter groups to
  * have a refresh control or a search box at all, which is the one thing a reader
  * of two copies has to know — along with the string kept under `state:keep`
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
@@ -255,8 +255,8 @@ export const VERSION = '3.0.0'
  *
  * It is a PREFERENCE and not a promise. 7830 through 7960 belong to the other
  * modules on this machine, and if something else holds 7820 when this starts,
- * `serves()` moves to the next free port and rewrites `~/.roadmap/modules` to
- * match — see `roadmap-module-protocol/serve`. A roadmap reads the registry, so
+ * `serves()` moves to the next free port and rewrites `~/Library/Application Support/Kehikot/modules` to
+ * match — see `kehikot-module-protocol/serve`. A host reads the registry, so
  * the registry is what has to be true; this number is only where to start
  * looking.
  */
@@ -269,7 +269,7 @@ export const PREFERRED_PORT = 7820
  * the host's check — the host runs its own copy over what arrives on the wire.
  * That cuts both ways: running it HERE is the cheapest way for this app to find
  * out it has written a manifest no host will accept, and to find out at start
- * rather than from a roadmap's refusal in somebody else's log. A summary one
+ * rather than from a host's refusal in somebody else's log. A summary one
  * character over `LIMITS.SUMMARY` should stop this process, not that one.
  */
 export const MANIFEST: Manifest = manifestSchema.parse({
@@ -299,7 +299,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * because it is this module's claim and not the host's.
    */
   guidance:
-    'Every issue, merge request and pull request the roadmap reads for this project — GitHub and GitLab ' +
+    'Every issue, merge request and pull request the host reads for this project — GitHub and GitLab ' +
     'together — is listed here, and the list shows the ones the open epic names unless the header’s scope is ' +
     'set to Everything — check the scope before concluding a reference does not exist. Before ' +
     'deciding what to work on, read the list rather than assuming the work is the one thing you were ' +
@@ -340,7 +340,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * `tracker`, because the rows ARE the shared reading: when
    * `context.tracker.at` moves — a refresh pressed in any container, the
    * project's own schedule — this page asks `tracker.get` again and the rows
-   * change. See `standingOn` in `src/wire/use-roadmap.ts`.
+   * change. See `standingOn` in `src/wire/use-kehikot.ts`.
    *
    * Not `passage`. Nothing here reads one.
    */

@@ -13,7 +13,7 @@ import { answer } from '../doors.ts'
 describe('the doors themselves', () => {
   test('the health check answers without touching anything', async () => {
     const got = await answer('GET', '/healthz', new URLSearchParams())
-    expect(got).toMatchObject({ status: 200, body: { ok: true, id: 'roadmap.references' } })
+    expect(got).toMatchObject({ status: 200, body: { ok: true, id: 'kehikot.references' } })
   })
 
   test('a path this app knows nothing about is handed back to Vite', async () => {
