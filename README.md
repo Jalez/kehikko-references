@@ -5,25 +5,25 @@ together — as one dense list. A row is an identifier, a state, a title and who
 is on it.
 
 It is a program of its own: its own server, its own page, its own
-`package.json`, its own port. A roadmap frames it, tells it which project is
+`package.json`, its own port. A host frames it, tells it which project is
 open, and hands it the rows.
 
 ```
 bun install
 ./run.sh           # or PORT=7820 ./run.sh
 bun test
-bun run dev/stub-host.ts   # a roadmap that is not one, for looking at all of it
+bun run dev/stub-host.ts   # a host that is not one, for looking at all of it
 ```
 
 Two documents come out of the server besides the page at `/`: the manifest at
-`/.well-known/roadmap-module.json`, which is the one path a host ever asks for,
+`/.well-known/kehikot-module.json`, which is the one path a host ever asks for (a host from before the rename asks `/.well-known/roadmap-module.json`, and gets the same manifest),
 and `/healthz`. Nothing here spends a credential.
 
 ## Where the rows come from, and what changed
 
 Three times now, and each move is the reason for the next.
 
-They came from the roadmap's `live.get` — a cached reading refreshed by somebody
+They came from the host's `live.get` — a cached reading refreshed by somebody
 remembering to run `refresh_epic`. Then, after the owner asked
 
 > Issues/MRs can be gotten from the project's own GitHub, no? Doesn't need
@@ -87,7 +87,7 @@ panel rather than "nothing matches what you asked for", because nobody asked.
 
 `37 of 412 shown · this epic · read 6 d ago · 2 unread`. The age is the shared
 reading's own `at` — when the host's reading last changed — never the moment the
-page asked, and it is what `roadmap.refreshable` announces too. `unread` counts
+page asked, and it is what `kehikot.refreshable` announces too. `unread` counts
 the refs the reading names and has no row for (`missing[]`: not read yet, not
 found, on no tracker this project reads, or its tracker failed), and the tooltip
 lists each with why — a ref the epic names that is on no row would otherwise be
@@ -174,9 +174,9 @@ are not the same fact:
 |---|---|
 | **Waiting to be greeted.** | The page loaded under a second ago. A greeting may still come. |
 | **Nothing has told me anything.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. *An empty list would mean somebody went and looked and found no work. Nobody has looked.* |
-| **A roadmap is here, and it named no project folder.** | Framed, and `projectPath` was null. Not a fault. |
+| **A host is here, and it named no project folder.** | Framed, and `projectPath` was null. Not a fault. |
 | **Reading the trackers for \<project\>.** | The question is out, or the host is reading for the first time. The one honest whole-container wait. |
-| **The roadmap reads no tracker for this project.** | The reading has no sources. Not an empty tracker: nothing was read. |
+| **The host reads no tracker for this project.** | The reading has no sources. Not an empty tracker: nothing was read. |
 | **This project's tracker has nothing in it.** | A reading of named sources, containing nothing. The one genuinely empty list — and if a source failed, it says so rather than claiming there is no work. |
 
 And one the reader caused: **Nothing here matches what you asked for**, which
@@ -190,9 +190,9 @@ conversation with the host:
 
 | | heading | offers to ask again |
 |---|---|---|
-| `unknown-method` | This roadmap has no shared tracker reading. | no — asking twice will not teach it |
-| `refused` | The roadmap would not hand over its tracker reading. | yes, and shows the host's words |
-| `unreadable` | The roadmap's tracker reading could not be read. | yes |
+| `unknown-method` | This host has no shared tracker reading. | no — asking twice will not teach it |
+| `refused` | The host would not hand over its tracker reading. | yes, and shows the host's words |
+| `unreadable` | The host's tracker reading could not be read. | yes |
 
 A failure asking again over rows already on screen keeps the rows and says so
 above them.
@@ -294,14 +294,14 @@ is a question about what is left after the two controls have taken theirs.
 They used to be seven buttons and a text box in this app's own bar — `All ·
 Issues · Changes`, `Any · Open · Merged · Closed`, and a query input — with a
 whole essay about fitting them into 220 pixels and a `ResizeObserver` collapsing
-them behind one labelled trigger below 21rem. Every one is a `roadmap.filters`
+them behind one labelled trigger below 21rem. Every one is a `kehikot.filters`
 group now, drawn in the container's own header beside every other module's:
 **Scope** (above); **Kehikko**, which narrows to what is picked on the canvas
 while it is on (`Picked here`); **hide**; and the query — four, which is
 `LIMITS.FILTER_GROUPS`.
 
 **`hide` is the shared ref facets**, one `toggles` group from
-`roadmap-module-protocol/facets` where there used to be two single choices for
+`kehikot-module-protocol/facets` where there used to be two single choices for
 kind and state. A pair of single choices can only say a cell of their product,
 and what people wanted was "hide closed MRs/PRs, keep closed issues": a closed
 issue is usually finished work and a closed change usually abandoned. So each of
@@ -416,7 +416,7 @@ below 24rem rather than disappearing.
 A project name, a freshness line and a Refresh button used to wrap across a row
 of their own here, because none of the three shortens. All three moved.
 
-The refresh and the freshness are `roadmap.refreshable` now: this module says it
+The refresh and the freshness are `kehikot.refreshable` now: this module says it
 can be read again and **when its reading was taken** — the shared reading's own
 `at` — and the host draws the button, the sentence and an auto-refresh interval
 it stores per container. A press is `tracker.refresh`; see above.
@@ -456,7 +456,7 @@ to scroll. Each panel is now its own scroller inside the frame, which is the
 shape the list already had; see the note about `h-full` in `main.tsx`.
 
 Measured in Chromium at 220, 280, 320, 400 and 1200 pixels, in both themes,
-against the real tracker of `~/Projects/roadmap` — 83 issues and 63 pull
+against the real tracker of `~/Projects/kehikko` — 83 issues and 63 pull
 requests, 146 rows: no page scrolls sideways at any width, every row is in the
 document, and each failure state draws its own heading in both themes.
 
@@ -468,7 +468,7 @@ no clear button — an empty `refs` is a real call, and it is the only way to sa
 "nothing is selected".
 
 The selection this page draws is the one the host stated, never the one it asked
-for. `selection.set` goes out, the host relays it into the `roadmap.context` every
+for. `selection.set` goes out, the host relays it into the `kehikot.context` every
 framed module receives, and the tick appears when that comes back. Measured
 against the real host: one request per click, the context 45ms later, the tick
 25ms after that, and `data-selected` still `false` at the instant the context
@@ -506,8 +506,8 @@ decide would be this app guessing at a fact the tracker handed it.
 manifest.ts             what this app says about itself; parsed at load
 doors.ts                what this app answers, for one request; holds no socket
 vite.config.ts          the page, the manifest, the doors and one header, on one origin
-run.sh                  how a roadmap starts it, and how a person does
-src/wire/use-roadmap.ts the only place messages become state, and the only place a question is decided
+run.sh                  how a host starts it, and how a person does
+src/wire/use-kehikot.ts the only place messages become state, and the only place a question is decided
 src/live/ask.ts         tracker.get and tracker.refresh, and every way their answers can disappoint
 src/live/collect.ts     the shared reading's rows -> rows, and the promise that none is dropped
 src/live/sift.ts        the only place a row may be hidden, all three groups offered to the header, and why
@@ -515,7 +515,7 @@ src/live/order.ts       five orders, and where a value the reading lacks belongs
 src/live/keep.ts        the one setting this module still owns, and how it is distrusted
 src/live/sight.ts       the states of knowing
 src/view/               the row, the list, the table's heading, failing sources, and the words for absence
-dev/stub-host.ts        a roadmap that is not one, for looking at all of the above
+dev/stub-host.ts        a host that is not one, for looking at all of the above
 dev/measure.tsx         the numbers in this file
 ```
 

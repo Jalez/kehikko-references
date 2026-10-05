@@ -54,8 +54,8 @@ import { StateWord } from './state-word.tsx'
  * 196 available in a 220-pixel container.
  *
  * The tick is drawn from the canvas's selection as the host last stated it, not
- * from anything this row remembers — see `selection` in `use-roadmap.ts`. A row
- * ticked here was ticked by the roadmap.
+ * from anything this row remembers — see `selection` in `use-kehikot.ts`. A row
+ * ticked here was ticked by the host.
  *
  * ## One layout, sized by the container and not by the window
  *

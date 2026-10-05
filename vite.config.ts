@@ -4,8 +4,8 @@ import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
-import { WELL_KNOWN } from 'roadmap-module-protocol'
-import { serves } from 'roadmap-module-protocol/serve'
+import { LEGACY_WELL_KNOWN, WELL_KNOWN, legacyManifest } from 'kehikot-module-protocol'
+import { frameAncestors, serves } from 'kehikot-module-protocol/serve'
 
 import { MANIFEST, answer } from './doors.ts'
 import { ID, PREFERRED_PORT } from './manifest.ts'
@@ -40,6 +40,8 @@ function doors(): Plugin {
         /* Spelled by the protocol package so that this app and every host
            cannot disagree about it by a character. */
         if (path === WELL_KNOWN) return send(200, MANIFEST)
+        /* The same manifest in the spelling a host from before the rename asks for. */
+        if (path === LEGACY_WELL_KNOWN) return send(200, legacyManifest(MANIFEST))
 
         /*
          * The page, served here rather than left to Vite's own index handling,
@@ -50,8 +52,9 @@ function doors(): Plugin {
          * what makes `frame-ancestors` mean something: without this line any
          * page anywhere could frame this one, and an origin that answers a
          * credentialed door should not also be silently embeddable. It is
-         * deliberately not a list of one — whoever runs this decides, through
-         * `ROADMAP_ORIGIN`, and the default is the address the host in this
+         * deliberately not a list of one — whoever runs this decides,
+         * through `frameAncestors()` (`KEHIKOT_ORIGINS`, falling back to
+         * `ROADMAP_ORIGIN`), and the default is every address a host in this
          * workspace actually serves on. `'self'` is in it so that opening this
          * page directly on its own port still works.
          *
@@ -63,7 +66,7 @@ function doors(): Plugin {
          * browser and this app never hears about it. A development harness that
          * silently stops working the moment somebody adds a security header is a
          * harness people stop trusting, so the one loopback port it runs on is
-         * named. Anybody who does not want it sets `ROADMAP_ORIGIN`.
+         * named. Anybody who does not want it sets `KEHIKOT_ORIGINS`, which `frameAncestors()` reads first (the stub is appended either way).
          *
          * The document still goes through `transformIndexHtml`, so Vite's
          * client and the module graph are injected exactly as they would be for
@@ -75,10 +78,7 @@ function doors(): Plugin {
             .then((html) => {
               response.statusCode = 200
               response.setHeader('content-type', 'text/html; charset=utf-8')
-              response.setHeader(
-                'content-security-policy',
-                `frame-ancestors 'self' ${process.env.ROADMAP_ORIGIN ?? 'http://127.0.0.1:4181 http://localhost:4181 http://127.0.0.1:7821'}`,
-              )
+              response.setHeader('content-security-policy', `${frameAncestors()} http://127.0.0.1:7821`)
               response.end(html)
             })
             .catch(next)
@@ -142,8 +142,8 @@ function doors(): Plugin {
  *
  * ## `base: './'`
  *
- * This page is served at `/` here and framed by a roadmap at whatever address
- * that roadmap wrote down — behind a proxy, on another port, under a path
+ * This page is served at `/` here and framed by a host at whatever address
+ * that host wrote down — behind a proxy, on another port, under a path
  * nobody here chose. Absolute asset paths are correct in the first case and a
  * guess in the second; relative ones are a fact in both, because the browser
  * resolves them against the document it just fetched.
@@ -159,10 +159,10 @@ function doors(): Plugin {
  * A free 7820 is taken in silence, so the `curl` line above still means what it
  * says. This app already answering there ends the start cleanly rather than
  * making a second copy of it. Anything else is a loud move to the next free
- * port, with `~/.roadmap/modules` rewritten to the port the server ACTUALLY
+ * port, with `~/Library/Application Support/Kehikot/modules` rewritten to the port the server ACTUALLY
  * bound — read off `httpServer.address()` after `listening` rather than off what
  * was asked for, because a registration naming a port this app has drifted off
- * is one a roadmap sweeps to find nothing.
+ * is one a host sweeps to find nothing.
  */
 export default defineConfig({
   base: './',

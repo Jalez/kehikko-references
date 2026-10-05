@@ -1,4 +1,4 @@
-import { LIMITS, type Disposition, type FilterChoice, type FilterGroup } from 'roadmap-module-protocol'
+import { LIMITS, type Disposition, type FilterChoice, type FilterGroup } from 'kehikot-module-protocol'
 import {
   HIDE_GROUP,
   countFacets,
@@ -9,7 +9,7 @@ import {
   sift as siftFacets,
   type Facet,
   type Sighting,
-} from 'roadmap-module-protocol/facets'
+} from 'kehikot-module-protocol/facets'
 
 import type { Reference } from './reference.ts'
 
@@ -37,7 +37,7 @@ import type { Reference } from './reference.ts'
  *
  * **Fourth, and this is what the code does now:** the two single-choice groups
  * for kind and state are gone, replaced by ONE `toggles` group built from the
- * shared ref facets in `roadmap-module-protocol/facets`, and the group that
+ * shared ref facets in `kehikot-module-protocol/facets`, and the group that
  * frees is spent on a scope that is on by default.
  *
  * Two reasons, either of which would have been enough. A pair of single
@@ -462,7 +462,7 @@ export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] 
   const narrowed = rows.filter((row) => {
     /* Exact strings, on both sides. `gh#41` and `#41` are two different
        references, and every module on this canvas spells them the way this
-       list draws them — see `select` in `use-roadmap.ts` — so normalising here
+       list draws them — see `select` in `use-kehikot.ts` — so normalising here
        would show a row for a pick that was never about it. */
     if (scope && !scope.has(row.ref)) return false
     if (picked && !picked.has(row.ref)) return false

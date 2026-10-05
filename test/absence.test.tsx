@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, render, screen } from '@testing-library/react'
 
-import type { TrackerSource } from 'roadmap-module-protocol'
+import type { TrackerSource } from 'kehikot-module-protocol'
 
 import type { Held, Trouble, TroubleKind } from '@/live/sight.ts'
 import {
@@ -79,9 +79,9 @@ describe('nothing has told me anything', () => {
     expect(said.toLowerCase()).not.toContain('no results')
   })
 
-  test('names where the rows would have come from: the roadmap’s reading of both trackers', () => {
+  test('names where the rows would have come from: the host’s reading of both trackers', () => {
     render(<Unhosted />)
-    expect(document.body.textContent).toContain('the roadmap’s reading of one')
+    expect(document.body.textContent).toContain('the host’s reading of one')
     expect(document.body.textContent).toContain('GitHub and GitLab')
   })
 })
@@ -95,24 +95,24 @@ describe('the absences are different sentences', () => {
     expect(screen.queryByText('Waiting to be greeted.')).toBeNull()
   })
 
-  test('a roadmap with no project folder says so, and does not offer to pick one', () => {
+  test('a host with no project folder says so, and does not offer to pick one', () => {
     /* The old page offered an epic picker in the equivalent state. Which project
        a canvas stands in is the host's, and a container offering to change it would
        be one corner steering the whole canvas. */
     render(<NoProject />)
-    expect(screen.getByText('A roadmap is here, and it named no project folder.')).toBeTruthy()
+    expect(screen.getByText('A host is here, and it named no project folder.')).toBeTruthy()
     expect(document.body.textContent).toContain('That is not a fault.')
     expect(document.querySelectorAll('button')).toHaveLength(0)
   })
 
   test('asking is the one honest wait, and says why', () => {
-    render(<Asking project="/Users/somebody/Projects/roadmap" />)
-    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
+    render(<Asking project="/Users/somebody/Projects/kehikko" />)
+    expect(screen.getByText('Reading the trackers for kehikko.')).toBeTruthy()
     expect(document.body.textContent).toContain('the one wait on this page that means an answer is coming')
   })
 
   test('an empty tracker is an answer rather than a gap, names what was read, and dates itself', () => {
-    render(<NothingFound project="/Users/x/roadmap" reading={held({ at: '2026-08-27T10:00:00Z' })} />)
+    render(<NothingFound project="/Users/x/kehikko" reading={held({ at: '2026-08-27T10:00:00Z' })} />)
     expect(screen.getByText('This project’s tracker has nothing in it.')).toBeTruthy()
     expect(document.body.textContent).toContain('This one is an answer rather than a gap.')
     expect(document.body.textContent).toContain('github.com/example/repo')
@@ -121,13 +121,13 @@ describe('the absences are different sentences', () => {
 
   test('a reading with no date says nothing about a date', () => {
     render(<NothingFound project="/x" reading={held({ at: null })} />)
-    expect(document.body.textContent).toContain('The roadmap read')
+    expect(document.body.textContent).toContain('The host read')
     expect(document.body.textContent).not.toContain('the reading is dated')
   })
 
-  test('a roadmap that reads no tracker for the project says that, which is not an empty tracker', () => {
+  test('a host that reads no tracker for the project says that, which is not an empty tracker', () => {
     render(<NothingFound project="/x" reading={held({ sources: [] })} />)
-    expect(screen.getByText('The roadmap reads no tracker for this project.')).toBeTruthy()
+    expect(screen.getByText('The host reads no tracker for this project.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('genuinely no work filed')
   })
 
@@ -176,11 +176,11 @@ describe('the failures are told apart, one sentence each', () => {
     render(
       <Troubled
         project="/x"
-        trouble={trouble('refused', 'roadmap.references may not read trackers.')}
+        trouble={trouble('refused', 'kehikot.references may not read trackers.')}
         again={() => {}}
       />,
     )
-    expect(document.body.textContent).toContain('roadmap.references may not read trackers.')
+    expect(document.body.textContent).toContain('kehikot.references may not read trackers.')
   })
 
   test('anything more the host said is shown rather than summarised, and never on its own', () => {
@@ -195,8 +195,8 @@ describe('the failures are told apart, one sentence each', () => {
   })
 
   test('the whole project path is on screen', () => {
-    render(<Troubled project="/Users/x/Projects/roadmap" trouble={trouble('refused')} again={() => {}} />)
-    expect(document.body.textContent).toContain('/Users/x/Projects/roadmap')
+    render(<Troubled project="/Users/x/Projects/kehikko" trouble={trouble('refused')} again={() => {}} />)
+    expect(document.body.textContent).toContain('/Users/x/Projects/kehikko')
   })
 
   test('asking again is offered unless the host has never heard of the question', () => {
@@ -288,12 +288,12 @@ describe('the list is narrowed to what the kehikko picked, and that reaches noth
 
 describe('what this page calls a project', () => {
   test('the last segment, which is what a person calls it', () => {
-    expect(projectName('/Users/somebody/Projects/roadmap')).toBe('roadmap')
-    expect(projectName('/Users/somebody/Projects/roadmap/')).toBe('roadmap')
+    expect(projectName('/Users/somebody/Projects/kehikko')).toBe('kehikko')
+    expect(projectName('/Users/somebody/Projects/kehikko/')).toBe('kehikko')
   })
 
   test('a path with nothing to shorten is left alone rather than emptied', () => {
-    expect(projectName('roadmap')).toBe('roadmap')
+    expect(projectName('kehikko')).toBe('kehikko')
     expect(projectName('/')).toBe('/')
   })
 })

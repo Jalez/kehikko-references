@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
-import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
+import { MESSAGE, PROTOCOL } from 'kehikot-module-protocol'
 
 /**
- * A roadmap that is not a roadmap, for looking at this app the way it is
+ * A host that is not a host, for looking at this app the way it is
  * actually used.
  *
  *   bun run dev/stub-host.ts                      # then open http://127.0.0.1:7821
- *   http://127.0.0.1:7821/?project=/Users/x/Projects/roadmap
+ *   http://127.0.0.1:7821/?project=/Users/x/Projects/kehikko
  *   http://127.0.0.1:7821/?project=               # a host that named no folder
- *   http://127.0.0.1:7821/?project=/Users/x/Projects/roadmap&narrow=1
+ *   http://127.0.0.1:7821/?project=/Users/x/Projects/kehikko&narrow=1
  *   http://127.0.0.1:7821/?tracker=failing      # a GitLab source whose last read failed
  *   http://127.0.0.1:7821/?tracker=empty        # a project the host reads no tracker for
  *   http://127.0.0.1:7821/?tracker=old          # a host that has never heard of tracker.get
@@ -60,7 +60,7 @@ const MODULE = process.env.MODULE_URL ?? 'http://127.0.0.1:7820/'
 const DEFAULT_PROJECT = process.env.STUB_PROJECT ?? process.cwd()
 
 const page = `<!doctype html>
-<html><head><meta charset="utf-8"><title>a stub roadmap</title>
+<html><head><meta charset="utf-8"><title>a stub host</title>
 <style>
   body { font: 13px system-ui; margin: 0; background: #fafafa; color: #111 }
   header { padding: 8px 12px; border-bottom: 1px solid #ddd; display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap }
@@ -71,7 +71,7 @@ const page = `<!doctype html>
 </style></head>
 <body>
   <header>
-    <strong>stub roadmap</strong>
+    <strong>stub host</strong>
     <span id="what"></span>
     <button id="walk">goto gh#7</button>
     <span id="picked"></span>
@@ -365,7 +365,7 @@ const page = `<!doctype html>
       if (q.get('pinned')) {
         frame.contentWindow.postMessage({
           type: '${MESSAGE.RESPONSE}', id: d.id, ok: false, reason: 'failed',
-          error: 'roadmap.references is pinned, so it would not be told about the change it is asking for.'
+          error: 'kehikot.references is pinned, so it would not be told about the change it is asking for.'
         }, '*');
         return;
       }
@@ -410,4 +410,4 @@ Bun.serve({
   fetch: () => new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } }),
 })
 
-console.log(`stub roadmap: http://127.0.0.1:${PORT}  (framing ${MODULE})`)
+console.log(`stub host: http://127.0.0.1:${PORT}  (framing ${MODULE})`)

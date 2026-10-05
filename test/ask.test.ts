@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { TRACKER_REFRESH_WITHIN_MS, methodParams, methodResults } from 'roadmap-module-protocol'
-import { HostRefused } from 'roadmap-module-protocol/client'
+import { TRACKER_REFRESH_WITHIN_MS, methodParams, methodResults } from 'kehikot-module-protocol'
+import { HostRefused } from 'kehikot-module-protocol/client'
 
 import { askReading, askRefresh, type Ask } from '@/live/ask.ts'
 import { reading, row } from './fixtures.ts'
@@ -76,8 +76,8 @@ describe('asking for the reading', () => {
   })
 
   test('a host that says no is quoted', async () => {
-    const got = await askReading(host(refuse('failed', 'roadmap.references may not read trackers.')).ask)
-    expect(got).toMatchObject({ ok: false, trouble: { kind: 'refused', why: 'roadmap.references may not read trackers.' } })
+    const got = await askReading(host(refuse('failed', 'kehikot.references may not read trackers.')).ask)
+    expect(got).toMatchObject({ ok: false, trouble: { kind: 'refused', why: 'kehikot.references may not read trackers.' } })
   })
 
   test('an answer that is not a reading is a version mismatch, in words', async () => {

@@ -5,8 +5,8 @@ import {
   trackerSourceSchema,
   type TrackerMissing,
   type TrackerSource,
-} from 'roadmap-module-protocol'
-import { HostRefused, type AskOptions } from 'roadmap-module-protocol/client'
+} from 'kehikot-module-protocol'
+import { HostRefused, type AskOptions } from 'kehikot-module-protocol/client'
 import { z } from 'zod'
 
 import type { Held, Trouble } from './sight.ts'
@@ -55,15 +55,15 @@ export function troubleFrom(error: unknown): Trouble {
     if (error.refusal.reason === 'unknown-method') {
       return {
         kind: 'unknown-method',
-        why: 'This roadmap does not hand out a shared tracker reading, so there is nothing for this list to show.',
+        why: 'This host does not hand out a shared tracker reading, so there is nothing for this list to show.',
         said: error.refusal.error || null,
       }
     }
-    return { kind: 'refused', why: error.refusal.error || 'The roadmap would not hand over its tracker reading, and did not say why.', said: null }
+    return { kind: 'refused', why: error.refusal.error || 'The host would not hand over its tracker reading, and did not say why.', said: null }
   }
   return {
     kind: 'unreadable',
-    why: 'This app failed while reading the roadmap’s answer.',
+    why: 'This app failed while reading the host’s answer.',
     said: error instanceof Error ? error.message : null,
   }
 }
@@ -91,7 +91,7 @@ export async function askReading(ask: Ask): Promise<{ ok: true; reading: Held } 
       ok: false,
       trouble: {
         kind: 'unreadable',
-        why: 'The roadmap answered with something this app cannot read as a tracker reading, which means the two are a version apart.',
+        why: 'The host answered with something this app cannot read as a tracker reading, which means the two are a version apart.',
         said: null,
       },
     }
@@ -139,6 +139,6 @@ export async function askRefresh(ask: Ask): Promise<string | null> {
   if (said.data.outcome === 'read') return null
   if (said.data.why) return said.data.why
   return said.data.outcome === 'declined'
-    ? 'The roadmap declined to read the trackers again.'
-    : 'The roadmap could not read every tracker again; the rows below are as each was last read.'
+    ? 'The host declined to read the trackers again.'
+    : 'The host could not read every tracker again; the rows below are as each was last read.'
 }

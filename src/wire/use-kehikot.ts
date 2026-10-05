@@ -8,19 +8,19 @@ import {
   type Disposition,
   type FilterChoice,
   type FilterGroup,
-} from 'roadmap-module-protocol'
+} from 'kehikot-module-protocol'
 import {
   HostRefused,
   connect,
   type Connection,
   type HostEvents,
   type Refusal,
-} from 'roadmap-module-protocol/client'
+} from 'kehikot-module-protocol/client'
 
 /**
  * The bridge, as one React value.
  *
- * `roadmap-module-protocol/client` is the wire and knows no React; this is the
+ * `kehikot-module-protocol/client` is the wire and knows no React; this is the
  * only file that turns messages into state, and it is deliberately the only
  * one. Two places driving a `Sight` would eventually disagree about which state
  * a page is in, and "which absence is this" is the one question this app cannot
@@ -74,7 +74,7 @@ const GREETING_GRACE_MS = 700
  */
 export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: string }
 
-export interface Roadmap {
+export interface Kehikot {
   sight: Sight
   /**
    * Whether anything is being read right now: this page asking the host for
@@ -122,7 +122,7 @@ export interface Roadmap {
    * broken: a selection is a fact about the canvas, in the same family as which
    * project is open, and the host owns it. This page asks for a change and then
    * finds out what happened the same way every other framed module does —
-   * through `roadmap.context`.
+   * through `kehikot.context`.
    *
    * The alternative, an optimistic local copy corrected by the echo, would draw
    * a tick for a selection the host had not made, and the two would disagree
@@ -170,7 +170,7 @@ export interface Roadmap {
    *
    * Fire and forget, like `resize`: the host may draw it, may draw part of it,
    * or may never have heard of the idea. What comes back is not an answer but a
-   * `roadmap.context` with `filters` in it, which is where `chosen` above comes
+   * `kehikot.context` with `filters` in it, which is where `chosen` above comes
    * from — including the first time, out of the greeting.
    *
    * Sent unconditionally. A page with no host posts into nothing, which costs
@@ -239,10 +239,10 @@ export interface Roadmap {
    *
    * The epic lives in `.kehikot/roadmap/epics/<slug>.json` under the project,
    * and this app's own server could read it there. It does not, because the
-   * file is the ROADMAP's, and the host already answers `steps.list` and
+   * file is the host's, and the host already answers `steps.list` and
    * `epic.get` out of it: a second reader of somebody else's file is a second
    * answer to what the epic says, and it would be wrong the first time the
-   * roadmap moved where it keeps them. So this module declares `steps:read`
+   * host moved where it keeps them. So this module declares `steps:read`
    * and `epics:read` and asks, and a host that refuses both leaves this `null`
    * — which the scope reads as "nothing to narrow to", never as "the epic names
    * nothing".
@@ -277,7 +277,7 @@ export interface Roadmap {
  */
 export type GotoHandler = NonNullable<HostEvents['onGoto']>
 
-export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
+export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   const [sight, setSight] = useState<Sight>({ at: 'listening' })
   const [asked, setAsked] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -652,7 +652,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
 
   const resize = useCallback((height: number) => host.current?.resize(height), [])
 
-  /* Sent whether or not anybody is listening. See `offerFilters` on `Roadmap`. */
+  /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
   const offerFilters = useCallback((groups: FilterGroup[]) => host.current?.filters(groups), [])
 
   /* And the same, for the state that makes the host's refresh control possible.
@@ -674,7 +674,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
    *   whole. `HostRefused` is what `request` rejects with, always, and anything
    *   else coming out of that promise is this page failing rather than the host
    *   declining — so it gets its own sentence rather than being reported as the
-   *   roadmap's answer.
+   *   host's answer.
    * - **A success.** Parsed, because `request` resolves `unknown` by design:
    *   the protocol is explicit that a client asserting a shape here would be
    *   asserting something no host promised. An answer that does not carry a
@@ -688,12 +688,12 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
       const answer = await current.request('filters.set', { filters })
       const held = filterChoiceSchema.safeParse((answer as { filters?: unknown } | null)?.filters)
       if (!held.success) {
-        return { ok: false, why: 'The roadmap answered that request in a shape this app could not read.' }
+        return { ok: false, why: 'The host answered that request in a shape this app could not read.' }
       }
       return { ok: true, filters: held.data }
     } catch (error) {
       if (error instanceof HostRefused) return { ok: false, why: error.refusal.error }
-      return { ok: false, why: 'This app failed while reading the roadmap’s answer.' }
+      return { ok: false, why: 'This app failed while reading the host’s answer.' }
     }
   }, [])
 
@@ -714,7 +714,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
    *
    * The obvious next line — `setSelection(refs)` — is the bug this whole design
    * is arranged to avoid, and it would look like an improvement. See `selection`
-   * on `Roadmap` above. What comes back through `roadmap.context` is the answer;
+   * on `Kehikot` above. What comes back through `kehikot.context` is the answer;
    * what went out is a request.
    *
    * An empty list is a real call rather than an absence: "nothing is selected"
@@ -733,7 +733,7 @@ export function useRoadmap(id: string, onGoto: GotoHandler): Roadmap {
       setSelectionRefused(
         error instanceof HostRefused
           ? error.refusal
-          : { reason: 'failed', error: 'This app failed while reading the roadmap’s answer.' },
+          : { reason: 'failed', error: 'This app failed while reading the host’s answer.' },
       )
     })
   }, [])
@@ -860,7 +860,7 @@ export function namedBy(steps: unknown, epic: unknown): string[] {
 
 /**
  * What the picked-out containers are showing, as one list, or `null` when no
- * container other than this one is picked out. See `aimed` on `Roadmap`.
+ * container other than this one is picked out. See `aimed` on `Kehikot`.
  */
 export function aimedAt(containers: readonly CanvasContainer[], self: string): string[] | null {
   const picked = containers.filter((container) => container.selected && container.module !== self)

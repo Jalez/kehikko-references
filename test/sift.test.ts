@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { LIMITS, filterGroupSchema, filtersSchema, MESSAGE, type Disposition } from 'roadmap-module-protocol'
+import { LIMITS, filterGroupSchema, filtersSchema, MESSAGE, type Disposition } from 'kehikot-module-protocol'
 
 import type { Reference } from '@/live/reference.ts'
 import {

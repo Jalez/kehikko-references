@@ -6,7 +6,7 @@ import { ReferenceList } from '@/view/reference-list.tsx'
 import { Heading, ageOf } from '@/view/heading.tsx'
 import { row } from './fixtures.ts'
 
-const PROJECT = '/Users/somebody/Projects/roadmap'
+const PROJECT = '/Users/somebody/Projects/kehikko'
 
 /**
  * What a narrow container is allowed to take away, and what it is not.
@@ -150,7 +150,7 @@ describe('what a narrow container hides is still reachable', () => {
  *
  * Everything the toolbar drew is somewhere else — the filters and the query in
  * the container's own header, the refresh and the freshness line as
- * `roadmap.refreshable`, the order on the columns it orders — except the count,
+ * `kehikot.refreshable`, the order on the columns it orders — except the count,
  * which could not move because the host cannot count rows it does not render.
  *
  * So what is worth holding here is what the old bar's tests held, translated:
