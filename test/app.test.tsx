@@ -4,7 +4,7 @@ import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
 import { mailbox } from 'roadmap-module-protocol/client'
 
 import { App } from '@/app.tsx'
-import type { Fetcher } from '@/live/ask.ts'
+import { reading as readingOf, row } from './fixtures.ts'
 
 /**
  * The whole app, against a roadmap that is not there and then one that is.
@@ -45,10 +45,34 @@ const OTHER = '/Users/somebody/Projects/kehikko'
 /** What a host holds for a container: a word per choice group, a list per toggles group. */
 type Choice = Record<string, string | string[]>
 
+/** How a stand-in host answers one question: data, or a refusal with its reason. */
+type Answer = { ok: true; data: unknown } | { ok: false; reason?: 'failed' | 'unknown-method'; error: string }
+
+/**
+ * The host's shared tracker reading, per project, and a record of every time
+ * it was asked for.
+ *
+ * `answers` is looked up by the project the stand-in host is standing in, so a
+ * test can move the reader between two projects and prove the list moved with
+ * them. A project nobody listed answers with a reading of no sources, which is
+ * the honest thing for a folder nobody set a tracker up for. `'hold'` answers
+ * nothing, so a case can answer late with `roadmap.answer`.
+ */
+function stubDoor(answers: Record<string, Answer | 'hold'>, refresh: Answer | 'hold' = REFRESHED) {
+  const seen: { project: string | null }[] = []
+  return { seen, reads: () => seen.length, answers, refresh }
+}
+type Door = ReturnType<typeof stubDoor>
+
+/** What a host says when a refresh read everything. */
+const REFRESHED: Answer = { ok: true, data: { outcome: 'read', at: '2026-08-27T09:13:00Z', why: '' } }
+
 /** Something to be greeted by, and to read what the page says back to it. */
-function stubRoadmap() {
+function stubRoadmap(door: Door = stubDoor({})) {
   const said: Record<string, unknown>[] = []
-  const source = { postMessage: (message: Record<string, unknown>) => said.push(message) }
+  /* Which project the host last said it was standing in: `tracker.get` asks
+     for `project: true`, and the host knows which project that is. */
+  let standing: string | null = null
 
   const post = (data: unknown) => {
     const event = new MessageEvent('message', { data, origin: 'http://localhost:7777' })
@@ -57,6 +81,31 @@ function stubRoadmap() {
        of stage machinery in the file. */
     Object.defineProperty(event, 'source', { value: source })
     window.dispatchEvent(event)
+  }
+  const respond = (id: string, outcome: Answer) =>
+    post(
+      outcome.ok
+        ? { type: MESSAGE.RESPONSE, id, ok: true, data: outcome.data }
+        : { type: MESSAGE.RESPONSE, id, ok: false, reason: outcome.reason ?? 'failed', error: outcome.error },
+    )
+
+  /* The two tracker questions are answered by the stand-in itself, a
+     microtask later, the way a host answers from what it holds. */
+  const source = {
+    postMessage: (message: Record<string, unknown>) => {
+      said.push(message)
+      if (message.type !== MESSAGE.REQUEST) return
+      const id = message.id as string
+      if (message.method === 'tracker.get') {
+        door.seen.push({ project: standing })
+        const outcome = (standing && door.answers[standing]) || { ok: true, data: readingOf([], { sources: [] }) }
+        if (outcome !== 'hold') queueMicrotask(() => respond(id, outcome))
+      }
+      if (message.method === 'tracker.refresh' && door.refresh !== 'hold') {
+        const outcome = door.refresh
+        queueMicrotask(() => respond(id, outcome))
+      }
+    },
   }
 
   return {
@@ -67,14 +116,16 @@ function stubRoadmap() {
       selection: string[] = [],
       filters: Choice = {},
       more: Record<string, unknown> = {},
-    ) =>
+    ) => {
+      standing = projectPath
       post({
         type: MESSAGE.HELLO,
         protocol: PROTOCOL,
         session: 'test-1',
         context: { epic: 'an-epic', project: 'roadmap', projectPath, theme: 'light', selection, filters, ...more },
         state: kept,
-      }),
+      })
+    },
     /**
      * A later context, which is what the host sends after any `selection.set`
      * and when the reader moves. It carries no `state`: a module's own kept
@@ -87,7 +138,8 @@ function stubRoadmap() {
       epic: string | null = 'an-epic',
       filters: Choice = {},
       more: Record<string, unknown> = {},
-    ) =>
+    ) => {
+      standing = projectPath
       post({
         type: MESSAGE.CONTEXT,
         protocol: PROTOCOL,
@@ -98,7 +150,8 @@ function stubRoadmap() {
         selection,
         filters,
         ...more,
-      }),
+      })
+    },
     goto: (ref: string) => post({ type: MESSAGE.GOTO, id: 'walk-1', ref }),
     /**
      * Answer the most recent request of one method, the way a host does.
@@ -111,18 +164,14 @@ function stubRoadmap() {
      */
     answer: (
       method: string,
-      outcome: { ok: true; data: unknown } | { ok: false; error: string },
+      outcome: Answer,
       /* The first rather than the most recent, to answer a question late. */
       which: 'last' | 'first' = 'last',
     ) => {
       const asking = (message: Record<string, unknown>) => message.type === MESSAGE.REQUEST && message.method === method
       const asked = (which === 'first' ? said.find(asking) : said.findLast(asking)) as { id: string } | undefined
       if (!asked) throw new Error(`nothing asked ${method}`)
-      post(
-        outcome.ok
-          ? { type: MESSAGE.RESPONSE, id: asked.id, ok: true, data: outcome.data }
-          : { type: MESSAGE.RESPONSE, id: asked.id, ok: false, reason: 'failed', error: outcome.error },
-      )
+      respond(asked.id, outcome)
     },
     /**
      * The host's refresh control, or an interval it is running. Neither says
@@ -149,64 +198,25 @@ function stubRoadmap() {
 const ticked = () =>
   [...document.querySelectorAll('li[data-ref][data-selected="true"]')].map((li) => li.getAttribute('data-ref'))
 
-/** A reading with `count` GitHub issues in it, in the shape the door hands back. */
-function reading(count: number, generated = '2026-08-27T09:12:00Z') {
-  const ghIssues: Record<string, unknown> = {}
-  for (let n = 1; n <= count; n += 1) {
-    ghIssues[`gh#${n}`] = {
-      state: n % 4 === 0 ? 'closed' : 'opened',
-      title: `the thing that has to become true, number ${n}`,
-      at: '2026-08-20T10:00:00Z',
-      url: `https://github.com/example/repo/issues/${n}`,
-      assignees: ['ada lovelace'],
-    }
-  }
-  return { generated, issues: {}, mrs: {}, ghIssues, ghPrs: {} }
+/** The rows of a reading with `count` GitHub issues in it, every fourth closed. */
+function issues(count: number) {
+  return Array.from({ length: count }, (_, at) =>
+    row(`gh#${at + 1}`, { state: (at + 1) % 4 === 0 ? 'closed' : 'open', assignees: ['ada lovelace'] }),
+  )
 }
 
-/**
- * A door, and a record of every read asked of it.
- *
- * `answers` is looked up by project, so a test can move the reader between two
- * projects and prove the list moved with them. Anything unlisted answers with a
- * `not-a-repo`, which is the honest thing for a folder nobody set up.
- */
-function stubDoor(answers: Record<string, unknown>) {
-  const seen: { project: string; fresh: boolean }[] = []
-  const fetcher: Fetcher = (url) => {
-    const query = new URLSearchParams(url.split('?')[1] ?? '')
-    const project = query.get('project') ?? ''
-    seen.push({ project, fresh: query.get('fresh') === '1' })
-    const body = answers[project] ?? {
-      ok: true,
-      project,
-      reading: null,
-      from: null,
-      trouble: 'not-a-repo',
-      why: 'This project is not a git repository.',
-      said: null,
-    }
-    return Promise.resolve(new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }))
-  }
-  return { fetcher, seen, reads: () => seen.length }
-}
-
-/** What a door says when a read worked. */
-const answered = (rows: number, from: 'gh' | 'cache' = 'gh', generated?: string) => ({
+/** What a host says when its reading holds `count` issues. */
+const answered = (count: number, more: Record<string, unknown> = {}): Answer => ({
   ok: true,
-  project: PROJECT,
-  reading: reading(rows, generated),
-  from,
-  trouble: null,
-  why: null,
-  said: null,
+  data: readingOf(issues(count), more),
 })
 
-const settle = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
+/* A macrotask, so every answer the stand-in queued has landed and been drawn. */
+const settle = () => act(async () => { await new Promise((done) => setTimeout(done, 0)) })
 
 describe('with nothing on the other end', () => {
   test('it says nothing has told it anything, and never draws an empty list', async () => {
-    render(<App fetcher={stubDoor({}).fetcher} />)
+    render(<App />)
     /* Before the grace passes it says what it is waiting for. */
     expect(screen.getByText('Waiting to be greeted.')).toBeTruthy()
     await act(async () => {
@@ -216,37 +226,49 @@ describe('with nothing on the other end', () => {
     expect(document.querySelectorAll('li')).toHaveLength(0)
     expect(document.body.textContent).toContain('Nobody has looked.')
   })
-
-  test('nothing is read, because nothing has said where to read from', async () => {
-    const door = stubDoor({})
-    render(<App fetcher={door.fetcher} />)
-    await act(async () => {
-      await new Promise((done) => setTimeout(done, 800))
-    })
-    expect(door.reads()).toBe(0)
-  })
 })
 
 describe('with a roadmap answering', () => {
-  test('the greeting is answered and the project in it is read', async () => {
+  test('the greeting is answered and the host’s reading of the project is asked for', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     expect(roadmap.said[0]).toMatchObject({ type: MESSAGE.READY, id: 'roadmap.references' })
-    /* Nothing is asked of the HOST for the rows any more. `live.get` is gone,
-       and this assertion is what would catch it coming back. What IS asked is
-       what the open epic names, for the scope — and nothing else. */
-    expect(roadmap.asked().sort()).toEqual(['epic.get', 'steps.list'])
-    expect(door.seen).toEqual([{ project: PROJECT, fresh: false }])
-    expect(screen.getByText('Reading the tracker in roadmap.')).toBeTruthy()
+    /* The rows are the host's shared reading, asked for the whole project; the
+       epic's refs are asked for the scope. `live.get` is gone, and nothing reads
+       a tracker from this page. */
+    expect(roadmap.asked().sort()).toEqual(['epic.get', 'steps.list', 'tracker.get'])
+    expect(roadmap.calls('tracker.get')).toEqual([{ project: true }])
+    expect(door.seen).toEqual([{ project: PROJECT }])
+    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
     await settle()
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
+  })
+
+  test('GitHub and GitLab refs list together, from the one reading', async () => {
+    const roadmap = stubRoadmap(
+      stubDoor({
+        [PROJECT]: {
+          ok: true,
+          data: readingOf([row('gh#1'), row('#2'), row('!3', { state: 'merged' })]),
+        },
+      }),
+    )
+    render(<App />)
+    act(() => roadmap.greet(PROJECT))
+    await settle()
+    expect([...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref')).sort()).toEqual([
+      '!3',
+      '#2',
+      'gh#1',
+    ])
+    expect(document.querySelector('li[data-ref="!3"]')?.getAttribute('title')).toContain('merge request')
   })
 
   test('four hundred references become four hundred rows, with the count on screen', async () => {
-    const door = stubDoor({ [PROJECT]: answered(400) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(400) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li')).toHaveLength(400)
@@ -255,27 +277,21 @@ describe('with a roadmap answering', () => {
     expect(document.body.textContent).toContain('400 references')
   })
 
-  test('when the reading was taken is announced to the host, not left for it to guess', async () => {
-    /* The three sentences the old header drew — `read <when>`, `last read
-       <when>`, `this reading is not dated` — are this one field plus the host's
-       formatting. It has to come from here, because only this side knows the
-       reading came out of the cache beside the project rather than off GitHub
-       just now. */
-    const door = stubDoor({ [PROJECT]: answered(3, 'cache') })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+  test('the reading’s own date is announced to the host, not the moment it was asked', async () => {
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(3) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     const said = roadmap.refreshable()
     expect(said?.can).toBe(true)
     expect(said?.busy).toBe(false)
-    expect(Date.parse(String(said?.at))).toBe(Date.parse('2026-08-27T09:12:00Z'))
+    expect(said?.at).toBe('2026-08-27T09:12:00Z')
   })
 
   test('a context with no project folder says so rather than drawing an empty list', async () => {
     const door = stubDoor({})
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(null))
     await settle()
     expect(screen.getByText('A roadmap is here, and it named no project folder.')).toBeTruthy()
@@ -284,62 +300,79 @@ describe('with a roadmap answering', () => {
   })
 
   test('a tracker with nothing in it is an answer rather than a gap', async () => {
-    const door = stubDoor({ [PROJECT]: answered(0) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(0) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(screen.getByText('This project’s tracker has nothing in it.')).toBeTruthy()
   })
 
-  test('a failed read with nothing cached is drawn as its own failure', async () => {
-    const door = stubDoor({
-      [PROJECT]: {
-        ok: true,
-        project: PROJECT,
-        reading: null,
-        from: null,
-        trouble: 'unauthenticated',
-        why: 'The GitHub CLI on this machine is not logged in.',
-        said: 'gh auth login',
-      },
-    })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+  test('a reading with nothing in it YET, and a read under way, is a wait rather than an empty tracker', async () => {
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: { ok: true, data: readingOf([], { at: null, refreshing: true }) } }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
-    expect(screen.getByText('This machine is not logged in to GitHub.')).toBeTruthy()
-    expect(document.body.textContent).toContain('gh auth login')
-    expect(document.querySelectorAll('li')).toHaveLength(0)
+    expect(screen.getByText('Reading the trackers for roadmap.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('has nothing in it')
   })
 
-  test('a failed read over a cache shows the rows AND says they are not current', async () => {
-    /* The state the whole caching design exists to be able to draw. Neither of
+  test('a host that will not hand over its reading is quoted, with a way to ask again', async () => {
+    const roadmap = stubRoadmap(
+      stubDoor({ [PROJECT]: { ok: false, error: 'roadmap.references may not read trackers.' } }),
+    )
+    render(<App />)
+    act(() => roadmap.greet(PROJECT))
+    await settle()
+    expect(screen.getByText('The roadmap would not hand over its tracker reading.')).toBeTruthy()
+    expect(document.body.textContent).toContain('roadmap.references may not read trackers.')
+    expect(document.querySelectorAll('li')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Ask again' })).toBeTruthy()
+  })
+
+  test('a host older than the shared reading says so, and offers nothing to press', async () => {
+    /* Jalez/kehikko#25 is the host side. A host without it answers
+       `unknown-method`, and asking twice will not teach it. */
+    const roadmap = stubRoadmap(
+      stubDoor({ [PROJECT]: { ok: false, reason: 'unknown-method', error: 'no such method: tracker.get' } }),
+    )
+    render(<App />)
+    act(() => roadmap.greet(PROJECT))
+    await settle()
+    expect(screen.getByText('This roadmap has no shared tracker reading.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Ask again' })).toBeNull()
+  })
+
+  test('a source that failed shows its older rows AND says, per source, why they are not newer', async () => {
+    /* The state the old cache existed to draw, kept by the host now. Neither of
        the two easy lies: not an error over a list somebody could have had, and
        not a list quietly pretending to be fresh. */
-    const door = stubDoor({
-      [PROJECT]: {
-        ...answered(4, 'cache'),
-        trouble: 'offline',
-        why: 'GitHub could not be reached from this machine, so nothing was read.',
-        said: 'dial tcp: no such host',
-      },
-    })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const failing = {
+      tracker: 'gitlab',
+      host: 'gitlab.example.org',
+      repo: 'group/project',
+      default: true,
+      listed: true,
+      at: '2026-08-26T09:12:00Z',
+      error: 'gitlab.example.org could not be reached.',
+      refreshing: false,
+    }
+    const roadmap = stubRoadmap(
+      stubDoor({ [PROJECT]: { ok: true, data: readingOf([...issues(3), row('#7')], { sources: [failing] as never }) } }),
+    )
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
-    expect(document.body.textContent).toContain('GitHub could not be reached')
-    expect(document.body.textContent).toContain('the last reading of this project, not a current one')
+    expect(document.body.textContent).toContain('gitlab.example.org/group/project could not be read')
+    expect(document.body.textContent).toContain('Its rows below are as it was last read')
   })
 })
 
-describe('when a read happens, and when it does not', () => {
-  test('moving to another project reads that project', async () => {
-    const door = stubDoor({ [PROJECT]: answered(3), [OTHER]: { ...answered(6), project: OTHER } })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+describe('when the reading is asked for, and when it is not', () => {
+  test('moving to another project asks for that project', async () => {
+    const door = stubDoor({ [PROJECT]: answered(3), [OTHER]: answered(6) })
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
@@ -351,13 +384,13 @@ describe('when a read happens, and when it does not', () => {
     expect(document.body.textContent).toContain('kehikko')
   })
 
-  test('a context that changes only the selection reads nothing', async () => {
-    /* Every selection anywhere on the canvas comes back as a context. Reading
-       the tracker on each of them would be a subprocess and a network call per
-       tick of a checkbox, and the click would look like a bug in the list. */
+  test('a context that changes only the selection asks nothing', async () => {
+    /* Every selection anywhere on the canvas comes back as a context. Asking
+       for four hundred rows on each would rebuild the list per tick of a
+       checkbox, and the click would look like a bug in the list. */
     const door = stubDoor({ [PROJECT]: answered(5) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(door.reads()).toBe(1)
@@ -367,12 +400,10 @@ describe('when a read happens, and when it does not', () => {
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(5)
   })
 
-  test('a context naming a different epic in the same project reads nothing either', async () => {
-    /* The list is the project's now. An epic changing is not a reason to spend a
-       network call, and this is the assertion that would catch it becoming one. */
+  test('a context naming a different epic in the same project asks nothing either', async () => {
     const door = stubDoor({ [PROJECT]: answered(5) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     act(() => roadmap.context(PROJECT, [], 'another-epic'))
@@ -380,38 +411,53 @@ describe('when a read happens, and when it does not', () => {
     expect(door.reads()).toBe(1)
   })
 
-  test('the host’s refresh is the only thing that asks for a fresh read', async () => {
-    /* The button used to be in this page's own header and is the host's now.
-       What did not change is what it MEANS: `fresh=1`, past the cache, because
-       somebody asking for a fresh reading gets one. The protocol forbids
-       telling this page whether the press was a person or an interval, so
-       taking the cache on one and not the other is not available to it. */
+  test('the host’s reading moving is what asks again — the tracker this module reacts to', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
+    act(() => roadmap.greet(PROJECT, null, [], {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: false } }))
+    await settle()
+    expect(door.reads()).toBe(1)
+
+    /* A refresh pressed in another container: the host is reading, and says so. */
+    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T09:12:00Z', refreshing: true } }))
+    await settle()
+    expect(door.reads()).toBe(1)
+    expect(roadmap.refreshable()?.busy).toBe(true)
+
+    /* It landed: `at` moved, so the reading is asked for again. */
+    door.answers[PROJECT] = answered(5, { at: '2026-08-27T10:00:00Z' })
+    act(() => roadmap.context(PROJECT, [], 'an-epic', {}, { tracker: { at: '2026-08-27T10:00:00Z', refreshing: false } }))
+    await settle()
+    expect(door.reads()).toBe(2)
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(5)
+    expect(roadmap.refreshable()).toMatchObject({ busy: false, at: '2026-08-27T10:00:00Z' })
+  })
+
+  test('the host’s refresh asks the host to read the trackers again, then asks for the reading', async () => {
+    /* The button is the host's, drawn from `roadmap.refreshable`. What it does
+       is `tracker.refresh` for the project — every module in it is told — and
+       the protocol forbids telling this page whether the press was a person or
+       an interval, so both do the same. */
+    const door = stubDoor({ [PROJECT]: answered(3) })
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
-    expect(door.seen).toEqual([{ project: PROJECT, fresh: false }])
+    expect(roadmap.calls('tracker.refresh')).toEqual([])
 
     act(() => roadmap.refresh())
     await settle()
-    expect(door.seen.at(-1)).toEqual({ project: PROJECT, fresh: true })
+    expect(roadmap.calls('tracker.refresh')).toEqual([{ project: true }])
+    expect(door.reads()).toBe(2)
   })
 
   test('the rows stay on screen while a refresh is in flight, and the host is told it is reading', async () => {
-    /* The container has to be usable during a network call. A list that blanks for
-       three seconds is a list that looks broken, and this is the assertion that
-       keeps `busy` from being folded back into `Sight`. */
-    let release: (() => void) | null = null
-    const door = stubDoor({ [PROJECT]: answered(4) })
-    const gated: Fetcher = (url, init) => {
-      if (!url.includes('fresh=1')) return door.fetcher(url, init)
-      return new Promise((settleIt) => {
-        release = () => settleIt(new Response(JSON.stringify(answered(4)), { headers: { 'content-type': 'application/json' } }))
-      })
-    }
-    const roadmap = stubRoadmap()
-    render(<App fetcher={gated} />)
+    /* The container has to be usable during a read of two trackers. A list
+       that blanks for ten seconds is a list that looks broken, and this is the
+       assertion that keeps `busy` from being folded back into `Sight`. */
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(4) }, 'hold'))
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
@@ -419,21 +465,34 @@ describe('when a read happens, and when it does not', () => {
     act(() => roadmap.refresh())
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
-    /* `busy` is what the host spins its own icon on and disables its own button
-       with. This page is the only side that knows a read is in flight — the
-       host posted a message into a frame and has no idea what happened next. */
     expect(roadmap.refreshable()?.busy).toBe(true)
 
-    act(() => release?.())
+    act(() => roadmap.answer('tracker.refresh', REFRESHED))
     await settle()
     expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
     expect(roadmap.refreshable()?.busy).toBe(false)
   })
 
-  test('nothing is read on a timer, so an unwatched container spends no rate limit', async () => {
+  test('a refresh that could not read everything says so, in the host’s words', async () => {
+    const roadmap = stubRoadmap(
+      stubDoor(
+        { [PROJECT]: answered(4) },
+        { ok: true, data: { outcome: 'failed', at: '2026-08-27T09:12:00Z', why: 'gitlab.com could not be reached.' } },
+      ),
+    )
+    render(<App />)
+    act(() => roadmap.greet(PROJECT))
+    await settle()
+    act(() => roadmap.refresh())
+    await settle()
+    expect(document.body.textContent).toContain('gitlab.com could not be reached.')
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
+  })
+
+  test('nothing is asked on a timer', async () => {
     const door = stubDoor({ [PROJECT]: answered(3) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     await act(async () => {
@@ -447,8 +506,8 @@ describe('picking references out', () => {
   /** Greet, read `count` rows, and hand back the stub. */
   const listed = async (count: number, kept: string | null = null) => {
     const door = stubDoor({ [PROJECT]: answered(count) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT, kept))
     await settle()
     return roadmap
@@ -523,9 +582,9 @@ describe('picking references out', () => {
     /* GitHub numbers start at one in every repository, so `gh#2` exists nearly
        everywhere. Carrying a tick across a project change would be the expected
        case rather than a contrived one. */
-    const door = stubDoor({ [PROJECT]: answered(5), [OTHER]: { ...answered(5), project: OTHER } })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const door = stubDoor({ [PROJECT]: answered(5), [OTHER]: answered(5) })
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT))
     await settle()
     act(() => roadmap.context(PROJECT, ['gh#2']))
@@ -551,8 +610,8 @@ describe('picking references out', () => {
 describe('remembering the order, which is all this module keeps for itself', () => {
   const shown = async (kept: string | null, rows = 8) => {
     const door = stubDoor({ [PROJECT]: answered(rows) })
-    const roadmap = stubRoadmap()
-    render(<App fetcher={door.fetcher} />)
+    const roadmap = stubRoadmap(door)
+    render(<App />)
     act(() => roadmap.greet(PROJECT, kept))
     await settle()
     return roadmap
@@ -604,8 +663,8 @@ describe('remembering the order, which is all this module keeps for itself', () 
   })
 
   test('nothing is written before the greeting has been read, or the memory erases itself', async () => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({}).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({}))
+    render(<App />)
     /* The page starts in its defaults and the host has not yet said what it
        kept. A write here would save those defaults over the settings that are
        on their way. */
@@ -626,16 +685,16 @@ describe('remembering the order, which is all this module keeps for itself', () 
  */
 describe('the filters the header holds', () => {
   const listed = async (count: number, filters: Choice = {}) => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(count) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT, null, [], filters))
     await settle()
     return roadmap
   }
 
   test('nothing is offered before there is a reading, and then the counts are in the labels', async () => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
     /* An empty offer is a CLAIM the host acts on by pruning this container's
        stored choice. Making it before a reading has arrived erases the
        remembered filter on every load, which is a bug that looks like the
@@ -722,8 +781,8 @@ describe('the filters the header holds', () => {
 describe('narrowed to what the kehikko has picked', () => {
   const ON = { kehikko: 'picked' }
   const listed = async (selection: string[], filters: Choice = {}) => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT, null, selection, filters))
     await settle()
     return roadmap
@@ -790,8 +849,8 @@ describe('narrowed to what the kehikko has picked', () => {
 
 describe('being walked to a reference', () => {
   const listed = async (count: number, filters: Choice = {}) => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(count) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(count) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT, null, [], filters))
     await settle()
     return roadmap
@@ -876,8 +935,8 @@ describe('being walked to a reference', () => {
  */
 describe('narrowed to the open epic', () => {
   const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT, null, [], filters, more))
     await settle()
     return roadmap
@@ -990,8 +1049,8 @@ describe('narrowed to the open epic', () => {
 
 describe('the shared facets, with the marks people put on them', () => {
   const listed = async (filters: Choice = {}, more: Record<string, unknown> = {}) => {
-    const roadmap = stubRoadmap()
-    render(<App fetcher={stubDoor({ [PROJECT]: answered(8) }).fetcher} />)
+    const roadmap = stubRoadmap(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
     act(() => roadmap.greet(PROJECT, null, [], filters, more))
     await settle()
     return roadmap

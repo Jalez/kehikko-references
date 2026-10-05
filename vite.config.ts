@@ -15,7 +15,7 @@ import { ID, PREFERRED_PORT } from './manifest.ts'
  *
  * A module is ONE ORIGIN or it is nothing: the protocol refuses a manifest
  * whose `entry` points anywhere but the origin that served the manifest. So the
- * manifest, the health check, this app's `/api/references` and the page cannot
+ * manifest, the health check and the page cannot
  * be split across two processes on two ports, however tidy that would be — they
  * are middleware in front of the same server that serves the page. The deciding
  * lives in `doors.ts`, which holds no socket; this adapts a node request to it.
@@ -118,26 +118,20 @@ function doors(): Plugin {
  * paragraph is kept rather than deleted because the trap is still there for
  * anybody who removes `storage: true` from the manifest without reading this.
  *
- * What changed is that this app now has something behind a door.
- * `/api/references` runs `gh issue list` under this machine's login, in a folder
- * a caller names. With a permissive `Access-Control-Allow-Origin` any page in
- * any tab could call it and READ the answer — the issue and pull-request list of
- * every private repository checked out on this machine, exfiltrated through the
- * person's own browser with no prompt. Loopback is a fence around the machine
- * and not around the programs on it, and that is not theoretical: Journeys had
- * the same shape and it was demonstrated with a one-line `curl` carrying
- * `Origin: https://evil.example`.
- *
- * So the manifest declares `storage: true`, this page keeps a real origin, its
- * scripts and its `/api/references` calls are ordinary same-origin requests, no
- * CORS is involved at all, and a stranger's fetch gets nothing back. The full
- * argument is in `manifest.ts`.
+ * What changed is that this app had something behind a door for a while:
+ * `/api/references` ran `gh issue list` under this machine's login, in a folder
+ * a caller named, and with a permissive `Access-Control-Allow-Origin` any page in
+ * any tab could have read the answer. That door is gone — the rows are the
+ * host's shared tracker reading now (issue #4) — but the arrangement that shut
+ * it stays, because it costs nothing and the next door anybody adds here
+ * inherits it: the manifest declares `storage: true`, this page keeps a real
+ * origin, its scripts are ordinary same-origin requests, and no CORS is
+ * involved at all. The full argument is in `manifest.ts`.
  *
  * `false` rather than simply omitted, and the word is earned: Vite's default is
  * not "off". It answers CORS for any loopback origin, so the remote-website hole
- * is shut by Vite and the local one is not — and a door that runs `gh` under
- * somebody's login should not be readable by every other dev server they happen
- * to be running. Turning it off costs this page nothing, because everything it
+ * is shut by Vite and the local one is not — and nothing this server answers
+ * should be readable by every other dev server somebody happens to be running. Turning it off costs this page nothing, because everything it
  * fetches is its own origin.
  *
  * The check, which takes one line and should be run after touching this file:

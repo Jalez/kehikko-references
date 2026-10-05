@@ -8,8 +8,10 @@ import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
  *   bun run dev/stub-host.ts                      # then open http://127.0.0.1:7821
  *   http://127.0.0.1:7821/?project=/Users/x/Projects/roadmap
  *   http://127.0.0.1:7821/?project=               # a host that named no folder
- *   http://127.0.0.1:7821/?project=/tmp/not-a-repo
  *   http://127.0.0.1:7821/?project=/Users/x/Projects/roadmap&narrow=1
+ *   http://127.0.0.1:7821/?tracker=failing      # a GitLab source whose last read failed
+ *   http://127.0.0.1:7821/?tracker=empty        # a project the host reads no tracker for
+ *   http://127.0.0.1:7821/?tracker=old          # a host that has never heard of tracker.get
  *
  * ## Why this exists rather than a mock in a test
  *
@@ -18,24 +20,23 @@ import { MESSAGE, PROTOCOL } from 'roadmap-module-protocol'
  * message, and no assertion settles which. The tests hold the words; this holds
  * the experience of meeting them.
  *
- * ## What changed when the rows started coming from GitHub
+ * ## What changed when the rows started coming from the host's shared reading
  *
- * This used to answer `live.get` and had a `?answer=` switch for every way a
- * host could disappoint. It answers nothing now, because the module asks it
- * nothing: the rows come from the module's own door, and the only thing a host
- * contributes is `projectPath`. So the switch is a PATH, and every state this
- * app can be in is reachable by naming a different folder on this machine —
- * a real checkout, a folder with no `.git`, one that does not exist, a
- * repository with no remote. Which is a better harness than the old one, because
- * what it exercises is the real code path rather than a canned reply.
+ * This used to answer `live.get`, then nothing at all while the module ran its
+ * own `gh`. Since issue #4 the rows are the host's shared tracker reading, so
+ * this answers `tracker.get` with a canned reading — GitHub and GitLab rows
+ * together, which is the point of the change — and `tracker.refresh` by moving
+ * the reading's `at` and saying so in `context.tracker`, which is how the
+ * module learns to ask again. `?tracker=` picks the other states worth
+ * looking at. The real reading is the host's (Jalez/kehikko#25).
  *
  * Two things about the frame are worth reading before changing them:
  *
  *  - `allow-same-origin` is in the sandbox, because this module now declares
  *    `storage: true` and a real host frames it that way. Without it the page is
- *    on an opaque origin, its fetch to its own `/api/references` is
- *    cross-origin, and the list is empty for a reason nothing on screen
- *    explains. That is the exact trap `vite.config.ts` has an essay about.
+ *    on an opaque origin, and the module scripts load cross-origin into a page
+ *    that cannot run them. That is the exact trap `vite.config.ts` has an
+ *    essay about.
  *  - The selection round trip is answered, because it is the module's most
  *    valuable behaviour and the only way to see it work is to relay it back as
  *    context, which is what a real host does.
@@ -97,6 +98,44 @@ const page = `<!doctype html>
      the page is open, which is long enough to watch it fire. */
   var reading = null;
   var every = null;
+  /* The host's own reading, canned: when it last changed, and what it holds. */
+  var trackerMode = q.get('tracker') || 'mixed';
+  var trackerAt = '2026-08-27T09:12:00Z';
+  var trackerBusy = false;
+  function trackerRows() {
+    if (trackerMode === 'empty') return [];
+    var rows = [];
+    for (var n = 1; n <= 24; n += 1) {
+      rows.push({
+        ref: 'gh#' + n, tracker: 'github', host: 'github.com', repo: 'example/repo', number: n,
+        kind: n % 5 === 0 ? 'change' : 'issue', state: n % 5 === 0 ? 'merged' : n % 4 === 0 ? 'closed' : 'open',
+        stateReason: n % 4 === 0 ? 'COMPLETED' : null,
+        title: 'the thing that has to become true, number ' + n,
+        url: 'https://github.com/example/repo/issues/' + n, labels: ['area::db'], assignees: ['ada lovelace'],
+        links: [], updatedAt: '2026-08-' + String(n % 28 + 1).padStart(2, '0') + 'T10:00:00Z', readAt: trackerAt
+      });
+    }
+    for (var m = 1; m <= 8; m += 1) {
+      var change = m % 3 === 0;
+      rows.push({
+        ref: (change ? '!' : '#') + (1800 + m), tracker: 'gitlab', host: 'gitlab.com', repo: 'group/project', number: 1800 + m,
+        kind: change ? 'change' : 'issue', state: m % 4 === 0 ? 'closed' : 'open',
+        title: 'a GitLab ' + (change ? 'merge request' : 'issue') + ', number ' + (1800 + m),
+        url: 'https://gitlab.com/group/project/-/' + (change ? 'merge_requests/' : 'issues/') + (1800 + m),
+        labels: [], assignees: ['grace hopper'], links: [], updatedAt: '2026-08-2' + (m % 9) + 'T12:00:00Z', readAt: trackerAt
+      });
+    }
+    return rows;
+  }
+  function trackerReading() {
+    var sources = trackerMode === 'empty' ? [] : [
+      { tracker: 'github', host: 'github.com', repo: 'example/repo', default: true, listed: true, at: trackerAt, error: null, refreshing: false },
+      { tracker: 'gitlab', host: 'gitlab.com', repo: 'group/project', default: true, listed: true,
+        at: trackerMode === 'failing' ? '2026-08-20T09:00:00Z' : trackerAt,
+        error: trackerMode === 'failing' ? 'gitlab.com could not be reached from this machine.' : null, refreshing: false }
+    ];
+    return { at: trackerAt, refreshing: trackerBusy, sources: sources, rows: trackerRows(), missing: [{ ref: '#77', reason: 'not-found' }] };
+  }
   var asked = 0;
   document.getElementById('what').textContent = 'projectPath: ' + (project ? project : '(null)');
   if (q.get('narrow')) document.getElementById('frame').id = 'narrow', document.getElementById('narrow').style.height = '80vh';
@@ -110,7 +149,8 @@ const page = `<!doctype html>
       projectPath: project || null,
       theme: q.get('theme') === 'dark' ? 'dark' : 'light',
       selection: selection,
-      filters: chosen
+      filters: chosen,
+      tracker: { at: trackerAt, refreshing: trackerBusy }
     };
   }
 
@@ -289,6 +329,34 @@ const page = `<!doctype html>
 
     if (d.type !== '${MESSAGE.REQUEST}') return;
 
+    if (d.method === 'tracker.get' || d.method === 'tracker.refresh') {
+      if (trackerMode === 'old') {
+        frame.contentWindow.postMessage({
+          type: '${MESSAGE.RESPONSE}', id: d.id, ok: false, reason: 'unknown-method', error: 'no such method: ' + d.method
+        }, '*');
+        return;
+      }
+      if (d.method === 'tracker.get') {
+        frame.contentWindow.postMessage({ type: '${MESSAGE.RESPONSE}', id: d.id, ok: true, data: trackerReading() }, '*');
+        return;
+      }
+      /* A read that takes a moment, announced to everybody through the
+         context the way a real host does, and answered when it lands. */
+      trackerBusy = true;
+      tell();
+      setTimeout(function () {
+        trackerBusy = false;
+        trackerAt = new Date().toISOString();
+        var failing = trackerMode === 'failing';
+        frame.contentWindow.postMessage({
+          type: '${MESSAGE.RESPONSE}', id: d.id, ok: true,
+          data: { outcome: failing ? 'failed' : 'read', at: trackerAt, why: failing ? 'gitlab.com could not be reached from this machine.' : '' }
+        }, '*');
+        tell();
+      }, 1200);
+      return;
+    }
+
     if (d.method === 'filters.set') {
       /* The three grounds a real host has for declining are all about a
          container this stub does not have — pinned, or on a kehikko nobody is
@@ -326,7 +394,7 @@ const page = `<!doctype html>
     }
     frame.contentWindow.postMessage({
       type: '${MESSAGE.RESPONSE}', id: d.id, ok: false, reason: 'unknown-method',
-      error: 'this stub answers selection.set, filters.set and state.set, which is all this module asks for'
+      error: 'this stub answers tracker.get, tracker.refresh, selection.set, filters.set and state.set, which is all this module asks for'
     }, '*');
   });
 

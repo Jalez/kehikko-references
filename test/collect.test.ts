@@ -1,190 +1,148 @@
 import { describe, expect, test } from 'bun:test'
 
-import { collect, generatedAt } from '@/live/collect.ts'
+import { collect } from '@/live/collect.ts'
+import { sightingOf } from '@/live/sift.ts'
+import { row } from './fixtures.ts'
 
 /**
  * The promise, under test.
  *
- * Everything here is one assertion in four hundred costumes: a key in a bag
- * becomes a row, whatever is filed under it. The reason this file is longer
- * than the module it tests is that "it drops nothing" cannot be proved by one
+ * Every row of the host's shared reading that names a ref becomes a row on
+ * screen, whatever else is wrong with it. The reason this file is longer than
+ * the module it tests is that "it drops nothing" cannot be proved by one
  * example — it has to be proved against every kind of thing that would tempt a
  * reasonable implementation into a `continue`.
  */
 
-const reading = (bags: Record<string, unknown>) => ({ generated: '2026-08-27T10:00:00Z', ...bags })
-
-describe('every key becomes a row', () => {
-  test('one from each bag, spelled the way people write it', () => {
-    const rows = collect(
-      reading({
-        issues: { '2274': { state: 'opened', title: 'an issue', at: '2026-08-01T00:00:00Z' } },
-        mrs: { '1848': { state: 'merged', title: 'a change', at: '2026-08-02T00:00:00Z' } },
-        ghIssues: { 'gh#41': { state: 'closed', title: 'a github issue', at: '2026-08-03T00:00:00Z' } },
-        ghPrs: { 'gh#2073': { state: 'merged', title: 'a pull request', at: '2026-08-04T00:00:00Z' } },
-      }),
-    )
-    expect(rows.map((row) => row.ref).sort()).toEqual(['!1848', '#2274', 'gh#2073', 'gh#41'])
-    expect(rows.map((row) => row.kind).sort()).toEqual(['change', 'change', 'issue', 'issue'])
+describe('every row becomes a row', () => {
+  test('GitHub and GitLab together, spelled the way the reading spells them', () => {
+    const rows = collect([
+      row('#2274', { updatedAt: '2026-08-01T00:00:00Z' }),
+      row('!1848', { state: 'merged', mergedAt: '2026-08-02T00:00:00Z' }),
+      row('gh#41', { state: 'closed', closedAt: '2026-08-03T00:00:00Z' }),
+      row('gh#2073', { kind: 'change', state: 'merged', mergedAt: '2026-08-04T00:00:00Z' }),
+    ])
+    expect(rows.map((one) => one.ref)).toEqual(['gh#2073', 'gh#41', '!1848', '#2274'])
+    expect(rows.map((one) => one.origin)).toEqual(['github', 'github', 'gitlab', 'gitlab'])
+    expect(rows.map((one) => one.kind)).toEqual(['change', 'issue', 'change', 'issue'])
   })
 
   test('four hundred references produce four hundred rows', () => {
-    const ghIssues: Record<string, unknown> = {}
-    for (let n = 1; n <= 400; n += 1) {
-      ghIssues[`gh#${n}`] = { state: 'opened', title: `issue ${n}`, at: '2026-08-01T00:00:00Z' }
-    }
-    expect(collect(reading({ ghIssues }))).toHaveLength(400)
+    expect(collect(Array.from({ length: 400 }, (_, n) => row(`gh#${n + 1}`)))).toHaveLength(400)
   })
 
-  test('the same number in two bags is two rows, not one', () => {
-    /* GitHub numbers issues and pull requests in one sequence. A refresh that
-       filed gh#41 in both bags is wrong about something, and the row that would
-       be silently swallowed is the failure this app refuses to have. */
-    const rows = collect(
-      reading({
-        ghIssues: { 'gh#41': { state: 'opened', title: 'the issue' } },
-        ghPrs: { 'gh#41': { state: 'merged', title: 'the pull request' } },
-      }),
-    )
-    expect(rows).toHaveLength(2)
-    expect(new Set(rows.map((row) => row.key)).size).toBe(2)
-    expect(rows.map((row) => row.kind).sort()).toEqual(['change', 'issue'])
+  test('two spellings of one item are two rows; one spelling twice is one', () => {
+    /* The protocol: a module looks its own string up and finds its own string,
+       so `gh#41` and `gh:example/repo#41` are each what somebody wrote. The
+       same spelling twice is a host repeating itself. */
+    const rows = collect([row('gh#41'), row('gh:example/repo#41'), row('gh#41', { title: 'again' })])
+    expect(rows.map((one) => one.ref)).toEqual(['gh#41', 'gh:example/repo#41'])
+    expect(new Set(rows.map((one) => one.key)).size).toBe(2)
+    expect(rows[0]?.title).not.toBe('again')
   })
 
-  test('a reading that is not an object is still a row', () => {
-    const rows = collect(reading({ issues: { '1': null, '2': 7, '3': 'nope', '4': [] } }))
-    expect(rows).toHaveLength(4)
-    expect(rows.every((row) => row.unreadable)).toBe(true)
-    expect(rows.every((row) => row.state === null)).toBe(true)
+  test('a row the schema refuses is still drawn, as unreadable, with no state', () => {
+    const rows = collect([
+      { ref: 'gh#7', tracker: 'github', state: 'locked', title: 'odd' },
+      { ref: '!9', kind: 'change', tracker: 'gitlab', url: 'javascript:alert(1)' },
+    ])
+    expect(rows.map((one) => one.ref)).toEqual(['gh#7', '!9'])
+    expect(rows.every((one) => one.unreadable && one.state === null)).toBe(true)
+    expect(rows[0]?.title).toBe('odd')
+    expect(rows[1]).toMatchObject({ kind: 'change', origin: 'gitlab', url: null })
+    /* And a row with no state has no facets, so no filter can hide it. */
+    expect(sightingOf(rows[0]!)).toBeNull()
   })
 
-  test('a state nobody recognises is never drawn as open', () => {
-    const [row] = collect(reading({ issues: { '9': { state: 'locked', title: 'x' } } }))
-    expect(row?.state).toBeNull()
+  test('an entry with no ref at all has nothing to be called, and is the one thing not drawn', () => {
+    expect(collect([null, 7, 'nope', {}, { ref: '' }, row('gh#1')]).map((one) => one.ref)).toEqual(['gh#1'])
   })
 
-  test('an entry with nothing in it keeps its identifier', () => {
-    const [row] = collect(reading({ mrs: { '5': {} } }))
-    expect(row?.ref).toBe('!5')
-    expect(row?.title).toBe('')
-    expect(row?.url).toBeNull()
-    expect(row?.unreadable).toBe(false)
-  })
-
-  test('a key that is a prototype name is a row like any other', () => {
-    /* The protocol package's hazard, from the enumerating side: `constructor`
-       is an ordinary lowercase word and a tracker may file one. What it must
-       not do is become an inherited value or vanish. */
-    const rows = collect(reading({ ghIssues: { constructor: { state: 'opened', title: 'odd' }, __proto__: {} } }))
-    expect(rows.map((row) => row.ref)).toContain('constructor')
+  test('anything that is not a list is no rows rather than a throw', () => {
+    expect(collect(null)).toEqual([])
+    expect(collect(undefined)).toEqual([])
+    expect(collect('a string')).toEqual([])
+    expect(collect({ rows: [] })).toEqual([])
   })
 })
 
-describe('what is read off one entry', () => {
+describe('what is read off one row', () => {
   test('a link is the tracker’s own, and only ever http', () => {
-    const rows = collect(
-      reading({
-        issues: {
-          '1': { url: 'https://gitlab.example/issues/1' },
-          '2': { url: 'javascript:alert(1)' },
-          '3': { url: 42 },
-        },
-      }),
-    )
-    expect(rows.map((row) => row.url)).toEqual(['https://gitlab.example/issues/1', null, null])
+    const rows = collect([
+      row('#1', { url: 'https://gitlab.example/issues/1', updatedAt: '2026-08-03T00:00:00Z' }),
+      row('#2', { url: 'javascript:alert(1)', updatedAt: '2026-08-02T00:00:00Z' }),
+    ])
+    expect(rows.map((one) => one.url)).toEqual(['https://gitlab.example/issues/1', null])
   })
 
-  test('people come out as one list: author, assignees, reviewers, deduped', () => {
-    const [row] = collect(
-      reading({ mrs: { '1': { author: 'ada', assignees: ['ada', 'grace'], reviewers: ['linus', 7] } } }),
-    )
-    expect(row?.people).toEqual(['ada', 'grace', 'linus'])
+  test('people: a change’s author, then assignees, deduped; an issue’s author is not on it', () => {
+    const [change] = collect([row('!1', { author: 'ada', assignees: ['ada', 'grace'] })])
+    expect(change?.people).toEqual(['ada', 'grace'])
+    const [issue] = collect([row('#1', { author: 'ada', assignees: ['grace'] })])
+    expect(issue?.people).toEqual(['grace'])
   })
 
   test('draft is only ever what the tracker said', () => {
-    const rows = collect(reading({ mrs: { '1': { draft: true }, '2': { title: 'WIP: not a draft flag' } } }))
-    expect(rows.map((row) => row.draft).sort()).toEqual([false, true])
+    const rows = collect([row('!1', { draft: true }), row('!2', { title: 'WIP: not a draft flag' })])
+    expect(rows.map((one) => one.draft).sort()).toEqual([false, true])
+  })
+
+  test('a row is a Sighting as it stands, with nothing translated', () => {
+    const [one] = collect([row('gh#3', { state: 'closed', stateReason: 'NOT_PLANNED' })])
+    expect(sightingOf(one!)).toMatchObject({ kind: 'issue', state: 'closed', stateReason: 'NOT_PLANNED' })
   })
 })
 
 describe('why a closed thing closed, as far as the reading says', () => {
   test('GitHub’s reason is carried as it arrived, and nothing else invents one', () => {
-    const rows = collect(
-      reading({
-        ghIssues: { 'gh#1': { state: 'closed', stateReason: 'NOT_PLANNED' }, 'gh#2': { state: 'closed' } },
-        issues: { '3': { state: 'closed', stateReason: 42 } },
-      }),
-    )
-    const by = Object.fromEntries(rows.map((row) => [row.ref, row]))
+    const rows = collect([
+      row('gh#1', { state: 'closed', stateReason: 'NOT_PLANNED' }),
+      row('gh#2', { state: 'closed' }),
+      row('#3', { state: 'closed' }),
+    ])
+    const by = Object.fromEntries(rows.map((one) => [one.ref, one]))
     expect(by['gh#1']?.stateReason).toBe('NOT_PLANNED')
     expect(by['gh#2']?.stateReason).toBeNull()
     expect(by['#3']?.stateReason).toBeNull()
   })
 
-  test('a GitLab issue linked to a merged merge request was closed by it', () => {
-    const rows = collect(
-      reading({
-        issues: { '10': { state: 'closed' }, '11': { state: 'closed' }, '12': { state: 'closed' } },
-        mrs: { '20': { state: 'merged' }, '21': { state: 'closed' } },
-        /* Keyed with and without the sigil, and listing iids as numbers and
-           as spelled refs: the refresher's shape is not promised, so both are
-           read and nothing else is. */
-        links: { '10': [20], '#11': ['!21'], '12': ['nonsense', null] },
-      }),
-    )
-    const by = Object.fromEntries(rows.map((row) => [row.ref, row]))
+  test('a row that says it was closed by a merge is believed, and one that says not is too', () => {
+    const rows = collect([
+      row('#1', { state: 'closed', closedByMerge: true }),
+      row('#2', { state: 'closed', closedByMerge: false, links: [{ ref: '!20', relation: 'closed-by' }] }),
+      row('!20', { state: 'merged' }),
+    ])
+    const by = Object.fromEntries(rows.map((one) => [one.ref, one]))
+    expect(by['#1']?.closedByMerge).toBe(true)
+    expect(by['#2']?.closedByMerge).toBe(false)
+  })
+
+  test('silent on it, a closed-by link to a change merged in the same reading says it', () => {
+    const rows = collect([
+      row('#10', { state: 'closed', links: [{ ref: '!20', relation: 'closed-by' }] }),
+      row('#11', { state: 'closed', links: [{ ref: '!21', relation: 'closed-by' }] }),
+      /* A link the other way is a citation, not a delivery. */
+      row('#12', { state: 'closed', links: [{ ref: '!20', relation: 'closes' }] }),
+      row('!20', { state: 'merged' }),
+      row('!21', { state: 'closed' }),
+    ])
+    const by = Object.fromEntries(rows.map((one) => [one.ref, one]))
     expect(by['#10']?.closedByMerge).toBe(true)
-    /* Linked to a change that closed without merging: not done. */
     expect(by['#11']?.closedByMerge).toBe(false)
     expect(by['#12']?.closedByMerge).toBe(false)
-  })
-
-  test('the same, for GitHub, out of ghLinks', () => {
-    const rows = collect(
-      reading({
-        ghIssues: { 'gh#68': { state: 'closed' } },
-        ghPrs: { 'gh#76': { state: 'merged' } },
-        ghLinks: { 'gh#68': [76] },
-      }),
-    )
-    expect(rows.find((row) => row.ref === 'gh#68')?.closedByMerge).toBe(true)
     /* Never about a change: a merged change says so in its own state. */
-    expect(rows.find((row) => row.ref === 'gh#76')?.closedByMerge).toBe(false)
-  })
-
-  test('a row that says so itself is believed', () => {
-    const rows = collect(reading({ issues: { '1': { state: 'closed', closedByMerge: true } } }))
-    expect(rows[0]?.closedByMerge).toBe(true)
+    expect(by['!20']?.closedByMerge).toBe(false)
   })
 })
 
 describe('order', () => {
-  test('most recently moved first, and rows with no date last', () => {
-    const rows = collect(
-      reading({
-        issues: {
-          '1': { at: '2026-01-01T00:00:00Z' },
-          '2': { at: '2026-06-01T00:00:00Z' },
-          '3': {},
-          '4': { at: '2026-03-01T00:00:00Z' },
-        },
-      }),
-    )
-    expect(rows.map((row) => row.ref)).toEqual(['#2', '#4', '#1', '#3'])
-  })
-})
-
-describe('the reading itself', () => {
-  test('nothing at all is no rows rather than a throw', () => {
-    expect(collect(null)).toEqual([])
-    expect(collect(undefined)).toEqual([])
-    expect(collect('a string')).toEqual([])
-    expect(collect([1, 2, 3])).toEqual([])
-  })
-
-  test('a reading with no bags is an empty reading, which is a different thing', () => {
-    expect(collect({ generated: '2026-08-27T10:00:00Z' })).toEqual([])
-    expect(generatedAt({ generated: '2026-08-27T10:00:00Z' })).toBe('2026-08-27T10:00:00Z')
-    expect(generatedAt({})).toBeNull()
+  test('most recently moved first — merged, closed, then updated — and rows with no date last', () => {
+    const rows = collect([
+      row('#1', { updatedAt: '2026-01-01T00:00:00Z' }),
+      row('#2', { updatedAt: '2026-01-01T00:00:00Z', closedAt: '2026-06-01T00:00:00Z', state: 'closed' }),
+      row('#3', { updatedAt: null }),
+      row('#4', { updatedAt: '2026-03-01T00:00:00Z' }),
+    ])
+    expect(rows.map((one) => one.ref)).toEqual(['#2', '#4', '#1', '#3'])
   })
 })

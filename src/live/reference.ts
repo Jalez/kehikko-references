@@ -16,11 +16,11 @@
  *   `https://github.com/…` out of a ref and a guess at the repository produces
  *   a link that looks right, opens, and is somewhere else.
  * - `state` may be null, for the same reason: a state we could not read is not
- *   `opened`, and drawing it as open would be this app inventing the one fact
+ *   `open`, and drawing it as open would be this app inventing the one fact
  *   somebody came here to check.
  */
 
-/** Which tracker filed it. Read from which bag it was in, never parsed out of the ref. */
+/** Which tracker it lives on, as the host's reading says — the row's `tracker`, never parsed out of the ref. */
 export type Origin = 'gitlab' | 'github'
 
 /**
@@ -34,20 +34,22 @@ export type Origin = 'gitlab' | 'github'
  */
 export type Kind = 'issue' | 'change'
 
-/** The three words a tracker uses. Null when the reading did not contain one. */
-export type State = 'opened' | 'closed' | 'merged'
+/**
+ * The three words the shared reading uses, which are the facets module's words
+ * too — so a row with a state IS a `Sighting`, with nothing to translate. Null
+ * when the row could not be read at all.
+ */
+export type State = 'open' | 'closed' | 'merged'
 
 export interface Reference {
   /**
    * A stable key for this row, distinct from `ref`.
    *
-   * `ref` is not unique and cannot be made so: GitHub numbers issues and pull
-   * requests in one sequence, so `gh#41` is filed under `ghIssues` or `ghPrs`
-   * and a refresh that put the same number in both — which is a bug in a
-   * refresher, but is a bug this app might be handed — produces two rows that
-   * spell themselves identically. Keying the list by `ref` would make React
-   * draw one of them and the other would be gone with nothing said. So the key
-   * carries the bag it came out of, and both rows appear.
+   * The shared reading answers one row per spelling, and `collect` keeps the
+   * first of any spelling handed twice, so `ref` happens to be unique today.
+   * The key still says which tracker, repository and number the row is, so
+   * that two spellings of one item — `gh#41` and `gh:owner/repo#41`, which the
+   * protocol says are two rows — are told apart by React by more than luck.
    */
   key: string
   /** As people write it: `#2274`, `!1848`, `gh#41`. */
@@ -58,16 +60,16 @@ export interface Reference {
   /**
    * Why the tracker says it closed, in the tracker's own word — GitHub's
    * `stateReason`: `COMPLETED`, `NOT_PLANNED`, `DUPLICATE`. Null where the
-   * reading carried none, which is every GitLab row and every pull request.
+   * row carried none, which is every GitLab row and every change.
    * Passed to the facets module as it arrived; `deriveDisposition` there is
    * what reads it.
    */
   stateReason: string | null
   /**
-   * True when the reading links this issue to a change that merged — GitLab's
-   * only sign that a closed issue was done, since GitLab records no reason.
-   * Read off the reading, never guessed from a title; see `linkedMerges` in
-   * `collect.ts`.
+   * True when the reading says a change that closes this issue has merged —
+   * GitLab's only sign that a closed issue was done, since GitLab records no
+   * reason. The row's own `closedByMerge`, or its `closed-by` links to a merged
+   * change in the same reading; never guessed from a title. See `collect.ts`.
    */
   closedByMerge: boolean
   /** A change the tracker says is not finished being written. Never inferred. */
@@ -86,8 +88,8 @@ export interface Reference {
    */
   people: string[]
   /**
-   * The reading filed under this reference was not a reading — not an object at
-   * all, but a null, a number, a string.
+   * The row filed under this reference was not a row the protocol describes —
+   * it named a ref, and little else this app could read.
    *
    * It earns a field because the alternative is a row that is simply blank, and
    * a blank row invites the reader to assume this app failed to draw it. It did

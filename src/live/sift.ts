@@ -209,20 +209,20 @@ export function narrowing(sifting: Sifting): boolean {
  * What one row is, in the facets module's terms, or `null` for a row whose
  * state nobody could read.
  *
+ * The row itself. The shared tracker reading spells `kind`, `state`,
+ * `stateReason` and `closedByMerge` exactly as `Sighting` does, and
+ * `collect.ts` carries them across untouched, so there is nothing to map —
+ * which is the whole of why the protocol made a row a sighting.
+ *
  * `null` is the rule this module has always kept — a state that could not be
- * read is not `opened` — carried into the shared vocabulary: a row with no
+ * read is not `open` — carried into the shared vocabulary: a row with no
  * sighting has no facets, and the facets module's `sift` never hides a row
  * with none. Hiding open issues must not hide an unreadable row, and neither
  * must hiding closed ones.
  */
 export function sightingOf(row: Reference): Sighting | null {
   if (row.state === null) return null
-  return {
-    kind: row.kind,
-    state: row.state === 'opened' ? 'open' : row.state,
-    stateReason: row.stateReason,
-    closedByMerge: row.closedByMerge,
-  }
+  return row as Reference & { state: NonNullable<Reference['state']> }
 }
 
 /** Every facet one row has, with a person's mark winning over the tracker's reason. */

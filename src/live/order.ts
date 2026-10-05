@@ -57,7 +57,7 @@ import type { Reference } from './reference.ts'
  *
  * **A row whose state could not be read sorts after `closed`** in `state`, for
  * the same reason and with the same shape: `sift.ts` already refuses to let an
- * unreadable state answer to `opened`, and an order that floated it to the top
+ * unreadable state answer to `open`, and an order that floated it to the top
  * beside the open work would undo that in a different costume.
  *
  * ## Ties keep the order they came in
@@ -92,13 +92,13 @@ export function reordered(ordering: Ordering): boolean {
 /**
  * The line work travels along, as a rank.
  *
- * `opened` is where the work is, `merged` is where it went, `closed` is where it
+ * `open` is where the work is, `merged` is where it went, `closed` is where it
  * stopped, and a state nobody could read is off the line entirely. A row's state
  * is `null` rather than absent when the reading did not carry one — see
  * `reference.ts` — so 3 is the rank of a fact this app does not have rather than
  * of a fourth kind of work.
  */
-const STATE_RANK: Record<string, number> = { opened: 0, merged: 1, closed: 2 }
+const STATE_RANK: Record<string, number> = { open: 0, merged: 1, closed: 2 }
 const stateRank = (row: Reference): number => (row.state === null ? 3 : (STATE_RANK[row.state] ?? 3))
 
 /**

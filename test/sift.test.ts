@@ -37,7 +37,7 @@ const row = (over: Partial<Reference>): Reference => ({
   ref: '#1',
   kind: 'issue',
   origin: 'gitlab',
-  state: 'opened',
+  state: 'open',
   stateReason: null,
   closedByMerge: false,
   draft: false,

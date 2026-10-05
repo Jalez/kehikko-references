@@ -20,10 +20,12 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * > Issues/MRs can be gotten from the project's own GitHub, no? Doesn't need
  * > separate maintenance.
  *
- * They can. `roadmap.context.projectPath` has carried an absolute project folder
- * since protocol 0.8, and this app's own server now runs `gh issue list` and
- * `gh pr list` in it. So two declarations came out and one went in, and each of
- * those three is a decision worth its paragraph.
+ * They could, and for a while this app's own server ran `gh issue list` and
+ * `gh pr list` in the project folder. That saw GitHub and nothing else, and it
+ * was a second reader of trackers the host was reading anyway. Since 3.0.0
+ * (issue #4) the rows are the host's SHARED reading — `tracker.get`, GitHub and
+ * GitLab together, read once for every module on the canvas — and the two
+ * declarations that say so are `trackers:read` and `trackers:refresh`.
  *
  * ## The capabilities, and the ones that left
  *
@@ -36,8 +38,9 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   declared because somebody deciding whether to run this program should read
  *   that sentence before they do, not because declaring it grants anything.
  *   Nothing about it changed with the data source, deliberately: a ref is still
- *   the string `gh#105`, spelled in one function in `tracker/gh.ts`, and other
- *   modules go on recognising it.
+ *   the string `gh#105`, spelled the way the shared reading spells it
+ *   (`spellTrackerRef` in the protocol), and other modules go on recognising
+ *   it.
  * - `filters:set`, which is the newest and the one worth a paragraph of its own.
  *   None of this app's filtering is drawn in this app any more. The scope, the
  *   `hide` toggles, the kehikko pick AND the typed query are offered as
@@ -67,18 +70,24 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *   which is not a filter, hides nothing, and is therefore nothing the host
  *   draws or remembers.
  *
- * Nothing new is declared for the refresh control, and that is worth a line
- * rather than a silence. `roadmap.refreshable` is an offer, in the same family
- * as `roadmap.filters`: this app says it can be read again and when it last
- * read, the host draws the button, the freshness line and an auto-refresh
- * interval it stores per container, and the press comes back as
- * `roadmap.refresh`. No request leaves this page for any of it, so there is no
- * permission for anybody to read about. What a person SHOULD know is what the
- * refresh spends, and that is what `/api/references` already documents below.
+ * - `trackers:read`, which is where every row comes from: `tracker.get` with
+ *   `project: true`, the host's reading of everything it reads for the open
+ *   project — the refs every epic names, the refs modules have asked about, and
+ *   the recent issues and changes of each source it lists. Answered at once
+ *   from what the host holds, so asking spends nothing at any tracker. See
+ *   `src/live/ask.ts`.
+ * - `trackers:refresh`, which is what the refresh control now does. The host
+ *   still draws the button from `roadmap.refreshable` and the press still comes
+ *   back as `roadmap.refresh`; what changed is the answer to it, which is
+ *   `tracker.refresh` — the host reading GitHub and GitLab again for every
+ *   module in the project. Declared apart from reading because it SPENDS
+ *   something: the person's rate limit, on behalf of everybody on the canvas.
+ *   Somebody deciding whether to run this program should read that before they
+ *   do.
  *
  * `live:read` came out because nothing calls it any more. There is no
- * `live.get` anywhere in this program: the rows come from a subprocess this
- * app's own server runs. Leaving the declaration in would be this module telling
+ * `live.get` anywhere in this program: the rows come from `tracker.get`, which
+ * is the same reading under its own door. Leaving the declaration in would be this module telling
  * every person who reads its manifest that it intends to ask a question it will
  * never ask — permission described to a program that will never exercise it —
  * and Paper removed `epics:read` for exactly that reason.
@@ -106,14 +115,13 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  *
  * ## The READING is the project's; the list on screen is the epic's by default
  *
- * The roadmap's old reading was a curated set — the refs an epic's narrative
- * named, plus pull requests discovered against them. GitHub records nowhere
- * which epic an issue belongs to, so that set cannot be rebuilt from the
- * tracker, and the choice was between a fresh list of everything in the project
- * and a stale list of the right things. Freshness won, and still does: the rows
- * are read from the project's own tracker, all of them.
+ * The rows are everything the host reads for the project: the refs every epic
+ * names AND the recent issues and changes of each listed source, on GitHub and
+ * GitLab both. So a GitLab project's issues and merge requests list beside a
+ * GitHub one's, from one reading with one age, and the epic's own refs are in
+ * it even when they are older than the recent ones.
  *
- * What changed (issue #1) is what is DRAWN. A fresh list of every one of 466
+ * What changed in 2.3.0 (issue #1) is what is DRAWN. A fresh list of every one of 466
  * references, under an epic that names about 80, read as noise. The epic itself
  * says which refs are its own — every step's `refs` and the umbrella — so the
  * scope group narrows to those by default, or to what the picked-out containers
@@ -123,19 +131,24 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * ## `scope: 'epic'`, which is now true in full
  *
  * `epic` means the tab is "told which epic is open and told again on every
- * switch", and this app uses both halves: the project to read the tracker in,
- * and the epic to narrow to. It used to use only the first and say so here.
+ * switch", and this app uses both halves: the project whose reading to ask
+ * for, and the epic to narrow to. It used to use only the first and say so here.
  *
  * ## No `mcp`, and that is a decision rather than an omission
  *
  * A module may name its own MCP door, and most of the apps beside this one do,
  * because they hold something an agent would want to write. This one holds
- * nothing but a cache of what GitHub already said. An agent that wants this
- * material has `gh` on the same machine and the same login; a second door onto
- * it would be a second answer to the same question, going stale on its own
- * schedule — which is the whole failure this rewrite removed.
+ * nothing at all: it draws the host's reading of the trackers. An agent that
+ * wants this material asks the host, which is where it lives; a second door
+ * onto it would be a second answer to the same question, going stale on its
+ * own schedule — which is the whole failure this module keeps removing.
  *
  * ## `storage: true`, which this app used to be right to refuse
+ *
+ * Written when `/api/references` ran `gh` behind this port. That door is gone
+ * (issue #4) and the declaration stays: it costs a page that holds nothing
+ * almost nothing, and taking it out puts back the opaque-origin trap described
+ * in `vite.config.ts`. The argument, as it was made:
  *
  * The old manifest declared `storage: false` and argued for it at length: the
  * page had a filter and an order to remember, `state:keep` remembered them, and
@@ -170,7 +183,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
  * the BROWSER's door and not the socket. Anything already running as this user
  * can `curl` the port, and no header stops that. What CORS was ever protecting
  * against is a stranger's page using this browser as a proxy, and that is the
- * door that is now shut. `tracker/project.ts` is what narrows the rest.
+ * door that is now shut.
  *
  * And the filter still travels by `state:keep` rather than by `localStorage`,
  * even though `localStorage` would now work. The host holding one opaque string
@@ -181,8 +194,17 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'roadmap-
 export const ID = 'roadmap.references'
 
 /**
- * Two, because the data source moved; and then a minor, because every control
- * did.
+ * Three, because the data source moved again; before it two, for the same
+ * reason; and minors between, because every control did.
+ *
+ * `3.0.0` (issue #4): the rows are the host's shared tracker reading —
+ * `tracker.get` — rather than this app's own `gh`, so GitLab and GitHub refs
+ * list together and nothing reads a tracker twice. It needs a host that answers
+ * `tracker.get`; an older one gets a sentence saying so rather than a list. The
+ * refresh control asks the host to read again (`tracker.refresh`), the page
+ * re-asks when `context.tracker.at` moves, and the heading's age is the shared
+ * reading's, with each failing source named under it. The refs, the selection,
+ * the filters and the kept order are unchanged.
  *
  * A version is for whoever is reading two copies of this program and wondering
  * why they disagree, and "the rows come from somewhere else now" is the largest
@@ -214,7 +236,7 @@ export const ID = 'roadmap.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '2.3.0'
+export const VERSION = '3.0.0'
 
 /**
  * The port this app would rather have.
@@ -263,15 +285,11 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * now and a summary that said otherwise would be the module lying in the one
    * sentence a person reads before installing it.
    *
-   * And no "merge request". This app reads GitHub and does not read GitLab —
-   * `glab` exists, is installed on this machine, and is not called, because
-   * nothing in this workspace is on GitLab and untested code shipped under a
-   * summary that claims it works is worse than an absence. The row, the filter
-   * and the `!41` spelling are all still in place for the day somebody has a
-   * GitLab project to prove it against; see the note at the foot of
-   * `tracker/gh.ts`.
+   * And "merge request" is back. It came out while this app read GitHub only
+   * and claiming GitLab would have been untrue; the host's shared reading
+   * covers both, so it is true again.
    */
-  summary: 'Every issue and pull request in this project, read from its own GitHub, as one list.',
+  summary: 'Every issue, merge request and pull request in this project, from GitHub and GitLab, as one list.',
   /**
    * What an agent should do about this module, given that it is here.
    *
@@ -281,8 +299,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * because it is this module's claim and not the host's.
    */
   guidance:
-    'Every issue and pull request in this project is read here from the project’s own GitHub rather ' +
-    'than from any copy, and the list shows the ones the open epic names unless the header’s scope is ' +
+    'Every issue, merge request and pull request the roadmap reads for this project — GitHub and GitLab ' +
+    'together — is listed here, and the list shows the ones the open epic names unless the header’s scope is ' +
     'set to Everything — check the scope before concluding a reference does not exist. Before ' +
     'deciding what to work on, read the list rather than assuming the work is the one thing you were ' +
     'pointed at — very often a change is already open for it. Picking a row sets the canvas selection ' +
@@ -319,12 +337,17 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * elsewhere moves it here. Both are reactions in the protocol's sense: the
    * rows on screen change.
    *
+   * `tracker`, because the rows ARE the shared reading: when
+   * `context.tracker.at` moves — a refresh pressed in any container, the
+   * project's own schedule — this page asks `tracker.get` again and the rows
+   * change. See `standingOn` in `src/wire/use-roadmap.ts`.
+   *
    * Not `passage`. Nothing here reads one.
    */
-  reacts: ['selection', 'containers', 'dispositions'],
+  reacts: ['selection', 'containers', 'dispositions', 'tracker'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read'],
+    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh'],
     storage: true,
   },
 })

@@ -1,5 +1,7 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, GitPullRequest } from 'lucide-react'
 
+import type { TrackerMissing } from 'roadmap-module-protocol'
+
 import { cn } from '@/lib/utils'
 import { ORDER_LABELS, type Ordering } from '@/live/order.ts'
 import { projectName } from './absence.tsx'
@@ -107,10 +109,17 @@ import { projectName } from './absence.tsx'
  *
  * `read 6 d ago` says how old the reading is. The host draws its own freshness
  * line from `roadmap.refreshable`, but only where it has room for one and only
- * in its header; a snapshot imported weeks ago, which no read on this machine
- * can replace — a GitLab project, say, where this app never asks `glab` —
- * looks exactly like a live list unless the list itself says otherwise. It is
- * the reading's own `generated`, never the moment the page asked.
+ * in its header, and a list a day old looks exactly like a live one unless the
+ * list itself says otherwise. It is the shared reading's own `at` — when the
+ * host's reading last changed — never the moment the page asked. It used to be
+ * the date of this app's own snapshot; there is no such snapshot any more
+ * (issue #4), and a source whose last read failed says so, with its own date,
+ * in the line under this one — see `view/sources.tsx`.
+ *
+ * `3 unread` is the refs the reading names but has no row for — not read yet,
+ * not found, on no tracker this project reads — counted, and listed in the
+ * tooltip with why. A ref the epic names that is on no row would otherwise be
+ * simply absent, which is the failure this module is written against.
  */
 
 /** Which order each column heading sets, and what its arrow means. */
@@ -123,7 +132,8 @@ export function Heading({
   showing,
   total,
   scope = null,
-  generated,
+  at,
+  unread = [],
   now,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
@@ -134,20 +144,24 @@ export function Heading({
   total: number
   /** What the scope is narrowing to, or `null` when it is not narrowing. */
   scope?: 'epic' | 'containers' | null
-  /** When the reading was taken, as the reading says. */
-  generated?: string | null
+  /** When the shared reading last changed, as the reading says. `undefined` draws no age at all. */
+  at?: string | null
+  /** The refs the reading names and holds no row for, and why. */
+  unread?: readonly TrackerMissing[]
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
 }) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
   const brief = showing === total ? `${total}` : `${showing}/${total}`
   const within = scope === 'epic' ? 'this epic' : scope === 'containers' ? 'picked containers' : null
-  const age = generated === undefined ? null : ageOf(generated, now)
+  const age = at === undefined ? null : ageOf(at, now)
+  const gaps = unread.length ? `${unread.length} unread` : null
+  const why = unread.map((gap) => `${gap.ref}: ${MISSING[gap.reason]}`)
 
   return (
     <div
       data-heading="columns"
-      title={[project, count, within, age].filter(Boolean).join(' · ')}
+      title={[[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')}
       className="flex items-stretch border-b border-border bg-muted/30"
     >
       {/* Above the checkboxes, and the same width as them, so the columns below
@@ -191,6 +205,7 @@ export function Heading({
           <span className="hidden @sm:inline">{count}</span>
           {within && <span className="hidden @sm:inline"> · {within}</span>}
           {age && <span className="hidden @md:inline"> · {age}</span>}
+          {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
         </span>
 
         {/* Kept at every width where its column is not, because an order nobody
@@ -309,16 +324,26 @@ function Sort({
   )
 }
 
+/** Why a ref has no row, in the words the heading's tooltip uses. */
+const MISSING: Record<TrackerMissing['reason'], string> = {
+  pending: 'not read yet',
+  'not-found': 'its tracker has no such issue or change',
+  'no-tracker': 'no tracker this project reads',
+  failed: 'its tracker could not be read',
+}
+
 /**
  * How old a reading is, in the fewest words that still say it.
  *
  * Coarse on purpose: minutes, hours, days. The exact instant is on the host's
  * own freshness line, and the question this answers is only "is this list
- * from today". A reading with no date, or one this cannot parse, says so
- * rather than guessing — an undated list is the one most worth doubting.
+ * from today". `null` is the protocol's "nothing has ever been read", and a
+ * date this cannot parse says so rather than guessing — an undated list is the
+ * one most worth doubting.
  */
-export function ageOf(generated: string | null, now: number = Date.now()): string {
-  const at = generated ? Date.parse(generated) : Number.NaN
+export function ageOf(read: string | null, now: number = Date.now()): string {
+  if (read === null) return 'not read yet'
+  const at = Date.parse(read)
   if (Number.isNaN(at)) return 'reading not dated'
   const minutes = Math.max(0, Math.floor((now - at) / 60_000))
   if (minutes < 1) return 'read just now'

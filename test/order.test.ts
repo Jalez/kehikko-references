@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import { collect } from '@/live/collect.ts'
 import { DEFAULT_ORDER, ORDER_LABELS, order, reordered, type Ordering } from '@/live/order.ts'
+import { row } from './fixtures.ts'
 
 /**
  * The promise from `collect.ts`, held one more time.
@@ -19,25 +20,16 @@ import { DEFAULT_ORDER, ORDER_LABELS, order, reordered, type Ordering } from '@/
 
 const EVERY: Ordering[] = ['moved', 'stale', 'ref', 'state', 'kind']
 
-/** A reading with all four bags, some rows deliberately damaged. */
-const READING = {
-  generated: '2026-08-27T09:00:00Z',
-  issues: {
-    '41': { state: 'opened', title: 'a gitlab issue', at: '2026-08-20T10:00:00Z' },
-    '1000': { state: 'closed', title: 'a closed one', at: '2026-08-10T10:00:00Z' },
-    '7': { state: 'opened', title: 'no date at all on this one' },
-  },
-  mrs: {
-    '17': { state: 'merged', title: 'a merge request', at: '2026-08-25T10:00:00Z' },
-  },
-  ghIssues: {
-    'gh#131': { state: 'opened', title: 'a github issue', at: '2026-08-26T10:00:00Z' },
-    'gh#4': { state: 'something-nobody-can-read', title: 'a state that will not read', at: '2026-08-01T10:00:00Z' },
-  },
-  ghPrs: {
-    'gh#105': { state: 'merged', title: 'a pull request', at: '2026-08-22T10:00:00Z' },
-  },
-}
+/** A reading with GitLab and GitHub rows in it, some deliberately damaged. */
+const READING = [
+  row('#41', { title: 'a gitlab issue', updatedAt: '2026-08-20T10:00:00Z' }),
+  row('#1000', { state: 'closed', title: 'a closed one', updatedAt: '2026-08-10T10:00:00Z' }),
+  row('#7', { title: 'no date at all on this one', updatedAt: null }),
+  row('!17', { state: 'merged', title: 'a merge request', updatedAt: '2026-08-25T10:00:00Z' }),
+  row('gh#131', { title: 'a github issue', updatedAt: '2026-08-26T10:00:00Z' }),
+  { ref: 'gh#4', tracker: 'github', state: 'something-nobody-can-read', title: 'a state that will not read', updatedAt: '2026-08-01T10:00:00Z' },
+  row('gh#105', { kind: 'change', state: 'merged', title: 'a pull request', updatedAt: '2026-08-22T10:00:00Z' }),
+]
 
 const ROWS = collect(READING)
 const refsIn = (ordering: Ordering) => order(ROWS, ordering).map((row) => row.ref)
@@ -72,7 +64,7 @@ describe('a row with nothing to sort by has a defined place', () => {
   test('a state nobody could read sorts after closed, never beside the open work', () => {
     const byState = order(ROWS, 'state')
     expect(byState.at(-1)?.ref).toBe('gh#4')
-    expect(byState[0]?.state).toBe('opened')
+    expect(byState[0]?.state).toBe('open')
   })
 })
 

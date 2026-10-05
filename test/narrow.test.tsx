@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { Heading, ageOf } from '@/view/heading.tsx'
+import { row } from './fixtures.ts'
 
 const PROJECT = '/Users/somebody/Projects/roadmap'
 
@@ -35,19 +36,15 @@ const PROJECT = '/Users/somebody/Projects/roadmap'
 
 afterEach(cleanup)
 
-const READING = {
-  generated: '2026-08-26T20:44:44Z',
-  ghIssues: {
-    'gh#131': {
-      state: 'opened',
-      title: 'Until Journeys can be read from a module, a container is a picture of one',
-      at: '2026-08-26T20:44:00Z',
-      url: 'https://github.com/example/repo/issues/131',
-      labels: ['area::modules', 'importance::P1'],
-      assignees: ['ada lovelace'],
-    },
-  },
-}
+const READING = [
+  row('gh#131', {
+    title: 'Until Journeys can be read from a module, a container is a picture of one',
+    updatedAt: '2026-08-26T20:44:00Z',
+    url: 'https://github.com/example/repo/issues/131',
+    labels: ['area::modules', 'importance::P1'],
+    assignees: ['ada lovelace'],
+  }),
+]
 
 /**
  * The one element that carries a row's columns.
@@ -126,7 +123,7 @@ describe('what a narrow container hides is still reachable', () => {
        because this is the answer to "reachable how" for somebody who does not
        know the word to type into the filter. */
     expect(overview).toContain('gh#131')
-    expect(overview).toContain('opened')
+    expect(overview).toContain('open')
     expect(overview).toContain('Until Journeys')
     expect(overview).toContain('area::modules')
     expect(overview).toContain('2026-08-26')
@@ -134,17 +131,17 @@ describe('what a narrow container hides is still reachable', () => {
   })
 
   test('a row with nobody on it says so in the tooltip too, rather than trailing off', () => {
-    const rows = collect({ issues: { '1': { state: 'opened', title: 'x' } } })
+    const rows = collect([row('#1', { title: 'x' })])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     expect(rowBox(container).getAttribute("title")).toContain('nobody')
   })
 
   test('a state nobody could read is named in the tooltip, never left blank', () => {
-    const rows = collect({ issues: { '1': { state: 'something-else', title: 'x' } } })
+    const rows = collect([{ ref: '#1', state: 'something-else', title: 'x' }])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const overview = rowBox(container).getAttribute("title") ?? ''
     expect(overview).toContain('state unread')
-    expect(overview).not.toContain('· opened ·')
+    expect(overview).not.toContain('· open ·')
   })
 })
 
@@ -194,14 +191,23 @@ describe('the table’s heading, at every width', () => {
         showing={7}
         total={24}
         scope="epic"
-        generated="2026-09-29T08:00:00Z"
+        at="2026-09-29T08:00:00Z"
+        unread={[
+          { ref: '#9', reason: 'pending' },
+          { ref: 'gl#3', reason: 'no-tracker' },
+        ]}
         now={now}
       />,
     )
     const heading = container.querySelector('[data-heading]')!
     expect(heading.textContent).toContain('this epic')
     expect(heading.textContent).toContain('read 6 d ago')
-    expect(heading.getAttribute('title')).toContain('7 of 24 shown · this epic · read 6 d ago')
+    /* The age is the shared reading's, and the refs it names without a row are
+       counted, and listed with why in the tooltip — never simply absent. */
+    expect(heading.textContent).toContain('2 unread')
+    expect(heading.getAttribute('title')).toContain('7 of 24 shown · this epic · read 6 d ago · 2 unread')
+    expect(heading.getAttribute('title')).toContain('#9: not read yet')
+    expect(heading.getAttribute('title')).toContain('gl#3: no tracker this project reads')
   })
 
   test('the age is coarse, and an undated reading says so', () => {
@@ -210,7 +216,7 @@ describe('the table’s heading, at every width', () => {
     expect(ageOf('2026-10-05T11:48:00Z', now)).toBe('read 12 min ago')
     expect(ageOf('2026-10-04T12:00:00Z', now)).toBe('read 24 h ago')
     expect(ageOf('2026-09-29T08:00:00Z', now)).toBe('read 6 d ago')
-    expect(ageOf(null, now)).toBe('reading not dated')
+    expect(ageOf(null, now)).toBe('not read yet')
     expect(ageOf('yesterday-ish', now)).toBe('reading not dated')
   })
 

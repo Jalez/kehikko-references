@@ -28,7 +28,18 @@ describe('the manifest a host reads', () => {
   test('says it both sets the selection and narrows when it changes', () => {
     expect(MANIFEST.declares.uses).toContain('selection:set')
     expect(MANIFEST.declares.uses).toContain('filters:set')
-    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions'])
+    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions', 'tracker'])
+  })
+
+  /**
+   * The rows are the host's shared tracker reading (issue #4): read under
+   * `trackers:read`, read again under `trackers:refresh`, and re-asked when
+   * `context.tracker.at` moves — which is what `reacts: ['tracker']` says.
+   */
+  test('says it reads the shared tracker reading, asks for it to be read again, and reacts when it moves', () => {
+    expect(MANIFEST.declares.uses).toContain('trackers:read')
+    expect(MANIFEST.declares.uses).toContain('trackers:refresh')
+    expect(MANIFEST.reacts).toContain('tracker')
   })
 
   /**
@@ -40,7 +51,7 @@ describe('the manifest a host reads', () => {
     expect(MANIFEST.declares.uses).toContain('epics:read')
   })
 
-  test('asks the host for nothing it reads itself', () => {
+  test('asks for no old door to the same reading, and opens no door of its own', () => {
     expect(MANIFEST.declares.uses).not.toContain('live:read')
     expect(MANIFEST.mcp).toBeUndefined()
   })
