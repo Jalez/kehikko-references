@@ -165,11 +165,18 @@ function stubHost(door: Door = stubDoor({})) {
     answer: (
       method: string,
       outcome: Answer,
-      /* The first rather than the most recent, to answer a question late. */
-      which: 'last' | 'first' = 'last',
+      /* The first rather than the most recent, to answer a question late — or
+         a number, for the one asked at that place in between. */
+      which: 'last' | 'first' | number = 'last',
     ) => {
       const asking = (message: Record<string, unknown>) => message.type === MESSAGE.REQUEST && message.method === method
-      const asked = (which === 'first' ? said.find(asking) : said.findLast(asking)) as { id: string } | undefined
+      const asked = (
+        typeof which === 'number'
+          ? said.filter(asking)[which]
+          : which === 'first'
+            ? said.find(asking)
+            : said.findLast(asking)
+      ) as { id: string } | undefined
       if (!asked) throw new Error(`nothing asked ${method}`)
       respond(asked.id, outcome)
     },
@@ -1078,5 +1085,195 @@ describe('the shared facets, with the marks people put on them', () => {
     act(() => host.context(PROJECT, [], 'an-epic', { hide: ['closed:wont-do'] }, { dispositions: [] }))
     await settle()
     expect(document.body.textContent).toContain('8 references')
+  })
+})
+
+/**
+ * The scope following the epic while it is open (issue #7).
+ *
+ * `steps.list` and `epic.get` used to be asked when the open epic changed and
+ * at no other time, so a ref added to a step did not come under "This epic"
+ * until the window was reloaded. `context.content` says whose material changed
+ * and for which epic; this page re-asks the two questions when the entries for
+ * what it shows move, and at no other time.
+ *
+ * The things that would break quietly: a change to another epic or another
+ * module's material must ask nothing; a burst must not be a question per
+ * change; and the list must be re-scoped where it stands — the same rows, the
+ * same scroll, the same ticks — rather than rebuilt.
+ */
+describe('following the open epic as its content changes', () => {
+  const HIDING = { hide: ['issue:closed'] }
+  const PICKED = ['gh#2']
+  const at = (minute: number) => `2026-08-27T10:${String(minute).padStart(2, '0')}:00Z`
+  const hostChanged = (minute: number, epic: string | null = 'an-epic') => ({ source: 'host', epic, at: at(minute) })
+  const journeysChanged = (minute: number) => ({ source: 'kehikot.journeys', epic: null, at: at(minute) })
+
+  /** Answer the two questions most recently asked. */
+  const names = (host: ReturnType<typeof stubHost>, refs: string[], umbrella: string | null = 'gh#5') => {
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella, steps: [] } }))
+  }
+  /** Greet, read eight rows, and answer what the epic names: gh#2, gh#3 and the umbrella gh#5. */
+  const listed = async (content: unknown[] = []) => {
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
+    act(() => host.greet(PROJECT, null, PICKED, HIDING, { content }))
+    await settle()
+    names(host, ['gh#2', 'gh#3'])
+    await settle()
+    return host
+  }
+  /** A later context that changes nothing but what is said to have changed. */
+  const told = (host: ReturnType<typeof stubHost>, content: unknown[], epic = 'an-epic') =>
+    act(() => host.context(PROJECT, PICKED, epic, HIDING, { content }))
+  const drawn = () =>
+    [...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref')).sort()
+
+  test('a change to the host’s epic asks both questions once more, and re-scopes the list where it stands', async () => {
+    const host = await listed()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+    expect(ticked()).toEqual(['gh#2'])
+
+    /* What a reader is holding on to: a row, where they have scrolled to, and
+       what is ticked. */
+    const row = document.querySelector('li[data-ref="gh#3"]')
+    const scroller = document.querySelector('ul')!.parentElement!
+    scroller.scrollTop = 72
+
+    told(host, [hostChanged(1)])
+    await settle()
+    expect(host.calls('steps.list')).toEqual([{ epic: 'an-epic' }, { epic: 'an-epic' }])
+    expect(host.calls('epic.get')).toEqual([{ epic: 'an-epic' }, { epic: 'an-epic' }])
+    /* The reading is not what changed, so it is not asked for again. */
+    expect(host.calls('tracker.get')).toHaveLength(1)
+    /* And nothing is taken away while the answer is on its way. */
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+
+    /* A step gained gh#6, and gh#4 — which the header is hiding. */
+    names(host, ['gh#2', 'gh#3', 'gh#6', 'gh#4'])
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5', 'gh#6'])
+    expect(document.body.textContent).toContain('4 of 8 shown')
+    /* The header's filter still narrows, the tick is still the tick, the row
+       is the same element and the list has not moved under the reader. */
+    expect(document.querySelector('li[data-ref="gh#4"]')).toBeNull()
+    expect(ticked()).toEqual(['gh#2'])
+    expect(document.querySelector('li[data-ref="gh#3"]')).toBe(row)
+    expect(document.querySelector('ul')!.parentElement).toBe(scroller)
+    expect(scroller.scrollTop).toBe(72)
+    /* The count in the header's own menu follows too. */
+    const scope = (host.offered() as { options: { label: string }[] }[])[0]!
+    expect(scope.options[0]?.label).toBe('This epic 5')
+    /* Once: the answer landing asks nothing further. */
+    expect(host.calls('steps.list')).toHaveLength(2)
+    expect(host.calls('epic.get')).toHaveLength(2)
+  })
+
+  test('a change under the journeys asks too, though the host cannot say which epic it was for', async () => {
+    const host = await listed()
+    told(host, [journeysChanged(1)])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(2)
+    expect(host.calls('epic.get')).toHaveLength(2)
+    names(host, ['gh#2'], null)
+    await settle()
+    expect(drawn()).toEqual(['gh#2'])
+  })
+
+  test('a change to another epic, or to another module’s material, asks nothing', async () => {
+    const host = await listed()
+    told(host, [hostChanged(1, 'another-epic')])
+    await settle()
+    told(host, [hostChanged(1, 'another-epic'), { source: 'kehikot.paper', epic: 'an-epic', at: at(2) }])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(1)
+    expect(host.calls('epic.get')).toHaveLength(1)
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+  })
+
+  test('the same changes said again ask nothing, and neither does a greeting that already carries some', async () => {
+    /* Every click on the canvas is a context, and each carries the whole list. */
+    const host = await listed([hostChanged(1)])
+    expect(host.calls('steps.list')).toHaveLength(1)
+    told(host, [hostChanged(1)])
+    await settle()
+    act(() => host.context(PROJECT, ['gh#3'], 'an-epic', HIDING, { content: [hostChanged(1)] }))
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(1)
+    expect(host.calls('epic.get')).toHaveLength(1)
+  })
+
+  test('a burst of changes while one question is out is one more question after it, not one each', async () => {
+    const host = await listed()
+    told(host, [hostChanged(1)])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(2)
+
+    /* Three more land before the host has answered. */
+    told(host, [hostChanged(2)])
+    told(host, [hostChanged(2), journeysChanged(3)])
+    told(host, [hostChanged(4), journeysChanged(3)])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(2)
+    expect(host.calls('epic.get')).toHaveLength(2)
+
+    /* The answer that was out is drawn — it is newer than what was there — and
+       ONE question follows it, for everything that changed meanwhile. */
+    names(host, ['gh#2', 'gh#3', 'gh#6'])
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5', 'gh#6'])
+    expect(host.calls('steps.list')).toHaveLength(3)
+    expect(host.calls('epic.get')).toHaveLength(3)
+
+    names(host, ['gh#2', 'gh#3', 'gh#6', 'gh#7'])
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5', 'gh#6', 'gh#7'])
+    expect(host.calls('steps.list')).toHaveLength(3)
+    expect(host.calls('epic.get')).toHaveLength(3)
+  })
+
+  test('a question that fails leaves the scope as it was, rather than the whole project or nothing', async () => {
+    const refused: Answer = { ok: false, error: 'The host could not read that epic just now.' }
+    const host = await listed()
+    told(host, [hostChanged(1)])
+    await settle()
+    act(() => host.answer('steps.list', refused))
+    act(() => host.answer('epic.get', refused))
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+
+    /* And one of the two failing does not narrow the epic to what the other said. */
+    told(host, [hostChanged(2)])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(3)
+    act(() => host.answer('steps.list', refused))
+    act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#5', steps: [] } }))
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+  })
+
+  test('an answer about an epic the reader has left is dropped, and so is the question queued behind it', async () => {
+    const host = await listed()
+    told(host, [hostChanged(1)])
+    told(host, [hostChanged(2)])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(2)
+
+    told(host, [hostChanged(2)], 'another-epic')
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(3)
+    expect(host.calls('steps.list').at(-1)).toEqual({ epic: 'another-epic' })
+    names(host, ['gh#1'], null)
+    await settle()
+    expect(drawn()).toEqual(['gh#1'])
+
+    /* The old epic's answer arrives last. It is not drawn, and it is not the
+       cue for the question that was waiting on it. */
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#3', 'gh#6'] }] } }, 1))
+    act(() => host.answer('epic.get', { ok: true, data: { umbrella: 'gh#5' } }, 1))
+    await settle()
+    expect(drawn()).toEqual(['gh#1'])
+    expect(host.calls('steps.list')).toHaveLength(3)
   })
 })

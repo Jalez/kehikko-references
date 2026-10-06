@@ -28,7 +28,7 @@ describe('the manifest a host reads', () => {
   test('says it both sets the selection and narrows when it changes', () => {
     expect(MANIFEST.declares.uses).toContain('selection:set')
     expect(MANIFEST.declares.uses).toContain('filters:set')
-    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions', 'tracker'])
+    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions', 'tracker', 'content'])
   })
 
   /**
@@ -49,6 +49,17 @@ describe('the manifest a host reads', () => {
   test('says it reads the open epic’s steps and umbrella', () => {
     expect(MANIFEST.declares.uses).toContain('steps:read')
     expect(MANIFEST.declares.uses).toContain('epics:read')
+  })
+
+  /**
+   * And asks both again when the epic's material changes while it is open
+   * (issue #7), which is what `reacts: ['content']` says. This app only reads,
+   * so it reports nothing: `content:report` is for a module saying its OWN
+   * material changed.
+   */
+  test('says it reacts when the open epic’s content changes, and reports none of its own', () => {
+    expect(MANIFEST.reacts).toContain('content')
+    expect(MANIFEST.declares.uses).not.toContain('content:report')
   })
 
   test('asks for no old door to the same reading, and opens no door of its own', () => {

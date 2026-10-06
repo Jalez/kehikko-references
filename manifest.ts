@@ -197,6 +197,13 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.1.0` (issue #7): the scope follows the epic while it is open. A ref added
+ * to a step, or a new umbrella, comes under "This epic" when the host says the
+ * epic's content changed, where it used to wait for the window to be reloaded.
+ * A minor, because nothing is withdrawn and nothing new is asked for: the same
+ * two questions, asked once more. Under a host that has never heard of
+ * `context.content` it behaves exactly as 3.0.0 did.
+ *
  * `3.0.0` (issue #4): the rows are the host's shared tracker reading —
  * `tracker.get` — rather than this app's own `gh`, so GitLab and GitHub refs
  * list together and nothing reads a tracker twice. It needs a host that answers
@@ -236,7 +243,7 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.0.0'
+export const VERSION = '3.1.0'
 
 /**
  * The port this app would rather have.
@@ -342,9 +349,17 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * project's own schedule — this page asks `tracker.get` again and the rows
    * change. See `standingOn` in `src/wire/use-kehikot.ts`.
    *
+   * `content`, because the scope is what the open epic names, and an epic is
+   * edited while it is open (issue #7): when `context.content` says the host's
+   * epics or the journeys changed for this epic, the page asks `steps.list`
+   * and `epic.get` again and the rows under "This epic" change. See `stampOn`
+   * in the same file. Only the receiving half: this app keeps no material of
+   * its own, so there is no `content:report` below and nothing here ever calls
+   * `content.changed`.
+   *
    * Not `passage`. Nothing here reads one.
    */
-  reacts: ['selection', 'containers', 'dispositions', 'tracker'],
+  reacts: ['selection', 'containers', 'dispositions', 'tracker', 'content'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
     uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh'],
