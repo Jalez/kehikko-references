@@ -3,8 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { askReading, askRefresh } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
 import {
+  CONTENT_HOST,
+  contentStamp,
   filterChoiceSchema,
   type CanvasContainer,
+  type ContentChange,
   type Disposition,
   type FilterChoice,
   type FilterGroup,
@@ -61,6 +64,24 @@ import {
  * It is not a spinner. It says what it is waiting for.
  */
 const GREETING_GRACE_MS = 700
+
+/**
+ * Whose material the open epic's refs are read out of, in the words
+ * `context.content` uses for a source.
+ *
+ * `CONTENT_HOST` is the epics the host keeps — what `steps.list` and `epic.get`
+ * answer from. The other is the Journeys module, by the id it registers under:
+ * a journey is where an epic's steps are edited, so a change there is a change
+ * to what the open epic names (issue #7 asks for both). The host announces an
+ * edit under the journeys without saying which epic it was for, and
+ * `contentStamp` counts that for any.
+ *
+ * Spelled here because this is the only place in this program that names
+ * another module, and it names it only as a source to listen for: nothing is
+ * asked of Journeys and nothing is sent to it.
+ */
+const JOURNEYS = 'kehikot.journeys'
+const EPIC_KEPT_BY = [CONTENT_HOST, JOURNEYS] as const
 
 /**
  * What came of asking the host to move this container's filters.
@@ -247,9 +268,16 @@ export interface Kehikot {
    * — which the scope reads as "nothing to narrow to", never as "the epic names
    * nothing".
    *
-   * Asked again when the epic or the project changes, and on the host's
-   * refresh, because steps are edited while an epic is open. Not on every
-   * context: a context arrives after every click on the canvas.
+   * Asked again when the epic or the project changes, on the host's refresh,
+   * and when `context.content` says the epic's material changed — because
+   * steps are edited while an epic is open (issue #7). Not on every context: a
+   * context arrives after every click on the canvas.
+   *
+   * An answer REPLACES this and nothing else. There is no "reading the epic"
+   * state between two answers, so a list re-scoped by a later answer is the
+   * same list: the rows that stay are the same elements, where the reader
+   * scrolled to is where they still are, and the filters and the selection —
+   * the host's, both — were never touched.
    */
   epicRefs: string[] | null
   /**
@@ -365,14 +393,64 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   const epicOn = useRef<string | null | undefined>(undefined)
   const epicAsked = useRef(0)
 
-  const readEpic = useCallback(() => {
+  /**
+   * The `contentStamp` this page last acted on, for the epic it is standing on.
+   *
+   * The second thing the question about the epic is keyed to, and the
+   * `content` this module's manifest says it reacts to — the same arrangement
+   * as `seenAt` for the tracker. The stamp is a string that moves only when
+   * the host's epics or the journeys changed for THIS epic, so a context that
+   * carries the same list again — every click on the canvas does — and one
+   * about another epic or another module's material both compare equal and ask
+   * nothing.
+   */
+  const stampOn = useRef('')
+
+  /**
+   * What makes a burst of changes one more question rather than one each.
+   *
+   * `epicOut` is whether the question about the epic is out and unanswered;
+   * `epicStale` is whether the material changed again while it was. An agent
+   * writing six steps is six contexts in a second, and the answer to the first
+   * question may have been composed before the sixth write — so it cannot be
+   * the last word, and asking six times to find that out would be five
+   * questions too many. One follows the answer, for everything that changed
+   * meanwhile.
+   *
+   * `epicHeard` is which of the two questions the answer on screen came from,
+   * so a re-ask can tell losing one of them from never having been granted it.
+   */
+  const epicOut = useRef(false)
+  const epicStale = useRef(false)
+  const epicHeard = useRef({ steps: false, whole: false })
+
+  /**
+   * Ask what the epic names.
+   *
+   * `afresh` is the question as it has always been asked — a new epic, a new
+   * project, a greeting, the host's refresh: asked now, whatever is out, and
+   * the older answer is dropped by the counter. `again` is the re-ask on
+   * `context.content` (issue #7), which differs in the two ways a question
+   * about material that is still being written has to: it waits its turn
+   * behind one already out, and an answer that failed leaves what is on screen
+   * alone.
+   */
+  const readEpic = useCallback(function ask(how: 'afresh' | 'again' = 'afresh') {
+    if (how === 'again' && epicOut.current) {
+      epicStale.current = true
+      return
+    }
     const epic = epicOn.current
     const mine = (epicAsked.current += 1)
+    /* Whatever was waiting was waiting to be asked no earlier than this. */
+    epicStale.current = false
     const current = host.current
     if (!epic || !current) {
+      epicOut.current = false
       setEpicRefs(null)
       return
     }
+    epicOut.current = true
     /* Both, side by side, and either is enough. `steps.list` is the steps'
        refs under `steps:read`; `epic.get` is the umbrella under `epics:read`.
        A host that grants one and refuses the other still narrows the list to
@@ -382,16 +460,29 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       current.request('steps.list', { epic }),
       current.request('epic.get', { epic }),
     ]).then(([steps, whole]) => {
+      /* A newer question is out, about this epic or the next — and whatever
+         was queued behind this one went with it. */
       if (epicAsked.current !== mine) return
-      if (steps.status === 'rejected' && whole.status === 'rejected') {
-        setEpicRefs(null)
-        return
+      epicOut.current = false
+      const heard = { steps: steps.status === 'fulfilled', whole: whole.status === 'fulfilled' }
+      /* Asked again over refs already on screen, and a question that answered
+         last time did not answer this time: the scope stays as it is. Putting
+         the whole project back, or narrowing the epic to what the other
+         question said, would be drawing a failure as if it were an edit. */
+      const lost =
+        how === 'again' && ((epicHeard.current.steps && !heard.steps) || (epicHeard.current.whole && !heard.whole))
+      if (!lost) {
+        epicHeard.current = heard
+        if (!heard.steps && !heard.whole) setEpicRefs(null)
+        else {
+          const named = namedBy(
+            steps.status === 'fulfilled' ? steps.value : null,
+            whole.status === 'fulfilled' ? whole.value : null,
+          )
+          setEpicRefs((was) => (was && same(was, named) ? was : named))
+        }
       }
-      const named = namedBy(
-        steps.status === 'fulfilled' ? steps.value : null,
-        whole.status === 'fulfilled' ? whole.value : null,
-      )
-      setEpicRefs((was) => (was && same(was, named) ? was : named))
+      if (epicStale.current) ask('again')
     })
   }, [])
 
@@ -461,6 +552,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
         containers?: CanvasContainer[]
         dispositions?: Disposition[]
         tracker?: { at?: string | null; refreshing?: boolean }
+        content?: ContentChange[]
       },
       /**
        * Whether this was a greeting rather than a later context, which decides
@@ -559,9 +651,20 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       /* The epic is asked about again when it changes, and when the project
          does: two projects can each have an epic with the same slug. */
       const epic = typeof context.epic === 'string' && context.epic ? context.epic : null
+      /* And when its material changes while it is open: the host's epics or
+         the journeys, for this epic. Empty with no epic open — there is
+         nothing to ask about — and from a host that has never heard of
+         content changes, which never moves it. */
+      const stamp = epic ? contentStamp(context.content, { sources: EPIC_KEPT_BY, epic }) : ''
       if (moved || epic !== epicOn.current) {
         epicOn.current = epic
+        /* A new epic is read whole, so whatever is said to have changed in it
+           so far is already in the answer. */
+        stampOn.current = stamp
         readEpic()
+      } else if (stamp !== stampOn.current) {
+        stampOn.current = stamp
+        readEpic('again')
       }
 
       if (!moved) {

@@ -83,6 +83,18 @@ refuses both questions, leaves the whole project on screen and the option says
 `This epic (not read)`. An epic that names nothing in the reading draws its own
 panel rather than "nothing matches what you asked for", because nobody asked.
 
+Since 3.1.0 the scope follows the epic while it is open (issue #7), which is
+`reacts: ['content']`. `context.content` says whose material changed and for
+which epic; when the entries for the host's epics or for the journeys move for
+the open epic — `contentStamp` — the page asks `steps.list` and `epic.get`
+again, and only those. The list is re-scoped where it stands: the answer
+replaces the epic's refs and nothing else, so the filters, the selection and
+where the reader had scrolled to are as they were. A burst of changes while a
+question is out is one more question after it, and a re-ask that fails leaves
+the scope as it was. It needs a host that sends `context.content`
+(Jalez/kehikko#40); under an older one the scope is read when the epic is
+opened and on refresh, as before.
+
 ### The heading: how much, of what, and how old
 
 `37 of 412 shown · this epic · read 6 d ago · 2 unread`. The age is the shared
