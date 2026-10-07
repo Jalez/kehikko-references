@@ -1,4 +1,14 @@
-import { LIMITS, type Disposition, type FilterChoice, type FilterGroup } from 'kehikot-module-protocol'
+import {
+  LIMITS,
+  focusCount,
+  isFocused,
+  pickedParts,
+  refInFocus,
+  type Disposition,
+  type EpicPart,
+  type FilterChoice,
+  type FilterGroup,
+} from 'kehikot-module-protocol'
 import {
   HIDE_GROUP,
   countFacets,
@@ -89,6 +99,28 @@ import type { Reference } from './reference.ts'
  * unless it is currently switched on, so a person can always switch off what
  * they switched on. Two groups are exempt from dropping anything, each for a
  * reason given where it is built: the scope, and the kehikko pick.
+ *
+ * ## The parts focus, which is a narrowing nobody set HERE
+ *
+ * An epic may be divided into parts, and a person may pick some of them out in
+ * the host's bar. `context.parts` lists every part of the open epic with the
+ * refs the host says belong to it, and flags the picked ones. While any is
+ * picked this list draws only the rows a picked part lists — `refInFocus`, the
+ * protocol's rule and not a copy of it — and a ref no part lists is outside
+ * every focus.
+ *
+ * It is the fifth thing that can hide a row and the first that is not a filter
+ * group: this module does not offer it, cannot set it, and `filters.set` does
+ * not move it. So it is deliberately NOT part of `narrowing`, which is "what
+ * one press here can put back", and it is counted on its own — `focusOf` says
+ * how many rows the rest of the narrowing would draw and the focus alone is
+ * hiding, and `view/heading.tsx` prints that number beside the names of the
+ * parts. A focus that shortened this list without a sentence would be the
+ * failure the first paragraph of this file is about.
+ *
+ * With nothing picked — an epic with no parts, no epic, a host that has never
+ * heard of parts — every function below behaves exactly as it did before the
+ * field existed.
  */
 
 /**
@@ -165,9 +197,18 @@ export interface Sifting {
    * the same value.
    */
   marks: readonly Disposition[]
+  /**
+   * `context.parts`: every part of the open epic, the picked ones flagged.
+   *
+   * The whole list rather than only the picked parts, for the reason the host
+   * sends the whole list: the heading names what is picked out of how many.
+   * `[]`, or a list with nothing picked, narrows nothing. Not a choice made in
+   * this container — see the essay above — so `narrowing` does not read it.
+   */
+  parts: readonly EpicPart[]
 }
 
-export const EVERYTHING: Sifting = { query: '', hidden: [], scope: null, picked: null, marks: [] }
+export const EVERYTHING: Sifting = { query: '', hidden: [], scope: null, picked: null, marks: [], parts: [] }
 
 /**
  * The four group ids, named because three things have to agree on them: the
@@ -249,7 +290,7 @@ export function scopeOf(epicRefs: readonly string[] | null, aimed: readonly stri
   return null
 }
 
-/** What else the narrowing is read against, besides the choice: four facts from the canvas. */
+/** What else the narrowing is read against, besides the choice: five facts from the canvas. */
 export interface Canvas {
   /** `context.selection`. */
   selection?: readonly string[]
@@ -259,6 +300,8 @@ export interface Canvas {
   aimed?: readonly string[] | null
   /** `context.dispositions`. */
   marks?: readonly Disposition[]
+  /** `context.parts`. */
+  parts?: readonly EpicPart[]
 }
 
 /**
@@ -379,7 +422,7 @@ export function offer(
  * working the first time somebody pastes something long into it.
  */
 export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
-  const { selection = [], epicRefs = null, aimed = null, marks = [] } = canvas
+  const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [] } = canvas
   const query = chosen[SEARCH]
   return {
     query: typeof query === 'string' ? query.slice(0, LIMITS.FILTER_TEXT) : '',
@@ -390,6 +433,7 @@ export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
        state elsewhere and a later context replaces them. */
     picked: chosen[KEHIKKO] === PICKED ? [...selection] : null,
     marks: [...marks],
+    parts: [...parts],
   }
 }
 
@@ -449,6 +493,42 @@ export function nothingInScope(rows: readonly Reference[], sifting: Sifting): bo
 }
 
 /**
+ * What the parts focus is doing to this list, for the sentence in the heading:
+ * `null` when nothing is picked out, which is the cue to say nothing at all.
+ *
+ * `outside` is counted against what the REST of the narrowing would draw, not
+ * against the whole reading. "14 outside the picked parts" then means fourteen
+ * rows that would be on screen this minute if no part were picked — the number
+ * a reader wondering where their row went can act on — where a count over the
+ * reading would fold in every row the scope and the toggles were hiding
+ * anyway, and say four hundred about a list that was never going to show them.
+ * `shown + outside` is exactly the list as it was before the focus.
+ *
+ * The two numbers are the protocol's `focusCount`, so that three modules do
+ * not count three ways.
+ */
+export interface Focus {
+  /** What a person calls each picked part — its heading, or its id where it has none — in the epic's order. */
+  picked: string[]
+  /** How many parts the epic has, picked or not. */
+  of: number
+  shown: number
+  outside: number
+}
+
+export function focusOf(rows: readonly Reference[], sifting: Sifting): Focus | null {
+  if (!isFocused(sifting.parts)) return null
+  const unfocused = sift(rows, { ...sifting, parts: [] })
+  const { shown, outside } = focusCount(sifting.parts, unfocused, (row) => refInFocus(sifting.parts, row.ref))
+  return {
+    picked: pickedParts(sifting.parts).map((part) => part.heading || part.id),
+    of: sifting.parts.length,
+    shown,
+    outside,
+  }
+}
+
+/**
  * The rows to draw, in the order `collect` put them.
  *
  * Order is never changed here. A filter that also reordered would mean pressing
@@ -466,6 +546,10 @@ export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] 
        would show a row for a pick that was never about it. */
     if (scope && !scope.has(row.ref)) return false
     if (picked && !picked.has(row.ref)) return false
+    /* The parts picked out in the host's bar. True for every row when none is
+       picked; a ref no picked part lists is outside the focus, and `focusOf`
+       counts it. */
+    if (!refInFocus(sifting.parts, row.ref)) return false
     return matches(row, terms)
   })
   /* The toggles through the facets module's own `sift`, so that "a row with no

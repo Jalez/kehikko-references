@@ -197,6 +197,14 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.2.0`: the list honours the parts focus. While parts of the open epic are
+ * picked out in the host's bar (`context.parts`, protocol 0.29.0), only the
+ * rows those parts list are drawn, a second heading line says which parts and
+ * how many rows are outside them, and a `goto` to a row outside them is
+ * answered `found: false` with that reason. A minor, because with nothing
+ * picked — and under a host that has never heard of parts — it behaves exactly
+ * as 3.1.0 did.
+ *
  * `3.1.0` (issue #7): the scope follows the epic while it is open. A ref added
  * to a step, or a new umbrella, comes under "This epic" when the host says the
  * epic's content changed, where it used to wait for the window to be reloaded.
@@ -243,7 +251,7 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.1.0'
+export const VERSION = '3.2.0'
 
 /**
  * The port this app would rather have.
@@ -359,9 +367,15 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * its own, so there is no `content:report` below and nothing here ever calls
    * `content.changed`.
    *
+   * `parts`, because the rows narrow to the references of the parts of the
+   * epic a person picked out in the host's bar — `refInFocus`, the protocol's
+   * rule — and the heading says which parts and how many rows are outside
+   * them. With none picked the list is what it was. The picking is the host's
+   * own control, so there is no capability for it below.
+   *
    * Not `passage`. Nothing here reads one.
    */
-  reacts: ['selection', 'containers', 'dispositions', 'tracker', 'content'],
+  reacts: ['selection', 'containers', 'dispositions', 'tracker', 'content', 'parts'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
     uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh'],

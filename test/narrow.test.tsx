@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
-import { Heading, ageOf } from '@/view/heading.tsx'
+import { Heading, ageOf, focusLine, focusTold } from '@/view/heading.tsx'
 import { row } from './fixtures.ts'
 
 const PROJECT = '/Users/somebody/Projects/kehikko'
@@ -265,5 +265,52 @@ describe('the table’s heading, at every width', () => {
     render(<Heading project={PROJECT} ordering="moved" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
     fireEvent.click(screen.getByRole('button', { name: /by kind/i }))
     expect(asked).toEqual(['kind'])
+  })
+})
+
+/**
+ * The second heading line, which exists only while parts of the epic are
+ * picked out in the host's bar.
+ *
+ * What is held: that it is absent at rest, so a project that never divided an
+ * epic sees the heading it always saw; that when it is there it carries no
+ * hiding rule at any width, because it is the one narrowing nobody set in this
+ * container; and that the number comes before the names, because the names are
+ * what a narrow container clips.
+ */
+describe('the parts focus, in the heading', () => {
+  const one = { picked: ['The posting seam'], of: 3, shown: 6, outside: 14 }
+  const two = { picked: ['The method', 'The results'], of: 5, shown: 9, outside: 1 }
+
+  test('nothing is drawn while no part is picked out', () => {
+    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
+    expect(container.querySelector('[data-heading="focus"]')).toBeNull()
+    expect(container.textContent).not.toContain('outside')
+  })
+
+  test('a picked part is named, with how many rows are outside it', () => {
+    const { container } = render(
+      <Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} focus={one} />,
+    )
+    const line = container.querySelector('[data-heading="focus"]')!
+    expect(line.textContent).toBe('14 outside the picked part · The posting seam')
+    expect(line.getAttribute('title')).toContain('one of this epic’s 3 parts')
+    expect(line.getAttribute('title')).toContain('host’s bar')
+  })
+
+  test('several are counted and named, the number first', () => {
+    expect(focusLine(two)).toBe('1 outside the 2 picked parts · The method, The results')
+    expect(focusTold(two)).toContain('2 of this epic’s 5 parts: The method, The results.')
+    expect(focusTold(two)).toContain('9 shown; 1 reference it would otherwise show is outside those parts.')
+    expect(focusLine({ ...one, outside: 0 })).toBe('0 outside the picked part · The posting seam')
+  })
+
+  test('the line carries no rule that hides it at any width', () => {
+    const { container } = render(
+      <Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} focus={one} />,
+    )
+    const line = container.querySelector('[data-heading="focus"]')!
+    expect(line.className).not.toContain('hidden')
+    expect(line.className).toContain('truncate')
   })
 })

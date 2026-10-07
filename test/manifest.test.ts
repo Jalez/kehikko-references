@@ -28,7 +28,18 @@ describe('the manifest a host reads', () => {
   test('says it both sets the selection and narrows when it changes', () => {
     expect(MANIFEST.declares.uses).toContain('selection:set')
     expect(MANIFEST.declares.uses).toContain('filters:set')
-    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions', 'tracker', 'content'])
+    expect(MANIFEST.reacts).toEqual(['selection', 'containers', 'dispositions', 'tracker', 'content', 'parts'])
+  })
+
+  /**
+   * `reacts: ['parts']` is the list narrowing to the refs of the parts of the
+   * epic picked out in the host's bar, and saying how many rows that left out.
+   * There is no capability beside it: picking a part is the host's own
+   * control, and nothing here asks for it.
+   */
+  test('says it narrows when the picked parts of the epic change, and asks for nothing to do it', () => {
+    expect(MANIFEST.reacts).toContain('parts')
+    expect(MANIFEST.declares.uses.some((use) => use.includes('part'))).toBe(false)
   })
 
   /**

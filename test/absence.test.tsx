@@ -9,6 +9,7 @@ import {
   Listening,
   NoProject,
   NothingFound,
+  NothingInFocus,
   NothingMatches,
   NothingPicked,
   Troubled,
@@ -295,5 +296,29 @@ describe('what this page calls a project', () => {
   test('a path with nothing to shorten is left alone rather than emptied', () => {
     expect(projectName('kehikko')).toBe('kehikko')
     expect(projectName('/')).toBe('/')
+  })
+})
+
+describe('every row is outside the picked parts', () => {
+  test('it says how many, which parts, and where the control is — and offers no press it cannot keep', () => {
+    render(<NothingInFocus focus={{ picked: ['The posting seam'], of: 3, shown: 0, outside: 14 }} />)
+    expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('The posting seam')
+    expect(text).toContain('all 14 references this list would otherwise show are outside it')
+    expect(text).toContain('host’s bar')
+    expect(text).toContain('Nothing has gone missing.')
+    /* The focus is the host's control: a button here could not undo it. */
+    expect(document.querySelectorAll('button')).toHaveLength(0)
+    /* And it is not the sentence for a filter somebody set in the header. */
+    expect(text).not.toContain('matches what you asked for')
+  })
+
+  test('several parts, and one row, are each said in their own number', () => {
+    render(<NothingInFocus focus={{ picked: ['The method', 'The results'], of: 5, shown: 0, outside: 1 }} />)
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('Nothing in the picked parts is in this list.')
+    expect(text).toContain('2 parts — The method, The results')
+    expect(text).toContain('the one reference this list would otherwise show is outside them')
   })
 })

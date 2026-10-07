@@ -1277,3 +1277,102 @@ describe('following the open epic as its content changes', () => {
     expect(host.calls('steps.list')).toHaveLength(3)
   })
 })
+
+/**
+ * The parts focus: parts of the epic picked out in the host's bar
+ * (`context.parts`).
+ *
+ * Driven through the bridge, because the failure worth a test here is not in
+ * the arithmetic — `sift.test.ts` holds that — but in the plumbing: a hook
+ * that parses the context itself and never passes `parts` on would leave every
+ * pure function correct and the list unnarrowed. So: the greeting's parts
+ * reach the rows; a later context that changes the focus re-draws them; no
+ * focus is exactly the list as it was; and the count of what is outside is on
+ * screen whenever anything is.
+ */
+describe('focused on parts of the epic', () => {
+  const part = (id: string, heading: string, refs: string[], picked: boolean) => ({ id, heading, refs, picked })
+  const parts = (seam: boolean, tests: boolean) => [
+    part('seam', 'The posting seam', ['gh#2', 'gh#3'], seam),
+    part('tests', 'What the tests check', ['gh#5', 'gl#404'], tests),
+  ]
+  const listed = async (more: Record<string, unknown> = {}, filters: Choice = { scope: 'all' }) => {
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
+    act(() => host.greet(PROJECT, null, [], filters, more))
+    await settle()
+    return host
+  }
+  const drawn = () => [...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))
+  const focusLine = () => document.querySelector('[data-heading="focus"]')
+
+  test('parts that are listed and not picked change nothing at all', async () => {
+    await listed({ parts: parts(false, false) })
+    expect(drawn()).toHaveLength(8)
+    expect(document.body.textContent).toContain('8 references')
+    expect(focusLine()).toBeNull()
+  })
+
+  test('a part picked in the greeting narrows the rows and says how many are outside it', async () => {
+    await listed({ parts: parts(true, false) })
+    expect(drawn()).toEqual(['gh#2', 'gh#3'])
+    expect(document.body.textContent).toContain('2 of 8 shown')
+    expect(focusLine()?.textContent).toBe('6 outside the picked part · The posting seam')
+  })
+
+  test('a change of focus in a later context re-draws the list, and unpicking puts it all back', async () => {
+    const host = await listed({ parts: parts(true, false) })
+    act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(true, true) }))
+    await settle()
+    expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+    expect(focusLine()?.textContent).toBe('5 outside the 2 picked parts · The posting seam, What the tests check')
+
+    act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(false, false) }))
+    await settle()
+    expect(drawn()).toHaveLength(8)
+    expect(focusLine()).toBeNull()
+
+    /* And a host that stops sending the field at all is a host with no focus. */
+    act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(false, true) }))
+    await settle()
+    expect(drawn()).toEqual(['gh#5'])
+    act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }))
+    await settle()
+    expect(drawn()).toHaveLength(8)
+  })
+
+  test('the count is of the rows the scope would have drawn, when the scope is narrowing too', async () => {
+    const host = await listed({ parts: parts(true, false) }, {})
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#5'] }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#7', steps: [] } }))
+    await settle()
+    /* The epic names three; the part lists one of them. */
+    expect(drawn()).toEqual(['gh#2'])
+    expect(document.body.textContent).toContain('1 of 8 shown')
+    expect(focusLine()?.textContent).toBe('2 outside the picked part · The posting seam')
+  })
+
+  test('a focus that leaves no row says so in its own words, with the heading still counting', async () => {
+    await listed({ parts: [part('elsewhere', 'Filed elsewhere', ['gl#404'], true)] })
+    expect(drawn()).toEqual([])
+    expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('matches what you asked for')
+    expect(focusLine()?.textContent).toBe('8 outside the picked part · Filed elsewhere')
+  })
+
+  test('a walk to a row outside the focus is refused with the reason, and no filter is moved for it', async () => {
+    const host = await listed({ parts: parts(true, false) }, { hide: ['issue:closed'] })
+    act(() => host.goto('gh#7'))
+    await settle()
+    const went = host.said.findLast((message) => message.type === MESSAGE.WENT)
+    expect(went).toMatchObject({ found: false })
+    expect(String(went?.why)).toContain('gh#7')
+    expect(String(went?.why)).toContain('outside the parts of the epic')
+    expect(host.calls('filters.set')).toEqual([])
+
+    /* One inside it walks as it always did. */
+    act(() => host.goto('gh#2'))
+    await settle()
+    expect(host.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
+  })
+})

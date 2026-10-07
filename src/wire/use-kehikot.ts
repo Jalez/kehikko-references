@@ -9,6 +9,7 @@ import {
   type CanvasContainer,
   type ContentChange,
   type Disposition,
+  type EpicPart,
   type FilterChoice,
   type FilterGroup,
 } from 'kehikot-module-protocol'
@@ -293,6 +294,21 @@ export interface Kehikot {
   aimed: string[] | null
   /** `context.dispositions`: what people have marked about why a reference closed. */
   marks: Disposition[]
+  /**
+   * `context.parts`: every part of the open epic, with the ones a person picked
+   * out in the host's bar flagged.
+   *
+   * `[]` before any host has said anything and from a host that has never
+   * heard of parts, which is the true answer in both cases: nothing is picked
+   * out, so the whole epic is in front of the reader. Passed through whole —
+   * picked or not — because the heading has to say what is picked out of how
+   * many, and `live/sift.ts` counts what a focus hides rather than dropping it.
+   *
+   * There is no setter beside it. Picking a part is the host's own control,
+   * with no method and no capability, so this page can only say where that
+   * control is.
+   */
+  parts: EpicPart[]
 }
 
 /**
@@ -318,6 +334,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   const [epicRefs, setEpicRefs] = useState<string[] | null>(null)
   const [aimed, setAimed] = useState<string[] | null>(null)
   const [marks, setMarks] = useState<Disposition[]>([])
+  const [parts, setParts] = useState<EpicPart[]>([])
   const host = useRef<Connection | null>(null)
 
   /**
@@ -551,6 +568,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
         filters?: FilterChoice
         containers?: CanvasContainer[]
         dispositions?: Disposition[]
+        parts?: EpicPart[]
         tracker?: { at?: string | null; refreshing?: boolean }
         content?: ContentChange[]
       },
@@ -630,6 +648,14 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       setAimed((was) => (was === pointed || (was && pointed && same(was, pointed)) ? was : pointed))
       const marked = context.dispositions ?? []
       setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
+      /* And the parts of the epic, taken from every context like the selection
+         and for its reason: moving to another epic sends that epic's parts with
+         nothing picked in the same message that names it, and a page that kept
+         the previous epic's focus would hide rows for parts that are not on
+         screen anywhere. Compared before it is written, because the list is
+         the same list on nearly every context. */
+      const divided = context.parts ?? []
+      setParts((was) => (JSON.stringify(was) === JSON.stringify(divided) ? was : divided))
 
       /* Read once, defensively, and treated as absent unless it is a non-empty
          string. It is only ever a key here — which project the reading is
@@ -880,6 +906,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       epicRefs,
       aimed,
       marks,
+      parts,
     }),
     [
       sight,
@@ -900,6 +927,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       epicRefs,
       aimed,
       marks,
+      parts,
     ],
   )
 }
