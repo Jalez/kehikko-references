@@ -296,6 +296,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * and claiming GitLab would have been untrue; the host's shared reading
    * covers both, so it is true again.
    */
+  /* Where a host files this module in its list, most fitting first. */
+  tags: ['planning', 'review'],
   summary: 'Every issue, merge request and pull request in this project, from GitHub and GitLab, as one list.',
   /**
    * What an agent should do about this module, given that it is here.
