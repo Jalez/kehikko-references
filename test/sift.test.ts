@@ -13,6 +13,7 @@ import {
   SCOPE,
   SHOW_ALL,
   facetsOfRow,
+  focusOf,
   hides,
   narrowing,
   nothingInScope,
@@ -261,6 +262,7 @@ describe('reading back what the host chose', () => {
       scope: { from: 'epic', refs: ['#2274'] },
       picked: ['gh#41'],
       marks: [],
+      parts: [],
     })
   })
 
@@ -428,6 +430,75 @@ describe('narrowed to what the kehikko has picked', () => {
     const taken = siftingOf({ [KEHIKKO]: PICKED }, { selection })
     selection.push('!1848')
     expect(taken.picked).toEqual(['gh#41'])
+  })
+})
+
+/**
+ * The parts focus: parts of the epic picked out in the host's bar.
+ *
+ * Two failures again, and the second is the one this field was designed
+ * against. It must narrow to the refs the picked parts list — and it must
+ * never do so without the number of rows it hid being countable, because
+ * nobody set this narrowing in this container and nothing here can undo it.
+ * With nothing picked, every answer has to be the one it was before the field
+ * existed.
+ */
+describe('the parts of the epic picked out in the host’s bar', () => {
+  const part = (id: string, refs: string[], picked = false, heading = `The ${id}`) => ({ id, heading, refs, picked })
+  const seam = (picked: boolean) => part('seam', ['#2274', 'gh#41'], picked)
+  const tests = (picked: boolean) => part('tests', ['!1848', 'gl#404'], picked)
+
+  test('parts that are listed and not picked narrow nothing and say nothing', () => {
+    const sifting = { ...EVERYTHING, parts: [seam(false), tests(false)] }
+    expect(sift(rows, sifting)).toHaveLength(4)
+    expect(focusOf(rows, sifting)).toBeNull()
+    expect(focusOf(rows, EVERYTHING)).toBeNull()
+    expect(narrowing(sifting)).toBe(false)
+  })
+
+  test('a picked part narrows to the refs it lists, and the rest are counted', () => {
+    const sifting = { ...EVERYTHING, parts: [seam(true), tests(false)] }
+    expect(sift(rows, sifting).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
+    expect(focusOf(rows, sifting)).toEqual({ picked: ['The seam'], of: 2, shown: 2, outside: 2 })
+  })
+
+  test('several picked parts are a union, and a ref in no part is outside every focus', () => {
+    const sifting = { ...EVERYTHING, parts: [seam(true), tests(true)] }
+    /* `gh#99` is in neither part: it is outside, counted, and not drawn. */
+    expect(sift(rows, sifting).map((r) => r.ref)).toEqual(['#2274', '!1848', 'gh#41'])
+    expect(focusOf(rows, sifting)).toEqual({ picked: ['The seam', 'The tests'], of: 2, shown: 3, outside: 1 })
+  })
+
+  test('the count is of what the rest of the narrowing would draw, not of the whole reading', () => {
+    /* The toggles hide `gh#41` whether or not a part is picked, so it is not
+       one of the rows the FOCUS is hiding. shown + outside is the list as it
+       was before the focus. */
+    const sifting = { ...EVERYTHING, hidden: ['issue:closed' as const], parts: [seam(true), tests(false)] }
+    const before = sift(rows, { ...sifting, parts: [] })
+    const focus = focusOf(rows, sifting)!
+    expect(sift(rows, sifting).map((r) => r.ref)).toEqual(['#2274'])
+    expect(focus).toMatchObject({ shown: 1, outside: 2 })
+    expect(focus.shown + focus.outside).toBe(before.length)
+  })
+
+  test('a part with no heading is named by its id, and a focus that hides nothing is still a focus', () => {
+    const all = part('all', ['#2274', '!1848', 'gh#41', 'gh#99'], true, '')
+    expect(focusOf(rows, { ...EVERYTHING, parts: [all] })).toEqual({ picked: ['all'], of: 1, shown: 4, outside: 0 })
+  })
+
+  test('it is not something one press here can put back, and `hides` still sees it', () => {
+    const sifting = { ...EVERYTHING, parts: [seam(true)] }
+    expect(narrowing(sifting)).toBe(false)
+    expect(hides(sifting, rows[1]!)).toBe(true)
+    expect(hides(sifting, rows[0]!)).toBe(false)
+  })
+
+  test('read out of the canvas as a copy, like every other fact', () => {
+    const parts = [seam(true)]
+    const taken = siftingOf({}, { parts })
+    parts.push(tests(true))
+    expect(taken.parts).toEqual([seam(true)])
+    expect(siftingOf({}).parts).toEqual([])
   })
 })
 

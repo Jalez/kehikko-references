@@ -111,6 +111,38 @@ stay. That is the state the old cache existed to draw — rows AND a sentence �
 kept by the host now, per source, because "gitlab.example.org could not be
 reached" is more use than "something failed" in a project that reads two.
 
+### Focused on parts of the epic
+
+An epic may be divided into parts, and a person may pick some of them out in
+the host's bar. `context.parts` (protocol 0.29.0) lists every part of the open
+epic with the refs the host says belong to it, and flags the picked ones; this
+module says `reacts: ['parts']`.
+
+- **Nothing picked** — an epic with no parts, no epic, a host that has never
+  heard of parts — and the list is exactly what it was.
+- **While any part is picked**, only the rows a picked part lists are drawn
+  (`refInFocus`, the protocol's rule). A reference no part lists is outside
+  every focus: counted, not shown. The scope, the toggles and the query narrow
+  as before, on top.
+- **The heading grows a second line** that says so, at every width:
+  `14 outside the picked part · The posting seam`, or
+  `5 outside the 2 picked parts · The method, The results`. The number is first
+  because the names are what a narrow container clips; the tooltip has the
+  whole sentence and where the control is. `outside` counts the rows the rest
+  of the narrowing would draw and the focus alone is hiding (`focusOf` in
+  `src/live/sift.ts`, over the protocol's `focusCount`), so shown plus outside
+  is the list as it was before the focus.
+- **A focus that leaves no row** draws its own panel — *Nothing in the picked
+  part is in this list* — with the count and the names, and no button: the
+  parts are picked in the host's bar, and nothing on this page can unpick them.
+- **`view.goto` to a row outside the focus** is answered `found: false` with
+  that reason, and no filter is moved for it, because clearing the filters
+  would not put the row on screen.
+
+The focus is not a filter group. This module does not offer it, `filters.set`
+does not move it, and "Show everything" does not clear it — which is why it is
+counted on its own line rather than folded into `37 of 412 shown`.
+
 ### What did not change, deliberately
 
 **A ref is still the string `gh#105`** — spelled the way the reading spells it
@@ -135,10 +167,11 @@ sentence when it does.
 `trackers:refresh` is declared apart from reading because it SPENDS something:
 the person's rate limit, on behalf of every module on the canvas.
 
-`reacts` names `selection`, `containers`, `dispositions` and `tracker` — the
-kehikko pick, the picked-out containers the scope follows, the marks people put
-on why a reference closed (which decide its `closed:*` facet below), and the
-shared reading moving.
+`reacts` names `selection`, `containers`, `dispositions`, `tracker`, `content`
+and `parts` — the kehikko pick, the picked-out containers the scope follows,
+the marks people put on why a reference closed (which decide its `closed:*`
+facet below), the shared reading moving, the open epic being edited, and the
+parts of the epic picked out in the host's bar.
 
 `storage: true` stays, though the door it protected is gone; `manifest.ts` and
 `vite.config.ts` say why. The check is still one line:
@@ -193,6 +226,10 @@ are not the same fact:
 
 And one the reader caused: **Nothing here matches what you asked for**, which
 names how many exist and hands them all back with one press.
+
+And one the host's bar caused: **Nothing in the picked part is in this list**,
+when parts of the epic are picked out and every row is outside them. It names
+the parts and how many rows are outside, and says where to unpick them.
 
 ### And the failures, which are three sentences now
 
@@ -533,7 +570,7 @@ dev/measure.tsx         the numbers in this file
 
 ## Tests
 
-`bun test` — 215 of them, and none needs a host, a login, or a network. The
+`bun test` — 243 of them, and none needs a host, a login, or a network. The
 host is a function in `test/ask.test.ts` and a stand-in on the real bridge in
 `test/app.test.tsx`; the readings it answers with are built in
 `test/fixtures.ts` and checked against the protocol's own schemas. The host side
@@ -572,3 +609,11 @@ of the shared reading is Jalez/kehikko#25.
   second half is the table's heading: that the count always names both numbers,
   that the whole of it is on the heading's own `title`, and that every order —
   including the two whose column a narrow row drops — stays reachable.
+- The parts focus is held in three places: `test/sift.test.ts` (what narrows,
+  that a ref in no part is outside, that the count is of what the rest of the
+  narrowing would draw), `test/narrow.test.tsx` (the heading's second line is
+  absent at rest and carries no hiding rule when it is there), and
+  `test/app.test.tsx` (that `context.parts` reaches the rows through the real
+  bridge, that a later context re-draws them, and that a `goto` outside the
+  focus is refused without moving a filter). None of it has been run in a real
+  host.

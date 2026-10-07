@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
-import type { Scope } from '@/live/sift.ts'
+import type { Focus, Scope } from '@/live/sift.ts'
 import type { Held, Trouble, TroubleKind } from '@/live/sight.ts'
 
 /**
@@ -405,6 +405,41 @@ export function NothingInScope({
       <Button variant="outline" size="sm" onClick={everything}>
         Show everything
       </Button>
+    </Panel>
+  )
+}
+
+/**
+ * Parts of the epic are picked out, and every row the list would otherwise
+ * draw is outside them.
+ *
+ * Its own panel for the reason the two above have one, and a stronger version
+ * of it: nobody narrowed this in the container's header, and nothing on this
+ * page can undo it. The parts are picked in the host's bar, so there is no
+ * button here — a press that promised to show everything and could not would
+ * be the broken control the other panels are careful not to draw. What there
+ * is instead is the count, the names, and where the control is.
+ *
+ * A reference no part lists is outside every focus. That is the protocol's
+ * rule, and it is why an epic whose parts list three refs can leave thirty
+ * here: they are counted, in this sentence and in the heading, and not shown.
+ */
+export function NothingInFocus({ focus }: { focus: Focus }) {
+  const one = focus.picked.length === 1
+  return (
+    <Panel title={one ? 'Nothing in the picked part is in this list.' : 'Nothing in the picked parts is in this list.'}>
+      <p>
+        This epic is focused on {one ? 'one part' : `${focus.picked.length} parts`} — {focus.picked.join(', ')} — and{' '}
+        {focus.outside === 1
+          ? 'the one reference this list would otherwise show is'
+          : `all ${focus.outside} references this list would otherwise show are`}{' '}
+        outside {one ? 'it' : 'them'}. A reference is in a part when the epic lists it under that part’s heading, or a
+        step assigned to the part names it.
+      </p>
+      <p>
+        Nothing has gone missing. The parts are picked in the host’s bar, beside the epic; unpick them there and the
+        list is whole again.
+      </p>
     </Panel>
   )
 }

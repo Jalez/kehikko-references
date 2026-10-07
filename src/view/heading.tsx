@@ -4,6 +4,7 @@ import type { TrackerMissing } from 'kehikot-module-protocol'
 
 import { cn } from '@/lib/utils'
 import { ORDER_LABELS, type Ordering } from '@/live/order.ts'
+import type { Focus } from '@/live/sift.ts'
 import { projectName } from './absence.tsx'
 
 /**
@@ -120,6 +121,25 @@ import { projectName } from './absence.tsx'
  * not found, on no tracker this project reads — counted, and listed in the
  * tooltip with why. A ref the epic names that is on no row would otherwise be
  * simply absent, which is the failure this module is written against.
+ *
+ * ## The parts focus, which gets a line of its own
+ *
+ * While parts of the epic are picked out in the host's bar the list draws only
+ * the rows those parts list, and the heading grows a second line that says so:
+ * `14 outside the picked part · The posting seam`. It is drawn only then — with
+ * nothing picked the heading is the one line it has always been.
+ *
+ * A line of its own rather than two more words after the count, because the
+ * words after the count are the ones a narrow container drops, and this is the
+ * one narrowing here that must not be droppable: nobody set it in this
+ * container, the header's funnel does not fill in for it, and no press on this
+ * page puts it back. So it costs its twenty pixels at every width, and the
+ * number goes FIRST — the names are what gets clipped when there is no room,
+ * and the whole sentence is on the line's own tooltip, with where the control
+ * is.
+ *
+ * `outside` is what the rest of the narrowing would draw and the focus alone
+ * is hiding; see `focusOf` in `live/sift.ts`.
  */
 
 /** Which order each column heading sets, and what its arrow means. */
@@ -134,6 +154,7 @@ export function Heading({
   scope = null,
   at,
   unread = [],
+  focus = null,
   now,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
@@ -148,6 +169,8 @@ export function Heading({
   at?: string | null
   /** The refs the reading names and holds no row for, and why. */
   unread?: readonly TrackerMissing[]
+  /** What the parts focus is doing to this list, or `null` when no part is picked out. */
+  focus?: Focus | null
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
 }) {
@@ -159,6 +182,7 @@ export function Heading({
   const why = unread.map((gap) => `${gap.ref}: ${MISSING[gap.reason]}`)
 
   return (
+    <>
     <div
       data-heading="columns"
       title={[[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')}
@@ -243,7 +267,40 @@ export function Heading({
           reason. */}
       <span className="w-[30px] shrink-0" aria-hidden="true" />
     </div>
+    {focus && (
+      <p
+        data-heading="focus"
+        title={focusTold(focus)}
+        className="truncate border-b border-border bg-muted/30 px-3 py-1 font-mono text-[11px] tabular-nums text-muted-foreground"
+      >
+        {focusLine(focus)}
+      </p>
+    )}
+    </>
   )
+}
+
+/**
+ * The focus line: how many rows are outside the picked parts, then which
+ * parts. The number first, because the line truncates from the right.
+ *
+ * `0 outside` is still said. A focus that happens to hide nothing is a focus,
+ * and the row that arrives tomorrow outside it will be hidden.
+ */
+export function focusLine(focus: Focus): string {
+  const one = focus.picked.length === 1
+  return `${focus.outside} outside the ${one ? 'picked part' : `${focus.picked.length} picked parts`} · ${focus.picked.join(', ')}`
+}
+
+/** The same, as whole sentences for the tooltip — with where the control is, since it is not on this page. */
+export function focusTold(focus: Focus): string {
+  const one = focus.picked.length === 1
+  const refs = focus.outside === 1 ? '1 reference' : `${focus.outside} references`
+  return [
+    `This list is narrowed to ${one ? 'one' : focus.picked.length} of this epic’s ${focus.of} ${focus.of === 1 ? 'part' : 'parts'}: ${focus.picked.join(', ')}.`,
+    `${focus.shown} shown; ${refs} it would otherwise show ${focus.outside === 1 ? 'is' : 'are'} outside ${one ? 'that part' : 'those parts'}.`,
+    'The parts are picked in the host’s bar, beside the epic. Unpick them there to see the rest.',
+  ].join('\n')
 }
 
 /**

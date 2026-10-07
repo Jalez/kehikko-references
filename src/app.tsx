@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { refInFocus } from 'kehikot-module-protocol'
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
@@ -7,6 +8,7 @@ import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
   SHOW_ALL,
+  focusOf,
   hides,
   narrowing,
   nothingInScope,
@@ -21,6 +23,7 @@ import {
   Listening,
   NoProject,
   NothingFound,
+  NothingInFocus,
   NothingInScope,
   NothingMatches,
   NothingPicked,
@@ -139,6 +142,7 @@ export function App() {
     epicRefs,
     aimed,
     marks,
+    parts,
   } = useKehikot(ID, onGoto)
 
   /**
@@ -150,14 +154,19 @@ export function App() {
    * another, which is right: a reader looking at four rows of four hundred does
    * not care which of the four controls did it.
    *
-   * The canvas is the second input, and four facts in it arrive from other
-   * containers: the selection, which the `Kehikko` group narrows to while it
+   * The canvas is the second input, and five facts in it arrive from
+   * elsewhere: the selection, which the `Kehikko` group narrows to while it
    * is on; what the open epic names and what the picked-out containers show,
-   * which the scope narrows to by default; and the marks people put on why a
-   * reference closed, which decide which `closed:*` facet a row has. Those are
-   * the reactions the manifest declares. See `Sifting` in `sift.ts`.
+   * which the scope narrows to by default; the marks people put on why a
+   * reference closed, which decide which `closed:*` facet a row has; and the
+   * parts of the epic picked out in the host's bar, which narrow the list to
+   * the refs those parts list. Those are the reactions the manifest declares.
+   * See `Sifting` in `sift.ts`.
    */
-  const canvas = useMemo(() => ({ selection, epicRefs, aimed, marks }), [selection, epicRefs, aimed, marks])
+  const canvas = useMemo(
+    () => ({ selection, epicRefs, aimed, marks, parts }),
+    [selection, epicRefs, aimed, marks, parts],
+  )
   const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 
   /**
@@ -304,6 +313,14 @@ export function App() {
    * And a `goto` naming a step rather than a reference is refused rather than
    * answered vaguely. This app lists references and has never known anything
    * about steps.
+   *
+   * 5. **A row outside the parts focus is refused, and nothing is asked for.**
+   *    The parts picked out in the host's bar are not a filter of this
+   *    container: `filters.set` does not move them and nothing else this page
+   *    can call does. So clearing the filters for such a row would throw away
+   *    the reader's narrowing and still land them on a page where the
+   *    reference is not drawn. The answer is `found: false` with a sentence
+   *    that says where the row is and why it is not on screen.
    */
   walk.current = (message, answer) => {
     if (!message.ref) {
@@ -317,6 +334,14 @@ export function App() {
         rows.length
           ? `Nothing in the reading this app is showing names ${message.ref}.`
           : `This app has no reading yet, so it cannot say where ${message.ref} is.`,
+      )
+      return
+    }
+
+    if (!refInFocus(sifting.parts, row.ref)) {
+      answer(
+        false,
+        `${message.ref} is in this list, but it is outside the parts of the epic picked out in the host’s bar, so it is not drawn.`,
       )
       return
     }
@@ -478,6 +503,12 @@ export function App() {
      anything — so the cheaper arrangement is simply the right one. */
   const shown = useMemo(() => order(sift(rows, sifting), ordering), [rows, sifting, ordering])
 
+  /* What the parts focus is doing to that list — which parts, and how many
+     rows the rest of the narrowing would have drawn — or `null` when no part
+     is picked out, which is every project that has never divided an epic. The
+     heading prints it; see `focusOf` in `sift.ts`. */
+  const focus = useMemo(() => focusOf(rows, sifting), [rows, sifting])
+
   /**
    * Scrolling to the row a `goto` landed on, once it is actually drawn.
    *
@@ -563,6 +594,7 @@ export function App() {
         scope={sifting.scope?.from ?? null}
         at={held.at}
         unread={held.missing}
+        focus={focus}
       />
       {/*
         A source that could not be read, over the rows it gave before.
@@ -636,6 +668,11 @@ export function App() {
             total={rows.length}
             everything={() => void outOfScope()}
           />
+        ) : shown.length === 0 && focus && focus.outside > 0 ? (
+          /* Before `NothingMatches` as well: there ARE rows that match what the
+             header asks for, and the parts picked in the host's bar are what
+             is hiding them. "Show all" would not bring them back. */
+          <NothingInFocus focus={focus} />
         ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => void clearAll()} />
         ) : (
