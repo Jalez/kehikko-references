@@ -459,14 +459,24 @@ describe('the parts of the epic picked out in the host’s bar', () => {
   test('a picked part narrows to the refs it lists, and the rest are counted', () => {
     const sifting = { ...EVERYTHING, parts: [seam(true), tests(false)] }
     expect(sift(rows, sifting).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
-    expect(focusOf(rows, sifting)).toEqual({ picked: ['The seam'], of: 2, shown: 2, outside: 2 })
+    expect(focusOf(rows, sifting)).toEqual({
+      picked: ['The seam'],
+      shown: 2,
+      outside: 2,
+      sentence: '2 references outside the picked part (The seam).',
+    })
   })
 
   test('several picked parts are a union, and a ref in no part is outside every focus', () => {
     const sifting = { ...EVERYTHING, parts: [seam(true), tests(true)] }
     /* `gh#99` is in neither part: it is outside, counted, and not drawn. */
     expect(sift(rows, sifting).map((r) => r.ref)).toEqual(['#2274', '!1848', 'gh#41'])
-    expect(focusOf(rows, sifting)).toEqual({ picked: ['The seam', 'The tests'], of: 2, shown: 3, outside: 1 })
+    expect(focusOf(rows, sifting)).toEqual({
+      picked: ['The seam', 'The tests'],
+      shown: 3,
+      outside: 1,
+      sentence: '1 reference outside the 2 picked parts (The seam, The tests).',
+    })
   })
 
   test('the count is of what the rest of the narrowing would draw, not of the whole reading', () => {
@@ -483,7 +493,12 @@ describe('the parts of the epic picked out in the host’s bar', () => {
 
   test('a part with no heading is named by its id, and a focus that hides nothing is still a focus', () => {
     const all = part('all', ['#2274', '!1848', 'gh#41', 'gh#99'], true, '')
-    expect(focusOf(rows, { ...EVERYTHING, parts: [all] })).toEqual({ picked: ['all'], of: 1, shown: 4, outside: 0 })
+    expect(focusOf(rows, { ...EVERYTHING, parts: [all] })).toEqual({
+      picked: ['all'],
+      shown: 4,
+      outside: 0,
+      sentence: '0 references outside the picked part (all).',
+    })
   })
 
   test('it is not something one press here can put back, and `hides` still sees it', () => {

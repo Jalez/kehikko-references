@@ -368,8 +368,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * `content.changed`.
    *
    * `parts`, because the rows narrow to the references of the parts of the
-   * epic a person picked out in the host's bar — `refInFocus`, the protocol's
-   * rule — and the heading says which parts and how many rows are outside
+   * epic a person picked out in the host's bar — a row's anchor is its ref,
+   * and the rule and the sentence are the protocol's — and the heading says which parts and how many rows are outside
    * them. With none picked the list is what it was. The picking is the host's
    * own control, so there is no capability for it below.
    *

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, GitPullRequest } from 'lucide-react'
 
-import type { TrackerMissing } from 'kehikot-module-protocol'
+import { FOCUS_WHERE, type TrackerMissing } from 'kehikot-module-protocol'
 
 import { cn } from '@/lib/utils'
 import { ORDER_LABELS, type Ordering } from '@/live/order.ts'
@@ -126,7 +126,9 @@ import { projectName } from './absence.tsx'
  *
  * While parts of the epic are picked out in the host's bar the list draws only
  * the rows those parts list, and the heading grows a second line that says so:
- * `14 outside the picked part · The posting seam`. It is drawn only then — with
+ * `14 references outside the picked part (The posting seam).` — the protocol's
+ * sentence, the number first because the line truncates from the right, and
+ * `0 … outside` still said. It is drawn only then — with
  * nothing picked the heading is the one line it has always been.
  *
  * A line of its own rather than two more words after the count, because the
@@ -270,37 +272,14 @@ export function Heading({
     {focus && (
       <p
         data-heading="focus"
-        title={focusTold(focus)}
+        title={FOCUS_WHERE}
         className="truncate border-b border-border bg-muted/30 px-3 py-1 font-mono text-[11px] tabular-nums text-muted-foreground"
       >
-        {focusLine(focus)}
+        {focus.sentence}
       </p>
     )}
     </>
   )
-}
-
-/**
- * The focus line: how many rows are outside the picked parts, then which
- * parts. The number first, because the line truncates from the right.
- *
- * `0 outside` is still said. A focus that happens to hide nothing is a focus,
- * and the row that arrives tomorrow outside it will be hidden.
- */
-export function focusLine(focus: Focus): string {
-  const one = focus.picked.length === 1
-  return `${focus.outside} outside the ${one ? 'picked part' : `${focus.picked.length} picked parts`} · ${focus.picked.join(', ')}`
-}
-
-/** The same, as whole sentences for the tooltip — with where the control is, since it is not on this page. */
-export function focusTold(focus: Focus): string {
-  const one = focus.picked.length === 1
-  const refs = focus.outside === 1 ? '1 reference' : `${focus.outside} references`
-  return [
-    `This list is narrowed to ${one ? 'one' : focus.picked.length} of this epic’s ${focus.of} ${focus.of === 1 ? 'part' : 'parts'}: ${focus.picked.join(', ')}.`,
-    `${focus.shown} shown; ${refs} it would otherwise show ${focus.outside === 1 ? 'is' : 'are'} outside ${one ? 'that part' : 'those parts'}.`,
-    'The parts are picked in the host’s bar, beside the epic. Unpick them there to see the rest.',
-  ].join('\n')
 }
 
 /**

@@ -301,7 +301,7 @@ describe('what this page calls a project', () => {
 
 describe('every row is outside the picked parts', () => {
   test('it says how many, which parts, and where the control is — and offers no press it cannot keep', () => {
-    render(<NothingInFocus focus={{ picked: ['The posting seam'], of: 3, shown: 0, outside: 14 }} />)
+    render(<NothingInFocus focus={{ picked: ['The posting seam'], shown: 0, outside: 14, sentence: '' }} />)
     expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
     const text = document.body.textContent ?? ''
     expect(text).toContain('The posting seam')
@@ -315,7 +315,7 @@ describe('every row is outside the picked parts', () => {
   })
 
   test('several parts, and one row, are each said in their own number', () => {
-    render(<NothingInFocus focus={{ picked: ['The method', 'The results'], of: 5, shown: 0, outside: 1 }} />)
+    render(<NothingInFocus focus={{ picked: ['The method', 'The results'], shown: 0, outside: 1, sentence: '' }} />)
     const text = document.body.textContent ?? ''
     expect(text).toContain('Nothing in the picked parts is in this list.')
     expect(text).toContain('2 parts — The method, The results')

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { refInFocus } from 'kehikot-module-protocol'
+import { anchorInFocus } from 'kehikot-module-protocol'
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
@@ -8,6 +8,7 @@ import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
   SHOW_ALL,
+  anchorOf,
   focusOf,
   hides,
   narrowing,
@@ -338,7 +339,7 @@ export function App() {
       return
     }
 
-    if (!refInFocus(sifting.parts, row.ref)) {
+    if (!anchorInFocus(sifting.parts, anchorOf(row))) {
       answer(
         false,
         `${message.ref} is in this list, but it is outside the parts of the epic picked out in the host’s bar, so it is not drawn.`,
