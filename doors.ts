@@ -1,3 +1,5 @@
+import { establishBuild, type Reply } from 'kehikot-module-protocol/serve'
+
 import { ID, MANIFEST, VERSION } from './manifest.ts'
 
 /**
@@ -16,8 +18,14 @@ import { ID, MANIFEST, VERSION } from './manifest.ts'
  * port however much tidier that would look.
  *
  * Hence: no listener here. `answer()` takes a method, a path and a query and
- * returns a status and a document, and `vite.config.ts` adapts a node request to
- * it in a dozen lines — see `test/doors.test.ts`.
+ * returns a status and a document, and the protocol's `doors()` — named in
+ * `vite.config.ts` — is what adapts a node request to it. See
+ * `test/doors.test.ts`.
+ *
+ * ## No ticket
+ *
+ * A ticket fences writes, and this app has no door that writes: the only thing
+ * `answer()` answers is the health check. So the page is printed without one.
  *
  * ## The door that is gone
  *
@@ -32,10 +40,15 @@ import { ID, MANIFEST, VERSION } from './manifest.ts'
  * complete answer to it.
  */
 
-export interface Reply {
-  status: number
-  body: unknown
-}
+/**
+ * What this process is built from, established once so it is one identity for
+ * the life of the process. `doors()` says it in the manifest, in the health
+ * check's answer, in the page, and as a stamp on every answer — which is how a
+ * page tells that the server answering it is no longer the one that served it.
+ */
+export const BUILD = establishBuild({ version: VERSION, dir: import.meta.dirname })
+
+export type { Reply }
 
 /**
  * What this app answers, for one request.
@@ -45,7 +58,11 @@ export interface Reply {
  * through the same middleware stack.
  */
 export async function answer(method: string, path: string, _query: URLSearchParams): Promise<Reply | null> {
-  if (path === '/healthz') {
+  /* `/health` is kept beside `/healthz` because this app answered on it for its
+     whole life and something on somebody's machine is watching it. Two
+     spellings of a liveness check cost nothing; a monitor that starts reporting
+     a dead module because a path was tidied costs an afternoon. */
+  if (path === '/healthz' || path === '/health') {
     if (method !== 'GET') return { status: 405, body: { ok: false, error: 'this door only answers GET' } }
     return { status: 200, body: { ok: true, id: ID, version: VERSION } }
   }

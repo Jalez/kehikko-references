@@ -19,6 +19,7 @@ import { createRoot } from 'react-dom/client'
  * for the same reason.
  */
 import 'kehikot-module-protocol/client'
+import { probeServer } from 'kehikot-module-protocol/client'
 
 import { App } from './app.tsx'
 import './index.css'
@@ -38,6 +39,19 @@ document.body.classList.add('h-full')
 const root = document.getElementById('root')
 if (!root) throw new Error('the page has no #root to mount into')
 root.classList.add('h-full')
+
+/**
+ * Ask whether this app's own server is still there, at the one moment the page
+ * is told it may not be.
+ *
+ * Nothing on this list comes from that server — the rows are the host's — so
+ * no question the page asks would ever notice it had stopped. Vite's dev
+ * client does notice: its socket closes. That is the cue to ask, and the
+ * answer is what puts up the cover with Try again; when the server is back
+ * Vite reloads the page by itself. Absent under a build and in the tests,
+ * where there is no `import.meta.hot`.
+ */
+import.meta.hot?.on('vite:ws:disconnect', () => void probeServer())
 
 createRoot(root).render(
   <StrictMode>
