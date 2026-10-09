@@ -3,14 +3,14 @@ import { resolve } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { doors, frameOrigins, serves } from 'kehikot-module-protocol/serve'
+import { doors, serves } from 'kehikot-module-protocol/serve'
 
 import { BUILD, MANIFEST, answer } from './doors.ts'
 import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
  * The doors this app answers on are `doors()` from the protocol, served by the
- * one process that serves the page: the manifest at both well-known paths, the
+ * one process that serves the page: the manifest at its well-known path, the
  * page (generated, with this process's build printed into it, `no-store`,
  * `frame-ancestors`) at `/`, and the health check through `answer` in
  * `doors.ts`. See the protocol's docs/module-plumbing.md.
@@ -26,8 +26,8 @@ import { ID, PREFERRED_PORT } from './manifest.ts'
  * and it keeps its real origin. Having an origin is what makes
  * `frame-ancestors` mean something: without it any page anywhere could frame
  * this one. `doors()` sends the header from `frameAncestors()` — whoever runs
- * this decides, through `KEHIKOT_ORIGINS` (falling back to `ROADMAP_ORIGIN`),
- * and the default is every address a host in this workspace actually serves on.
+ * this decides, through `KEHIKOT_ORIGINS`, and the default is every address a
+ * host in this workspace actually serves on.
  *
  * `127.0.0.1:7821` is added to whatever that says, and it is the stub host in
  * `dev/stub-host.ts`. That was not planned: the first time this page was
@@ -36,12 +36,9 @@ import { ID, PREFERRED_PORT } from './manifest.ts'
  * any log — because a refused frame is refused by the browser and this app
  * never hears about it. A development harness that silently stops working the
  * moment somebody adds a security header is a harness people stop trusting, so
- * the one loopback port it runs on is named. It is said through the
- * environment variable the protocol reads, for this process only, because the
- * header is the protocol's to write now.
+ * the one loopback port it runs on is named, as `ancestors` on `doors()`.
  */
 const STUB_HOST = 'http://127.0.0.1:7821'
-process.env.KEHIKOT_ORIGINS = [...new Set([...frameOrigins(), STUB_HOST])].join(' ')
 
 /** `/health` beside the protocol's own three: see `answer` in `doors.ts`. */
 const ours = (path: string) => path === '/healthz' || path === '/health' || path === '/mcp' || path.startsWith('/api/')
@@ -115,7 +112,7 @@ export default defineConfig({
   base: './',
   plugins: [
     serves({ id: ID, prefer: PREFERRED_PORT }),
-    doors({ manifest: MANIFEST, answer, build: BUILD, ours, page: { title: 'References' } }),
+    doors({ manifest: MANIFEST, answer, build: BUILD, ours, ancestors: [STUB_HOST], page: { title: 'References' } }),
     react(),
     tailwindcss(),
   ],

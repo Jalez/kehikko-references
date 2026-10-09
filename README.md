@@ -16,7 +16,7 @@ bun run dev/stub-host.ts   # a host that is not one, for looking at all of it
 ```
 
 Two documents come out of the server besides the page at `/`: the manifest at
-`/.well-known/kehikot-module.json`, which is the one path a host ever asks for (a host from before the rename asks `/.well-known/roadmap-module.json`, and gets the same manifest),
+`/.well-known/kehikot-module.json`, which is the one path a host ever asks for,
 and `/healthz`. Nothing here spends a credential.
 
 ## Where the rows come from, and what changed
