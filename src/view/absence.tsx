@@ -44,9 +44,9 @@ import type { Held, Trouble, TroubleKind } from '@/live/sight.ts'
  * ## It scrolls itself, for the reason the list does
  *
  * These are the states with no rows, and it is easy to forget that one of them
- * is still the whole of a container — a container that is often 220 by 340. "Nothing has
- * told me anything" is three paragraphs and wants about six hundred pixels of
- * height there. Without a scroller of its own the last of those paragraphs sat
+ * is still the whole of a container — a container that is often 220 by 340. A
+ * failed conversation with the host is three paragraphs and wants about six
+ * hundred pixels of height there. Without a scroller of its own the last of those paragraphs sat
  * below the bottom edge of the frame, and it is the one that says what to DO
  * about the situation. An honest sentence nobody can reach is worth no more
  * than one that was never written.
@@ -74,73 +74,12 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-/** The page has just loaded and nothing has said anything yet. It still might. */
-export function Listening() {
-  return (
-    <Panel title="Waiting to be greeted.">
-      <p>
-        A host greets a frame as that frame loads. If one is out there, this page fills in by itself in a
-        moment.
-      </p>
-    </Panel>
-  )
-}
-
-/**
- * Nothing greeted us. The standalone state, and the one this app is most likely
- * to be in — somebody opened it on its own port to see what it is.
+/*
+ * Three states are not here: waiting to be greeted, nothing framing the page,
+ * and a host that named no project folder. Every module has those, and they are
+ * the protocol's `Cover` — drawn in `app.tsx` — so that they read the same in
+ * every container on a canvas. What follows is what only this app can say.
  */
-export function Unhosted() {
-  return (
-    <Panel title="Nothing has told me anything.">
-      <p>
-        This app holds no references of its own. Every row on this list is the host’s reading of one
-        project’s trackers — GitHub and GitLab, read once by the host for every module on its canvas —
-        and which project that is comes from the host that frames this page and says where it is
-        standing.
-      </p>
-      <p>
-        Nothing has. So there is no project, no reading, and nothing to list — which is different from a list
-        with nothing in it. An empty list would mean somebody went and looked and found no work. Nobody has
-        looked.
-      </p>
-      <p>
-        Frame this page from a host and the rows arrive after the greeting. Until then this is the whole of
-        what the app honestly knows.
-      </p>
-    </Panel>
-  )
-}
-
-/**
- * A host is there; its context names no project folder.
- *
- * The protocol is explicit that this is a real state rather than an oversight: a
- * host with no filesystem of its own knows the name of the project somebody is
- * looking at and has no folder to point at. So this paragraph is careful not to
- * read as a fault — there is nothing here for anybody to fix, and the previous
- * version of this page offered a picker in the equivalent state, which is a
- * thing this one deliberately does not do. Which project a canvas stands in is
- * the host's to decide, and a module offering to change it would be a container
- * steering the whole canvas from the corner.
- */
-export function NoProject() {
-  return (
-    <Panel title="A host is here, and it named no project folder.">
-      <p>
-        The greeting arrived and the context it carried had no{' '}
-        <code className="font-mono text-foreground">projectPath</code> in it. This list is the host’s
-        reading of a project’s own trackers, so with no project there is nothing to read and nothing to be
-        about.
-      </p>
-      <p>
-        That is not a fault. A host with no filesystem of its own knows which project you are looking at
-        and has no folder to point at, and the protocol says so. Open a project with a folder behind it and
-        this fills in.
-      </p>
-    </Panel>
-  )
-}
 
 /**
  * The read is out and there is nothing on screen to keep somebody company.

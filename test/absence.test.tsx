@@ -6,14 +6,11 @@ import type { TrackerSource } from 'kehikot-module-protocol'
 import type { Held, Trouble, TroubleKind } from '@/live/sight.ts'
 import {
   Asking,
-  Listening,
-  NoProject,
   NothingFound,
   NothingInFocus,
   NothingMatches,
   NothingPicked,
   Troubled,
-  Unhosted,
   projectName,
 } from '@/view/absence.tsx'
 import { SourceTrouble } from '@/view/sources.tsx'
@@ -27,9 +24,12 @@ import { SourceTrouble } from '@/view/sources.tsx'
  * behaviour that would be visibly wrong if it broke; these guard the difference
  * between two pages that both look fine — one that says nothing has told it
  * anything, and one that says there is nothing to tell. A refactor that
- * replaced the second paragraph of `Unhosted` with "No references found" would
- * pass a test asserting the component renders, and would have removed the
- * entire point of the app.
+ * replaced the second paragraph of `NothingFound` with "No references found"
+ * would pass a test asserting the component renders, and would have removed
+ * the entire point of the app.
+ *
+ * The three states every module shares — waiting, nothing framing the page, no
+ * project folder — are the protocol's cover, and `app.test.tsx` holds them.
  *
  * So the assertions are on the distinctions rather than on the prose as a
  * whole: each panel must say what happened, and must not say the thing a
@@ -66,46 +66,7 @@ const held = (over: Partial<Held> = {}): Held => ({
   ...over,
 })
 
-describe('nothing has told me anything', () => {
-  test('says it is not an empty list, in as many words', () => {
-    render(<Unhosted />)
-    expect(screen.getByText('Nothing has told me anything.')).toBeTruthy()
-    expect(document.body.textContent).toContain('An empty list would mean somebody went and looked and found no work. Nobody has looked.')
-  })
-
-  test('never says "no references" or "none"', () => {
-    render(<Unhosted />)
-    const said = document.body.textContent ?? ''
-    expect(said.toLowerCase()).not.toContain('no references found')
-    expect(said.toLowerCase()).not.toContain('no results')
-  })
-
-  test('names where the rows would have come from: the host’s reading of both trackers', () => {
-    render(<Unhosted />)
-    expect(document.body.textContent).toContain('the host’s reading of one')
-    expect(document.body.textContent).toContain('GitHub and GitLab')
-  })
-})
-
 describe('the absences are different sentences', () => {
-  test('waiting to be greeted is not the same as ungreeted', () => {
-    render(<Listening />)
-    expect(screen.getByText('Waiting to be greeted.')).toBeTruthy()
-    cleanup()
-    render(<Unhosted />)
-    expect(screen.queryByText('Waiting to be greeted.')).toBeNull()
-  })
-
-  test('a host with no project folder says so, and does not offer to pick one', () => {
-    /* The old page offered an epic picker in the equivalent state. Which project
-       a canvas stands in is the host's, and a container offering to change it would
-       be one corner steering the whole canvas. */
-    render(<NoProject />)
-    expect(screen.getByText('A host is here, and it named no project folder.')).toBeTruthy()
-    expect(document.body.textContent).toContain('That is not a fault.')
-    expect(document.querySelectorAll('button')).toHaveLength(0)
-  })
-
   test('asking is the one honest wait, and says why', () => {
     render(<Asking project="/Users/somebody/Projects/kehikko" />)
     expect(screen.getByText('Reading the trackers for kehikko.')).toBeTruthy()

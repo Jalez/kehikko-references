@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MESSAGE, PROTOCOL } from 'kehikot-module-protocol'
-import { mailbox } from 'kehikot-module-protocol/client'
+import { mailbox, probeServer, resetServerStanding, serverStanding } from 'kehikot-module-protocol/client'
+import { COVER_WORDS } from 'kehikot-module-protocol/client/react'
 
 import { App } from '@/app.tsx'
 import { reading as readingOf, row } from './fixtures.ts'
@@ -23,6 +24,15 @@ import { reading as readingOf, row } from './fixtures.ts'
  * `Response`, for the same reason: it is all a `fetch` is.
  */
 
+/**
+ * This app's own server, which answers one thing: that it is there. The page
+ * asks on a refresh press, and with nothing answering it would — rightly — put
+ * up the cover for a server that has gone. The cases about exactly that swap
+ * this out and put it back.
+ */
+globalThis.fetch = (() =>
+  Promise.resolve(new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } }))) as unknown as typeof fetch
+
 afterEach(() => {
   cleanup()
   /* The mailbox is a singleton and this file shares one `window` across every
@@ -37,6 +47,8 @@ afterEach(() => {
      a page: forgetting the backlog in a browser throws away the greeting the
      backlog exists to hold. */
   mailbox.forget?.()
+  /* And the server's standing is one fact per page, which `stale` never heals. */
+  resetServerStanding()
 })
 
 const PROJECT = '/Users/somebody/Projects/harbour'
@@ -225,13 +237,16 @@ describe('with nothing on the other end', () => {
   test('it says nothing has told it anything, and never draws an empty list', async () => {
     render(<App />)
     /* Before the grace passes it says what it is waiting for. */
-    expect(screen.getByText('Waiting to be greeted.')).toBeTruthy()
+    expect(screen.getByText(COVER_WORDS.waiting())).toBeTruthy()
+    expect(document.querySelector('[data-cover]')?.getAttribute('data-cover')).toBe('waiting')
     await act(async () => {
       await new Promise((done) => setTimeout(done, 800))
     })
-    expect(screen.getByText('Nothing has told me anything.')).toBeTruthy()
+    expect(screen.getByText('Nothing is framing this page — open References in Kehikot.')).toBeTruthy()
+    expect(document.querySelector('[data-cover]')?.getAttribute('data-cover')).toBe('unhosted')
+    /* Not an empty list, and not a sentence that reads like one. */
     expect(document.querySelectorAll('li')).toHaveLength(0)
-    expect(document.body.textContent).toContain('Nobody has looked.')
+    expect((document.body.textContent ?? '').toLowerCase()).not.toContain('no references')
   })
 })
 
@@ -301,9 +316,65 @@ describe('with a host answering', () => {
     render(<App />)
     act(() => host.greet(null))
     await settle()
-    expect(screen.getByText('A host is here, and it named no project folder.')).toBeTruthy()
+    expect(screen.getByText(COVER_WORDS['no-project']())).toBeTruthy()
     expect(door.reads()).toBe(0)
     expect(document.querySelectorAll('li')).toHaveLength(0)
+    /* Which project a canvas stands in is the host's: nothing here offers to pick one. */
+    expect(document.querySelectorAll('button')).toHaveLength(0)
+  })
+
+  test('this app’s own server not answering covers the list, and Try again asks before reading again', async () => {
+    const door = stubDoor({ [PROJECT]: answered(3) })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
+
+    const real = globalThis.fetch
+    const before = host.calls('tracker.get').length
+    globalThis.fetch = (() => Promise.reject(new TypeError('Load failed'))) as unknown as typeof fetch
+    try {
+      await act(async () => void (await probeServer()))
+      expect(screen.getByText('References’ own server is not answering.')).toBeTruthy()
+      expect(document.querySelectorAll('li[data-ref]')).toHaveLength(0)
+
+      /* Still down: the press asks, hears nothing, and reads nothing from the host. */
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      await settle()
+      expect(serverStanding()).toBe('down')
+      expect(host.calls('tracker.get')).toHaveLength(before)
+
+      /* Back: the cover goes and the reading is asked for again. */
+      globalThis.fetch = (() =>
+        Promise.resolve(new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } }))) as unknown as typeof fetch
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+      await settle()
+      await settle()
+    } finally {
+      globalThis.fetch = real
+    }
+    expect(host.calls('tracker.get')).toHaveLength(before + 1)
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(3)
+  })
+
+  test('a page older than its server says so over everything else', async () => {
+    const host = stubHost(stubDoor({ [PROJECT]: answered(3) }))
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    const real = globalThis.fetch
+    /* The mark the protocol's `refuseTicket` puts on a refusal: another process is answering. */
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ ok: false, error: 'no', refused: 'ticket' }), { status: 403, headers: { 'content-type': 'application/json' } }),
+      )) as unknown as typeof fetch
+    try {
+      await act(async () => void (await probeServer()))
+    } finally {
+      globalThis.fetch = real
+    }
+    expect(document.querySelector('[data-cover]')?.getAttribute('data-cover')).toBe('stale')
   })
 
   test('a tracker with nothing in it is an answer rather than a gap', async () => {

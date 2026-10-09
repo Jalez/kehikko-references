@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { anchorInFocus } from 'kehikot-module-protocol'
+import { probeServer } from 'kehikot-module-protocol/client'
+import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/client/react'
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
@@ -21,15 +23,12 @@ import {
 import { useKehikot, type GotoHandler, type Settled } from '@/wire/use-kehikot.ts'
 import {
   Asking,
-  Listening,
-  NoProject,
   NothingFound,
   NothingInFocus,
   NothingInScope,
   NothingMatches,
   NothingPicked,
   Troubled,
-  Unhosted,
 } from '@/view/absence.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -100,6 +99,7 @@ export function App() {
    */
   const [filterRefused, setFilterRefused] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
+  const server = useServerStanding()
 
   /**
    * Every row of the current reading, before any narrowing.
@@ -127,6 +127,8 @@ export function App() {
 
   const {
     sight,
+    where,
+    projectPath,
     busy,
     read,
     refreshNote,
@@ -546,9 +548,29 @@ export function App() {
 
   const again = useCallback(() => read(), [read])
 
-  if (sight.at === 'listening') return <Listening />
-  if (sight.at === 'unhosted') return <Unhosted />
-  if (sight.at === 'no-project') return <NoProject />
+  /* Try again, on the cover for a server that did not answer: ask whether it is
+     there now, and if it is, ask the host for the reading as it holds it. */
+  const knock = useCallback(() => {
+    void probeServer().then((now) => {
+      if (now === 'up') read()
+    })
+  }, [read])
+
+  /**
+   * The states every module has, drawn by the cover every module shares:
+   * waiting to be greeted, nothing framing the page, no project folder, this
+   * app's own server gone, and a page older than its server (which reloads
+   * itself). The absences that are this app's own — the ones about a reading —
+   * are the paragraphs in `view/absence.tsx`, below.
+   *
+   * The second half of the test is for the compiler and for one frame at most:
+   * the three states `Sight` starts in are the ones the cover has just
+   * answered for.
+   */
+  const cover = coverFor({ where, projectPath, server })
+  if (cover || sight.at === 'listening' || sight.at === 'unhosted' || sight.at === 'no-project') {
+    return <Cover state={cover ?? 'waiting'} name="References" onRetry={knock} />
+  }
   if (sight.at === 'asking') return <Asking project={sight.project} />
   if (sight.at === 'trouble') return <Troubled project={sight.project} trouble={sight.trouble} again={again} />
 

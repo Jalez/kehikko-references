@@ -5,7 +5,6 @@
   "type": "module",
   "description": "Every issue and pull request in a project, read from the project's own GitHub with the login gh already holds, as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A host may frame it, and then it knows which project to read.",
   "scripts": {
-    "build": "vite build",
     "dev": "vite",
     "start": "vite",
     "test": "bun test",
@@ -20,7 +19,7 @@
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "kehikot-module-protocol": "git+ssh://git@github.com/Jalez/kehikko-protocol.git#main",
+    "kehikot-module-protocol": "git+ssh://git@github.com/Jalez/kehikko-protocol.git#v0.36.0",
     "tailwind-merge": "^3.6.0",
     "zod": "^3.23.8"
   },

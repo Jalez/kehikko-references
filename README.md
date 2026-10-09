@@ -217,9 +217,11 @@ are not the same fact:
 
 | | what it means |
 |---|---|
-| **Waiting to be greeted.** | The page loaded under a second ago. A greeting may still come. |
-| **Nothing has told me anything.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. *An empty list would mean somebody went and looked and found no work. Nobody has looked.* |
-| **A host is here, and it named no project folder.** | Framed, and `projectPath` was null. Not a fault. |
+| **Waiting for Kehikot…** | The page loaded under a second ago. A greeting may still come. |
+| **Nothing is framing this page — open References in Kehikot.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. |
+| **No project is open — open one in Kehikot.** | Framed, and `projectPath` was null. Not a fault. |
+| **References’ own server is not answering.** + Try again | The process that serves this page has stopped. The rows are the host’s, but a page whose server is gone cannot be reloaded or updated, so it says so. |
+| **This page is older than its server — reloading…** | The server restarted since the page loaded. It reloads itself, once. |
 | **Reading the trackers for \<project\>.** | The question is out, or the host is reading for the first time. The one honest whole-container wait. |
 | **The host reads no tracker for this project.** | The reading has no sources. Not an empty tracker: nothing was read. |
 | **This project's tracker has nothing in it.** | A reading of named sources, containing nothing. The one genuinely empty list — and if a source failed, it says so rather than claiming there is no work. |
@@ -554,9 +556,9 @@ decide would be this app guessing at a fact the tracker handed it.
 ```
 manifest.ts             what this app says about itself; parsed at load
 doors.ts                what this app answers, for one request; holds no socket
-vite.config.ts          the page, the manifest, the doors and one header, on one origin
+vite.config.ts          the protocol's doors() — page, manifest, health check — on one origin
 run.sh                  how a host starts it, and how a person does
-src/wire/use-kehikot.ts the only place messages become state, and the only place a question is decided
+src/wire/use-kehikot.ts the protocol's useHost, plus what is this app's: the states of knowing, and when a question is asked
 src/live/ask.ts         tracker.get and tracker.refresh, and every way their answers can disappoint
 src/live/collect.ts     the shared reading's rows -> rows, and the promise that none is dropped
 src/live/sift.ts        the only place a row may be hidden, all three groups offered to the header, and why

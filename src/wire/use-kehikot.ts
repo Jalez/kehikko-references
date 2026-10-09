@@ -6,21 +6,15 @@ import {
   CONTENT_HOST,
   contentStamp,
   filterChoiceSchema,
-  sameParts,
   type CanvasContainer,
-  type ContentChange,
   type Disposition,
   type EpicPart,
   type FilterChoice,
   type FilterGroup,
+  type ModuleContext,
 } from 'kehikot-module-protocol'
-import {
-  HostRefused,
-  connect,
-  type Connection,
-  type HostEvents,
-  type Refusal,
-} from 'kehikot-module-protocol/client'
+import { HostRefused, probeServer, type Connection, type HostEvents, type Refusal } from 'kehikot-module-protocol/client'
+import { useHost, type KeptCodec, type Where } from 'kehikot-module-protocol/client/react'
 
 /**
  * The bridge, as one React value.
@@ -31,41 +25,29 @@ import {
  * a page is in, and "which absence is this" is the one question this app cannot
  * afford to be confused about.
  *
- * ## What used to be underneath this
+ * ## What is underneath this
  *
- * `wire/host.ts` and `wire/mailbox.ts` — 423 lines. This module is where the
- * store-before-listen bug was FOUND: a handler that reached for the connection
- * during the mailbox's synchronous replay hung this page forever, with no
- * question sent and no timeout, on a sentence that never changed. The comment
- * below is that afternoon, and it now describes two calls instead of a
- * workaround.
+ * `useHost` from the protocol: the connection, the grace before "nobody is
+ * there", the theme on `<html>`, the kept string, and the selection, the filter
+ * choice and the parts flattened off every context and held steady while they
+ * say the same thing. This module had each of those written out here — and was
+ * where the store-before-listen bug was FOUND, a handler that reached for the
+ * connection during the mailbox's synchronous replay and hung this page
+ * forever. The ordering that fixed it is the hook's now.
  *
- * `mailbox.ts` also grew a `forget()` here, after a real test-isolation bug:
- * one case's greeting replayed into the next case's freshly mounted app and
- * every counting assertion in `test/app.test.tsx` went off by one. The client
- * ships `MessageSource.forget?()` for exactly that, so the test keeps its
- * `afterEach` and calls the package's.
+ * What stays is what is this module's own: the `Sight` state machine, and the
+ * only place that decides WHEN the reading is asked for, which used to be a
+ * trivial question and is not any more. See `standingOn` below.
  *
- * The context was already passed through whole here, so no field starts or
- * stops arriving. The `goto` backstop stays at 500ms, which is this module's
- * lineage and the client's default.
- *
- * It is also the only file that decides WHEN the reading is asked for, which
- * used to be a trivial question and is not any more. See `standingOn` below.
- *
- * ## The grace, and why there is one
- *
- * A page cannot know at load whether it is framed. It has to wait to find out,
- * because the greeting arrives when the host is ready rather than when we are,
- * and a page that concluded "nobody is there" in the first frame would say so
- * and then be greeted a moment later — the reader would see the honest
- * standalone paragraph flash past and be replaced, which teaches them that
- * paragraph is noise. So there is a `listening` state with its own words, it
- * lasts under a second, and only then does the page say the harder thing.
- *
- * It is not a spinner. It says what it is waiting for.
+ * The `goto` backstop stays at 500ms, which is this module's lineage and the
+ * client's default.
  */
-const GREETING_GRACE_MS = 700
+
+/**
+ * The kept string, handed over exactly as the host holds it. `live/keep.ts`
+ * owns the format and distrusts it there; nothing here parses it.
+ */
+const AS_KEPT: KeptCodec<string> = { read: (state) => state, write: (kept) => kept }
 
 /**
  * Whose material the open epic's refs are read out of, in the words
@@ -99,6 +81,9 @@ export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: st
 
 export interface Kehikot {
   sight: Sight
+  /** Whether anything is framing this page, and the project folder it named: what the shared cover asks. */
+  where: Where
+  projectPath: string | null
   /**
    * Whether anything is being read right now: this page asking the host for
    * its reading, a refresh this page asked for, or the host reading on its own
@@ -159,7 +144,7 @@ export interface Kehikot {
    * spelled identically, the round trip is identical, and every module that
    * reacts to `gh#105` goes on reacting to it.
    */
-  selection: string[]
+  selection: readonly string[]
   /** Ask the host to make this the canvas's selection. An empty list clears it. */
   select: (refs: string[]) => void
   /**
@@ -309,7 +294,7 @@ export interface Kehikot {
    * with no method and no capability, so this page can only say where that
    * control is.
    */
-  parts: EpicPart[]
+  parts: readonly EpicPart[]
 }
 
 /**
@@ -323,32 +308,21 @@ export interface Kehikot {
 export type GotoHandler = NonNullable<HostEvents['onGoto']>
 
 export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
-  const [sight, setSight] = useState<Sight>({ at: 'listening' })
+  const [read_, setSight] = useState<Sight>({ at: 'listening' })
   const [asked, setAsked] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [hostReading, setHostReading] = useState(false)
   const [refreshNote, setRefreshNote] = useState<string | null>(null)
-  const [selection, setSelection] = useState<string[]>([])
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
-  const [chosen, setChosen] = useState<FilterChoice>({})
-  const [kept, setKept] = useState<string | null | undefined>(undefined)
   const [epicRefs, setEpicRefs] = useState<string[] | null>(null)
   const [aimed, setAimed] = useState<string[] | null>(null)
   const [marks, setMarks] = useState<Disposition[]>([])
-  const [parts, setParts] = useState<EpicPart[]>([])
-  const host = useRef<Connection | null>(null)
-
   /**
-   * The handler, held in a ref and read at the moment a `goto` arrives.
-   *
-   * The view rebuilds this function whenever the rows change, and connecting to
-   * the window again on every render would mean a torn-down listener during the
-   * one millisecond a host chose to greet in. So the listener is established
-   * once and always calls the newest handler — which is also the only one that
-   * knows the rows currently on screen.
+   * The connection, read at the moment something is asked. Assigned from
+   * `useHost` further down — the questions below are defined before it because
+   * its handlers call them — and stable from then on.
    */
-  const goto = useRef(onGoto)
-  goto.current = onGoto
+  const live = useRef<() => Connection | null>(() => null)
 
   /**
    * The question in flight, by number.
@@ -462,7 +436,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
     const mine = (epicAsked.current += 1)
     /* Whatever was waiting was waiting to be asked no earlier than this. */
     epicStale.current = false
-    const current = host.current
+    const current = live.current()
     if (!epic || !current) {
       epicOut.current = false
       setEpicRefs(null)
@@ -506,7 +480,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
 
   const read = useCallback(() => {
     const project = standingOn.current
-    const current = host.current
+    const current = live.current()
     if (!project || !current) return
 
     const mine = (asking.current += 1)
@@ -534,7 +508,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   }, [])
 
   const refresh = useCallback(() => {
-    const current = host.current
+    const current = live.current()
     if (!standingOn.current || !current) return
     const mine = (refreshed.current += 1)
     setRefreshing(true)
@@ -550,196 +524,123 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
     })
   }, [read])
 
-  useEffect(() => {
+  /**
+   * What the greeting and every later context both do, after `useHost` has
+   * taken what is the same in every module: the theme, the selection, the
+   * filter choice, the parts and the kept string are already in its standing by
+   * the time this is called, in the same render.
+   *
+   * That the selection and the parts come off EVERY context, before anything
+   * here decides whether the project moved, is the whole of "the UI follows
+   * rather than showing stale ticks" when the reader changes project. The host
+   * clears the selection as part of moving, and says so in the message that
+   * names the new project. GitHub numbers start at one in every repository, so
+   * `gh#1` exists nearly everywhere and a page that kept the previous project's
+   * ticks would draw them against whatever rows happen to share a ref.
+   */
+  const arrived = (
+    context: ModuleContext,
     /**
-     * What the greeting and every later context both do.
+     * Whether this was a greeting rather than a later context, which decides
+     * whether the tracker is read again.
      *
-     * The theme is applied here rather than in a component, because it is a
-     * fact about the document rather than about any part of it: the host says
-     * light or dark and the root element carries it. `light` is set explicitly
-     * as well as `dark`, so that a host asking for light over a machine set to
-     * dark actually gets it — see the media query in `index.css`.
+     * A greeting always re-reads, because a greeting means the conversation is
+     * new: the host greets on every frame LOAD, so one arriving is a page that
+     * has just come into existence, or a frame that reloaded itself and has
+     * forgotten everything it knew. Answering that with "the project has not
+     * changed, so there is nothing to do" would leave a page with no rows and
+     * nothing outstanding, forever.
+     *
+     * `StrictMode` is the case that proves it in the smallest possible space.
+     * The hook's effect is torn down and set up again on purpose in
+     * development; the teardown drops the read still in flight, and the setup
+     * replays the greeting out of the mailbox. If the replayed greeting were
+     * deduplicated against the project the dropped read had been about, the
+     * page would sit on "asking" forever — in development only, which is the
+     * worst place for a bug to be discovered.
      */
-    const arrived = (
-      context: {
-        epic?: string | null
-        projectPath?: string | null
-        theme: 'light' | 'dark'
-        selection: string[]
-        filters?: FilterChoice
-        containers?: CanvasContainer[]
-        dispositions?: Disposition[]
-        parts?: EpicPart[]
-        tracker?: { at?: string | null; refreshing?: boolean }
-        content?: ContentChange[]
-      },
-      /**
-       * Whether this was a greeting rather than a later context, which decides
-       * whether the tracker is read again.
-       *
-       * A greeting always re-reads, because a greeting means the conversation is
-       * new: the host greets on every frame LOAD, so one arriving is a page that
-       * has just come into existence, or a frame that reloaded itself and has
-       * forgotten everything it knew. Answering that with "the project has not
-       * changed, so there is nothing to do" would leave a page with no rows and
-       * nothing outstanding, forever.
-       *
-       * `StrictMode` is the case that proves it in the smallest possible space.
-       * The effect below is torn down and set up again on purpose in
-       * development; the teardown aborts the read still in flight, and the setup
-       * replays the greeting out of the mailbox. If the replayed greeting were
-       * deduplicated against the project the aborted read had been about, the
-       * page would sit on "asking" forever — in development only, which is the
-       * worst place for a bug to be discovered.
-       */
-      greeting: boolean,
-      /**
-       * What the host had kept for this module, on a greeting, and `null` on a
-       * later context — where the field does not exist, because a context is
-       * broadcast and a module's own state is not.
-       */
-      state: string | null,
-    ) => {
-      if (greeting) {
-        standingOn.current = undefined
-        epicOn.current = undefined
-        seenAt.current = undefined
-        /* Set even when it is null, and that is the whole point of the third
-           value on `kept`: `null` means the host answered and keeps nothing,
-           which is a fact the view is entitled to act on, and it is a different
-           fact from the `undefined` this starts as. */
-        setKept(state)
-      }
-      const root = document.documentElement
-      root.classList.toggle('dark', context.theme === 'dark')
-      root.classList.toggle('light', context.theme === 'light')
-
-      /**
-       * The selection is taken from every context, unconditionally, before
-       * anything decides whether the project moved.
-       *
-       * That order is the whole of "the UI follows rather than showing stale
-       * ticks" when the reader changes project. The host clears the selection as
-       * part of moving, and it says so in the same message that names the new
-       * project — so a page that read the selection only on the branch where the
-       * project stayed put would keep drawing the previous project's ticks
-       * against whatever rows happen to share a ref with it. GitHub numbers
-       * start at one in every repository, so `gh#1` exists nearly everywhere and
-       * that collision is the expected case rather than a contrived one.
-       */
-      setSelection(context.selection)
-
-      /*
-       * And the choice the host is holding for this container, taken from every
-       * context for the same reason: it is a fact about the container that this
-       * page draws rather than owns, and the greeting carries it before this
-       * page has offered anything.
-       *
-       * Compared key by key before it is written. The host builds a fresh record
-       * on every context whatever happened, and a fresh identity here would
-       * re-narrow and re-order the whole list on every click anybody makes on
-       * the canvas — including every one of ours, because the host sends a
-       * context back after each `selection.set`.
-       */
-      setChosen((was) => (agrees(was, context.filters ?? {}) ? was : (context.filters ?? {})))
-
-      /* The two other facts the narrowing reads, compared for the same reason
-         before they are written. */
-      const pointed = aimedAt(context.containers ?? [], id)
-      setAimed((was) => (was === pointed || (was && pointed && same(was, pointed)) ? was : pointed))
-      const marked = context.dispositions ?? []
-      setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
-      /* And the parts of the epic, taken from every context like the selection
-         and for its reason: moving to another epic sends that epic's parts with
-         nothing picked in the same message that names it, and a page that kept
-         the previous epic's focus would hide rows for parts that are not on
-         screen anywhere. Compared before it is written, because the list is
-         the same list on nearly every context. */
-      const divided = context.parts ?? []
-      setParts((was) => (sameParts(was, divided) ? was : divided))
-
-      /* Read once, defensively, and treated as absent unless it is a non-empty
-         string. It is only ever a key here — which project the reading is
-         about — and the host, which owns the folder, is the one that reads it. */
-      const project = typeof context.projectPath === 'string' && context.projectPath ? context.projectPath : null
-
-      const moved = project !== standingOn.current
-      standingOn.current = project
-
-      /* The host's signal: when its reading last changed, and whether it is
-         reading now. Absent from a host that has never heard of it, which is
-         the honest `{ at: null, refreshing: false }`. */
-      const signal = context.tracker ?? {}
-      const readAt = typeof signal.at === 'string' ? signal.at : null
-      const changed = seenAt.current !== undefined && readAt !== seenAt.current
-      seenAt.current = readAt
-      setHostReading(signal.refreshing === true)
-
-      /* The epic is asked about again when it changes, and when the project
-         does: two projects can each have an epic with the same slug. */
-      const epic = typeof context.epic === 'string' && context.epic ? context.epic : null
-      /* And when its material changes while it is open: the host's epics or
-         the journeys, for this epic. Empty with no epic open — there is
-         nothing to ask about — and from a host that has never heard of
-         content changes, which never moves it. */
-      const stamp = epic ? contentStamp(context.content, { sources: EPIC_KEPT_BY, epic }) : ''
-      if (moved || epic !== epicOn.current) {
-        epicOn.current = epic
-        /* A new epic is read whole, so whatever is said to have changed in it
-           so far is already in the answer. */
-        stampOn.current = stamp
-        readEpic()
-      } else if (stamp !== stampOn.current) {
-        stampOn.current = stamp
-        readEpic('again')
-      }
-
-      if (!moved) {
-        if (changed && project) read()
-        return
-      }
-
-      setRefreshNote(null)
-      refreshed.current += 1
-      setRefreshing(false)
-      if (project) read()
-      else {
-        asking.current += 1
-        setAsked(false)
-        setSight({ at: 'no-project' })
-      }
+    greeting: boolean,
+  ) => {
+    if (greeting) {
+      standingOn.current = undefined
+      epicOn.current = undefined
+      seenAt.current = undefined
     }
 
-    /**
-     * The connection is stored BEFORE it is told to listen, and the order is
-     * the whole of a bug that made this page hang forever.
-     *
-     * `listen()` subscribes to the mailbox, and the mailbox replays what has
-     * already arrived SYNCHRONOUSLY, inside that call. The greeting almost
-     * always arrives before React mounts — that is the entire reason the
-     * mailbox exists — so `onHello` fires on that line. When `connect` also
-     * subscribed, that happened before `host.current` had been assigned:
-     * anything reading `host.current` found null and returned early, and the
-     * page was left on a sentence that never changed, with no question sent
-     * and nothing to time out.
-     *
-     * Worse, it worked often enough to look fine. When the host happened to
-     * greet after this effect returned — a slow module, a reload, a busy
-     * machine — the assignment had already happened and everything behaved. A
-     * race whose good outcome is the common one is the kind that ships.
-     *
-     * What stood here was a box that caught the too-early arrival and replayed
-     * it once the assignment was done. It worked, and it was the wrong shape:
-     * it fixed this module's copy of a hazard every module in the family had.
-     * `connect` and `listen` are two calls now, so the ordering is three plain
-     * lines that read in the order they happen, and the protocol package holds
-     * a test that runs a one-step connect against the same greeting and
-     * watches it fail.
-     */
-    const live = connect(id, {
-      onHello: (context, state) => arrived(context, true, state),
-      onContext: (context) => arrived(context, false, null),
-      onGoto: (message, answer) => goto.current(message, answer),
+    /* The two other facts the narrowing reads, compared before they are
+       written: the host builds every context afresh, and a new identity here
+       would re-narrow the whole list on every click anybody makes on the
+       canvas. */
+    const pointed = aimedAt(context.containers ?? [], id)
+    setAimed((was) => (was === pointed || (was && pointed && same(was, pointed)) ? was : pointed))
+    const marked = context.dispositions ?? []
+    setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
+
+    /* Read once, defensively, and treated as absent unless it is a string with
+       something in it — the same rule as `projectPath` on the hook, so the
+       cover and this file cannot disagree about whether a project is open. It
+       is only ever a key here — which project the reading is about — and the
+       host, which owns the folder, is the one that reads it. */
+    const project = typeof context.projectPath === 'string' && context.projectPath.trim() ? context.projectPath : null
+
+    const moved = project !== standingOn.current
+    standingOn.current = project
+
+    /* The host's signal: when its reading last changed, and whether it is
+       reading now. Absent from a host that has never heard of it, which is
+       the honest `{ at: null, refreshing: false }`. */
+    const signal: { at?: string | null; refreshing?: boolean } = context.tracker ?? {}
+    const readAt = typeof signal.at === 'string' ? signal.at : null
+    const changed = seenAt.current !== undefined && readAt !== seenAt.current
+    seenAt.current = readAt
+    setHostReading(signal.refreshing === true)
+
+    /* The epic is asked about again when it changes, and when the project
+       does: two projects can each have an epic with the same slug. */
+    const epic = typeof context.epic === 'string' && context.epic ? context.epic : null
+    /* And when its material changes while it is open: the host's epics or
+       the journeys, for this epic. Empty with no epic open — there is
+       nothing to ask about — and from a host that has never heard of
+       content changes, which never moves it. */
+    const stamp = epic ? contentStamp(context.content, { sources: EPIC_KEPT_BY, epic }) : ''
+    if (moved || epic !== epicOn.current) {
+      epicOn.current = epic
+      /* A new epic is read whole, so whatever is said to have changed in it
+         so far is already in the answer. */
+      stampOn.current = stamp
+      readEpic()
+    } else if (stamp !== stampOn.current) {
+      stampOn.current = stamp
+      readEpic('again')
+    }
+
+    if (!moved) {
+      if (changed && project) read()
+      return
+    }
+
+    setRefreshNote(null)
+    refreshed.current += 1
+    setRefreshing(false)
+    if (project) read()
+    else {
+      asking.current += 1
+      setAsked(false)
+      setSight({ at: 'no-project' })
+    }
+  }
+
+  /**
+   * The host. The handlers are read through a ref inside `useHost`, so they are
+   * rebuilt on every render and the newest is the one called — which for
+   * `onGoto` is also the only one that knows the rows currently on screen.
+   */
+  const host = useHost<string>(
+    id,
+    {
+      onHello: (context) => arrived(context, true),
+      onContext: (context) => arrived(context, false),
+      onGoto,
       /**
        * The host's refresh control, or the interval somebody set for this
        * container. Both arrive here and neither says which it was.
@@ -754,43 +655,48 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
        * Handled here rather than passed in like `onGoto`, because everything it
        * needs is already in this file, and the decision about WHEN the reading
        * is asked for has always lived here rather than in the view.
+       *
+       * It is also one of the two moments this page asks whether its OWN server
+       * is there — see `main.tsx` for the other. Nothing on this list comes
+       * from that server, so no question of the page's would ever find out.
        */
       onRefresh: () => {
+        void probeServer()
         refresh()
         readEpic()
       },
-    })
-    host.current = live
-    live.listen()
+    },
+    { kept: AS_KEPT },
+  )
+  live.current = host.connection
 
-    const grace = setTimeout(() => {
-      setSight((was) => (was.at === 'listening' ? { at: 'unhosted' } : was))
-    }, GREETING_GRACE_MS)
-
-    return () => {
-      clearTimeout(grace)
-      /* The question goes with the listener. A page being torn down has no use
+  useEffect(
+    () => () => {
+      /* The questions go with the listener. A page being torn down has no use
          for an answer, and one arriving after a remount must not become it. */
       asking.current += 1
       refreshed.current += 1
-      live.stop()
-      /* Cleared only if it is still ours: under StrictMode the second mount has
-         already assigned its own connection by the time some cleanups run. */
-      if (host.current === live) host.current = null
-    }
-  }, [id, read, refresh, readEpic])
-
-  const resize = useCallback((height: number) => host.current?.resize(height), [])
-
-  /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
-  const offerFilters = useCallback((groups: FilterGroup[]) => host.current?.filters(groups), [])
-
-  /* And the same, for the state that makes the host's refresh control possible.
-     Silent standalone, where there is nobody to draw one. */
-  const refreshable = useCallback(
-    (state: { can?: boolean; at?: string | null; busy?: boolean }) => host.current?.refreshable(state),
+    },
     [],
   )
+
+  /**
+   * `listening` is the state this file starts in, and `useHost` is what knows
+   * when the grace has run out: a page cannot know at load whether it is
+   * framed, and one that concluded "nobody is there" in the first frame would
+   * say so and then be greeted a moment later.
+   */
+  const sight: Sight = read_.at === 'listening' && host.where === 'unhosted' ? UNHOSTED : read_
+
+  /**
+   * Three values, and the third is doing real work: a string is what was kept,
+   * `null` is a host that keeps nothing for this module, and `undefined` is "no
+   * greeting has arrived, so the question has not been answered".
+   */
+  const kept = host.where === 'hosted' ? host.kept : undefined
+  const { where, projectPath, selection, chosen, parts, resize, refreshable, remember: keep } = host
+  /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
+  const offerFilters = host.filters
 
   /**
    * Ask, then read the answer rather than assuming it.
@@ -812,7 +718,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
    *   would go on to claim it had cleared something it knows nothing about.
    */
   const setFilters = useCallback(async (filters: FilterChoice): Promise<Settled> => {
-    const current = host.current
+    const current = live.current()
     if (!current) return { ok: true, filters: {} }
     try {
       const answer = await current.request('filters.set', { filters })
@@ -853,7 +759,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
    */
   const select = useCallback((refs: string[]) => {
     setSelectionRefused(null)
-    const current = host.current
+    const current = live.current()
     if (!current) {
       /* Standalone. Not a refusal by anybody — there is nobody to refuse — and
          the page says so in its own words elsewhere, so this is silent. */
@@ -868,28 +774,13 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
     })
   }, [])
 
-  /**
-   * Hand the host a string to keep, and do not wait to hear about it.
-   *
-   * Fire and forget, unlike `select`, and the asymmetry is deliberate. A refused
-   * `selection.set` has a visible symptom — a row that will not tick — and needs
-   * a sentence beside it. A refused `state.set` has none: the page goes on
-   * working exactly as it is, and the only consequence is that a filter is
-   * forgotten on the next load. Putting a warning on screen for that would be
-   * telling a reader about a disappointment they have not had yet, in the space
-   * where their work is.
-   *
-   * Nothing here knows what is in the string. See `live/keep.ts`.
-   */
-  const keep = useCallback((state: string) => {
-    void host.current?.request('state.set', { state }).catch(() => {})
-  }, [])
-
   const busy = asked || refreshing || hostReading
 
   return useMemo(
     () => ({
       sight,
+      where,
+      projectPath,
       busy,
       read,
       refresh,
@@ -911,6 +802,8 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
     }),
     [
       sight,
+      where,
+      projectPath,
       busy,
       read,
       refresh,
@@ -933,29 +826,8 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   )
 }
 
-/**
- * Whether two choices say the same thing, key by key.
- *
- * Written here rather than reached for from a library because it is three lines
- * and because what it is for is specific: the host rebuilds this record on every
- * context, so identity is worthless and only the contents mean anything. A
- * `JSON.stringify` comparison would have depended on key order, which nothing
- * promises.
- */
-function agrees(one: FilterChoice, other: FilterChoice): boolean {
-  const mine = Object.keys(one)
-  const theirs = Object.keys(other)
-  return (
-    mine.length === theirs.length &&
-    mine.every((key) => {
-      const a = one[key]
-      const b = other[key]
-      /* A toggles group's value is a list, and two lists are never `===`. In
-         order, because the host keeps the order things were switched on in. */
-      return Array.isArray(a) && Array.isArray(b) ? same(a, b) : a === b
-    })
-  )
-}
+/** One object, so a page nobody greeted is not handed a new `Sight` on every render. */
+const UNHOSTED: Sight = { at: 'unhosted' }
 
 /** Two lists of strings, element by element. */
 function same(one: readonly string[], other: readonly string[]): boolean {
