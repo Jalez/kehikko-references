@@ -6,6 +6,7 @@ import {
   CONTENT_HOST,
   contentStamp,
   filterChoiceSchema,
+  sameParts,
   type CanvasContainer,
   type ContentChange,
   type Disposition,
@@ -655,7 +656,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
          screen anywhere. Compared before it is written, because the list is
          the same list on nearly every context. */
       const divided = context.parts ?? []
-      setParts((was) => (JSON.stringify(was) === JSON.stringify(divided) ? was : divided))
+      setParts((was) => (sameParts(was, divided) ? was : divided))
 
       /* Read once, defensively, and treated as absent unless it is a non-empty
          string. It is only ever a key here — which project the reading is

@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { FOCUS_WHERE } from 'kehikot-module-protocol'
 
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
-import { Heading, ageOf, focusLine, focusTold } from '@/view/heading.tsx'
+import { Heading, ageOf } from '@/view/heading.tsx'
 import { row } from './fixtures.ts'
 
 const PROJECT = '/Users/somebody/Projects/kehikko'
@@ -279,8 +280,7 @@ describe('the table’s heading, at every width', () => {
  * what a narrow container clips.
  */
 describe('the parts focus, in the heading', () => {
-  const one = { picked: ['The posting seam'], of: 3, shown: 6, outside: 14 }
-  const two = { picked: ['The method', 'The results'], of: 5, shown: 9, outside: 1 }
+  const one = { picked: ['The posting seam'], shown: 6, outside: 14, sentence: '14 references outside the picked part (The posting seam).' }
 
   test('nothing is drawn while no part is picked out', () => {
     const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
@@ -293,16 +293,8 @@ describe('the parts focus, in the heading', () => {
       <Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} focus={one} />,
     )
     const line = container.querySelector('[data-heading="focus"]')!
-    expect(line.textContent).toBe('14 outside the picked part · The posting seam')
-    expect(line.getAttribute('title')).toContain('one of this epic’s 3 parts')
-    expect(line.getAttribute('title')).toContain('host’s bar')
-  })
-
-  test('several are counted and named, the number first', () => {
-    expect(focusLine(two)).toBe('1 outside the 2 picked parts · The method, The results')
-    expect(focusTold(two)).toContain('2 of this epic’s 5 parts: The method, The results.')
-    expect(focusTold(two)).toContain('9 shown; 1 reference it would otherwise show is outside those parts.')
-    expect(focusLine({ ...one, outside: 0 })).toBe('0 outside the picked part · The posting seam')
+    expect(line.textContent).toBe('14 references outside the picked part (The posting seam).')
+    expect(line.getAttribute('title')).toBe(FOCUS_WHERE)
   })
 
   test('the line carries no rule that hides it at any width', () => {

@@ -1317,7 +1317,7 @@ describe('focused on parts of the epic', () => {
     await listed({ parts: parts(true, false) })
     expect(drawn()).toEqual(['gh#2', 'gh#3'])
     expect(document.body.textContent).toContain('2 of 8 shown')
-    expect(focusLine()?.textContent).toBe('6 outside the picked part · The posting seam')
+    expect(focusLine()?.textContent).toBe('6 references outside the picked part (The posting seam).')
   })
 
   test('a change of focus in a later context re-draws the list, and unpicking puts it all back', async () => {
@@ -1325,7 +1325,7 @@ describe('focused on parts of the epic', () => {
     act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(true, true) }))
     await settle()
     expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
-    expect(focusLine()?.textContent).toBe('5 outside the 2 picked parts · The posting seam, What the tests check')
+    expect(focusLine()?.textContent).toBe('5 references outside the 2 picked parts (The posting seam, What the tests check).')
 
     act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(false, false) }))
     await settle()
@@ -1349,7 +1349,7 @@ describe('focused on parts of the epic', () => {
     /* The epic names three; the part lists one of them. */
     expect(drawn()).toEqual(['gh#2'])
     expect(document.body.textContent).toContain('1 of 8 shown')
-    expect(focusLine()?.textContent).toBe('2 outside the picked part · The posting seam')
+    expect(focusLine()?.textContent).toBe('2 references outside the picked part (The posting seam).')
   })
 
   test('a focus that leaves no row says so in its own words, with the heading still counting', async () => {
@@ -1357,7 +1357,7 @@ describe('focused on parts of the epic', () => {
     expect(drawn()).toEqual([])
     expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('matches what you asked for')
-    expect(focusLine()?.textContent).toBe('8 outside the picked part · Filed elsewhere')
+    expect(focusLine()?.textContent).toBe('8 references outside the picked part (Filed elsewhere).')
   })
 
   test('a walk to a row outside the focus is refused with the reason, and no filter is moved for it', async () => {

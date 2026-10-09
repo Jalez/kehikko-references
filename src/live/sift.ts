@@ -1,9 +1,11 @@
 import {
   LIMITS,
-  focusCount,
+  anchorInFocus,
+  focusSentence,
   isFocused,
+  narrowToFocus,
   pickedParts,
-  refInFocus,
+  type Anchor,
   type Disposition,
   type EpicPart,
   type FilterChoice,
@@ -105,17 +107,17 @@ import type { Reference } from './reference.ts'
  * An epic may be divided into parts, and a person may pick some of them out in
  * the host's bar. `context.parts` lists every part of the open epic with the
  * refs the host says belong to it, and flags the picked ones. While any is
- * picked this list draws only the rows a picked part lists — `refInFocus`, the
- * protocol's rule and not a copy of it — and a ref no part lists is outside
- * every focus.
+ * picked this list draws only the rows a picked part lists — a row's anchor is
+ * its ref, and the protocol's one rule decides — and a ref no part lists is
+ * outside every focus.
  *
  * It is the fifth thing that can hide a row and the first that is not a filter
  * group: this module does not offer it, cannot set it, and `filters.set` does
  * not move it. So it is deliberately NOT part of `narrowing`, which is "what
  * one press here can put back", and it is counted on its own — `focusOf` says
  * how many rows the rest of the narrowing would draw and the focus alone is
- * hiding, and `view/heading.tsx` prints that number beside the names of the
- * parts. A focus that shortened this list without a sentence would be the
+ * hiding, in the sentence every module says (`focusSentence`), and
+ * `view/heading.tsx` prints it. A focus that shortened this list without a sentence would be the
  * failure the first paragraph of this file is about.
  *
  * With nothing picked — an epic with no parts, no epic, a host that has never
@@ -504,27 +506,30 @@ export function nothingInScope(rows: readonly Reference[], sifting: Sifting): bo
  * anyway, and say four hundred about a list that was never going to show them.
  * `shown + outside` is exactly the list as it was before the focus.
  *
- * The two numbers are the protocol's `focusCount`, so that three modules do
- * not count three ways.
+ * The numbers and the sentence are the protocol's (`narrowToFocus`,
+ * `focusSentence`), so that no two modules count or say it two ways.
  */
 export interface Focus {
   /** What a person calls each picked part — its heading, or its id where it has none — in the epic's order. */
   picked: string[]
-  /** How many parts the epic has, picked or not. */
-  of: number
   shown: number
   outside: number
+  /** `14 references outside the picked part (The posting seam).` */
+  sentence: string
 }
+
+/** What ties a row to a part: the reference it is. */
+export const anchorOf = (row: { ref: string }): Anchor => ({ ref: row.ref })
 
 export function focusOf(rows: readonly Reference[], sifting: Sifting): Focus | null {
   if (!isFocused(sifting.parts)) return null
   const unfocused = sift(rows, { ...sifting, parts: [] })
-  const { shown, outside } = focusCount(sifting.parts, unfocused, (row) => refInFocus(sifting.parts, row.ref))
+  const { shown, outside } = narrowToFocus(sifting.parts, unfocused, anchorOf)
   return {
     picked: pickedParts(sifting.parts).map((part) => part.heading || part.id),
-    of: sifting.parts.length,
-    shown,
+    shown: shown.length,
     outside,
+    sentence: focusSentence(sifting.parts, outside, 'reference'),
   }
 }
 
@@ -549,7 +554,7 @@ export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] 
     /* The parts picked out in the host's bar. True for every row when none is
        picked; a ref no picked part lists is outside the focus, and `focusOf`
        counts it. */
-    if (!refInFocus(sifting.parts, row.ref)) return false
+    if (!anchorInFocus(sifting.parts, anchorOf(row))) return false
     return matches(row, terms)
   })
   /* The toggles through the facets module's own `sift`, so that "a row with no
