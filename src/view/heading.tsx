@@ -1,10 +1,9 @@
 import { ArrowDown, ArrowUp, ArrowUpDown, GitPullRequest } from 'lucide-react'
 
-import { FOCUS_WHERE, type TrackerMissing } from 'kehikot-module-protocol'
+import type { TrackerMissing } from 'kehikot-module-protocol'
 
 import { cn } from '@/lib/utils'
 import { ORDER_LABELS, type Ordering } from '@/live/order.ts'
-import type { Focus } from '@/live/sift.ts'
 import { projectName } from './absence.tsx'
 
 /**
@@ -122,26 +121,13 @@ import { projectName } from './absence.tsx'
  * tooltip with why. A ref the epic names that is on no row would otherwise be
  * simply absent, which is the failure this module is written against.
  *
- * ## The parts focus, which gets a line of its own
+ * ## The parts focus, which gets no line
  *
  * While parts of the epic are picked out in the host's bar the list draws only
- * the rows those parts list, and the heading grows a second line that says so:
- * `14 references outside the picked part (The posting seam).` — the protocol's
- * sentence, the number first because the line truncates from the right, and
- * `0 … outside` still said. It is drawn only then — with
- * nothing picked the heading is the one line it has always been.
- *
- * A line of its own rather than two more words after the count, because the
- * words after the count are the ones a narrow container drops, and this is the
- * one narrowing here that must not be droppable: nobody set it in this
- * container, the header's funnel does not fill in for it, and no press on this
- * page puts it back. So it costs its twenty pixels at every width, and the
- * number goes FIRST — the names are what gets clipped when there is no room,
- * and the whole sentence is on the line's own tooltip, with where the control
- * is.
- *
- * `outside` is what the rest of the narrowing would draw and the focus alone
- * is hiding; see `focusOf` in `live/sift.ts`.
+ * the rows those parts list. The heading used to grow a second line saying so
+ * and counting what was outside; it cost its twenty pixels at every width, and
+ * the host's bar already shows the pick. The heading is the one line it has
+ * always been, whatever is picked.
  */
 
 /** Which order each column heading sets, and what its arrow means. */
@@ -156,7 +142,6 @@ export function Heading({
   scope = null,
   at,
   unread = [],
-  focus = null,
   now,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
@@ -171,8 +156,6 @@ export function Heading({
   at?: string | null
   /** The refs the reading names and holds no row for, and why. */
   unread?: readonly TrackerMissing[]
-  /** What the parts focus is doing to this list, or `null` when no part is picked out. */
-  focus?: Focus | null
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
 }) {
@@ -269,15 +252,6 @@ export function Heading({
           reason. */}
       <span className="w-[30px] shrink-0" aria-hidden="true" />
     </div>
-    {focus && (
-      <p
-        data-heading="focus"
-        title={FOCUS_WHERE}
-        className="truncate border-b border-border bg-muted/30 px-3 py-1 font-mono text-[11px] tabular-nums text-muted-foreground"
-      >
-        {focus.sentence}
-      </p>
-    )}
     </>
   )
 }

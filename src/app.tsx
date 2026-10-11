@@ -508,8 +508,8 @@ export function App() {
 
   /* What the parts focus is doing to that list — which parts, and how many
      rows the rest of the narrowing would have drawn — or `null` when no part
-     is picked out, which is every project that has never divided an epic. The
-     heading prints it; see `focusOf` in `sift.ts`. */
+     is picked out, which is every project that has never divided an epic.
+     Nothing prints it; it tells an emptied list apart. See `focusOf` in `sift.ts`. */
   const focus = useMemo(() => focusOf(rows, sifting), [rows, sifting])
 
   /**
@@ -617,7 +617,6 @@ export function App() {
         scope={sifting.scope?.from ?? null}
         at={held.at}
         unread={held.missing}
-        focus={focus}
       />
       {/*
         A source that could not be read, over the rows it gave before.

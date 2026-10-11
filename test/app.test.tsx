@@ -1375,20 +1375,22 @@ describe('focused on parts of the epic', () => {
     return host
   }
   const drawn = () => [...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))
-  const focusLine = () => document.querySelector('[data-heading="focus"]')
+  /** Anything on the page that announces the picked parts while there is a row to show: there is to be none. */
+  const notice = () =>
+    document.querySelector('[data-heading="focus"]') !== null || /outside the|picked part|host’s bar/.test(document.body.textContent ?? '')
 
   test('parts that are listed and not picked change nothing at all', async () => {
     await listed({ parts: parts(false, false) })
     expect(drawn()).toHaveLength(8)
     expect(document.body.textContent).toContain('8 references')
-    expect(focusLine()).toBeNull()
+    expect(notice()).toBe(false)
   })
 
-  test('a part picked in the greeting narrows the rows and says how many are outside it', async () => {
+  test('a part picked in the greeting narrows the rows, and no line says how many are outside it', async () => {
     await listed({ parts: parts(true, false) })
     expect(drawn()).toEqual(['gh#2', 'gh#3'])
     expect(document.body.textContent).toContain('2 of 8 shown')
-    expect(focusLine()?.textContent).toBe('6 references outside the picked part (The posting seam).')
+    expect(notice()).toBe(false)
   })
 
   test('a change of focus in a later context re-draws the list, and unpicking puts it all back', async () => {
@@ -1396,12 +1398,12 @@ describe('focused on parts of the epic', () => {
     act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(true, true) }))
     await settle()
     expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
-    expect(focusLine()?.textContent).toBe('5 references outside the 2 picked parts (The posting seam, What the tests check).')
+    expect(notice()).toBe(false)
 
     act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(false, false) }))
     await settle()
     expect(drawn()).toHaveLength(8)
-    expect(focusLine()).toBeNull()
+    expect(notice()).toBe(false)
 
     /* And a host that stops sending the field at all is a host with no focus. */
     act(() => host.context(PROJECT, [], 'an-epic', { scope: 'all' }, { parts: parts(false, true) }))
@@ -1412,7 +1414,7 @@ describe('focused on parts of the epic', () => {
     expect(drawn()).toHaveLength(8)
   })
 
-  test('the count is of the rows the scope would have drawn, when the scope is narrowing too', async () => {
+  test('the parts narrow on top of the scope, when the scope is narrowing too', async () => {
     const host = await listed({ parts: parts(true, false) }, {})
     act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['gh#2', 'gh#5'] }] } }))
     act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', umbrella: 'gh#7', steps: [] } }))
@@ -1420,15 +1422,18 @@ describe('focused on parts of the epic', () => {
     /* The epic names three; the part lists one of them. */
     expect(drawn()).toEqual(['gh#2'])
     expect(document.body.textContent).toContain('1 of 8 shown')
-    expect(focusLine()?.textContent).toBe('2 references outside the picked part (The posting seam).')
+    expect(notice()).toBe(false)
   })
 
-  test('a focus that leaves no row says so in its own words, with the heading still counting', async () => {
+  test('a focus that leaves no row says so in one sentence where the rows would be, and nowhere else', async () => {
     await listed({ parts: [part('elsewhere', 'Filed elsewhere', ['gl#404'], true)] })
     expect(drawn()).toEqual([])
     expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('matches what you asked for')
-    expect(focusLine()?.textContent).toBe('8 references outside the picked part (Filed elsewhere).')
+    expect(document.querySelector('[data-heading="focus"]')).toBeNull()
+    expect(document.querySelector('[data-absence="focus"]')?.textContent).toBe('Nothing in the picked part is in this list.')
+    expect(document.body.textContent).not.toContain('host’s bar')
+    expect(document.body.textContent).not.toContain('outside the')
   })
 
   test('a walk to a row outside the focus is refused with the reason, and no filter is moved for it', async () => {

@@ -463,7 +463,6 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['The seam'],
       shown: 2,
       outside: 2,
-      sentence: '2 references outside the picked part (The seam).',
     })
   })
 
@@ -475,7 +474,6 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['The seam', 'The tests'],
       shown: 3,
       outside: 1,
-      sentence: '1 reference outside the 2 picked parts (The seam, The tests).',
     })
   })
 
@@ -497,7 +495,6 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['all'],
       shown: 4,
       outside: 0,
-      sentence: '0 references outside the picked part (all).',
     })
   })
 

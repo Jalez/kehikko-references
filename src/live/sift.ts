@@ -1,7 +1,6 @@
 import {
   LIMITS,
   anchorInFocus,
-  focusSentence,
   isFocused,
   narrowToFocus,
   pickedParts,
@@ -116,9 +115,12 @@ import type { Reference } from './reference.ts'
  * not move it. So it is deliberately NOT part of `narrowing`, which is "what
  * one press here can put back", and it is counted on its own — `focusOf` says
  * how many rows the rest of the narrowing would draw and the focus alone is
- * hiding, in the sentence every module says (`focusSentence`), and
- * `view/heading.tsx` prints it. A focus that shortened this list without a sentence would be the
- * failure the first paragraph of this file is about.
+ * hiding. That number is never printed: the heading used to grow a second
+ * line for it (`14 references outside the picked part (The posting seam).`),
+ * which cost a row at every width when the host's bar already shows the pick
+ * and the rows drawn are the message. It is kept for one thing — telling a
+ * list the focus EMPTIED from one with no rows, so that the empty place can
+ * say one sentence about why (`NothingInFocus` in `view/absence.tsx`).
  *
  * With nothing picked — an epic with no parts, no epic, a host that has never
  * heard of parts — every function below behaves exactly as it did before the
@@ -495,8 +497,8 @@ export function nothingInScope(rows: readonly Reference[], sifting: Sifting): bo
 }
 
 /**
- * What the parts focus is doing to this list, for the sentence in the heading:
- * `null` when nothing is picked out, which is the cue to say nothing at all.
+ * What the parts focus is doing to this list, for the one sentence an emptied
+ * list says: `null` when nothing is picked out.
  *
  * `outside` is counted against what the REST of the narrowing would draw, not
  * against the whole reading. "14 outside the picked parts" then means fourteen
@@ -506,16 +508,14 @@ export function nothingInScope(rows: readonly Reference[], sifting: Sifting): bo
  * anyway, and say four hundred about a list that was never going to show them.
  * `shown + outside` is exactly the list as it was before the focus.
  *
- * The numbers and the sentence are the protocol's (`narrowToFocus`,
- * `focusSentence`), so that no two modules count or say it two ways.
+ * The numbers are the protocol's (`narrowToFocus`), so that no two modules
+ * count two ways.
  */
 export interface Focus {
   /** What a person calls each picked part — its heading, or its id where it has none — in the epic's order. */
   picked: string[]
   shown: number
   outside: number
-  /** `14 references outside the picked part (The posting seam).` */
-  sentence: string
 }
 
 /** What ties a row to a part: the reference it is. */
@@ -529,7 +529,6 @@ export function focusOf(rows: readonly Reference[], sifting: Sifting): Focus | n
     picked: pickedParts(sifting.parts).map((part) => part.heading || part.id),
     shown: shown.length,
     outside,
-    sentence: focusSentence(sifting.parts, outside, 'reference'),
   }
 }
 

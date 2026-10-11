@@ -124,17 +124,13 @@ module says `reacts: ['parts']`.
   (`refInFocus`, the protocol's rule). A reference no part lists is outside
   every focus: counted, not shown. The scope, the toggles and the query narrow
   as before, on top.
-- **The heading grows a second line** that says so, at every width:
-  `14 outside the picked part · The posting seam`, or
-  `5 outside the 2 picked parts · The method, The results`. The number is first
-  because the names are what a narrow container clips; the tooltip has the
-  whole sentence and where the control is. `outside` counts the rows the rest
-  of the narrowing would draw and the focus alone is hiding (`focusOf` in
-  `src/live/sift.ts`, over the protocol's `focusCount`), so shown plus outside
-  is the list as it was before the focus.
-- **A focus that leaves no row** draws its own panel — *Nothing in the picked
-  part is in this list* — with the count and the names, and no button: the
-  parts are picked in the host's bar, and nothing on this page can unpick them.
+- **Nothing announces it** while there is a row to draw: no second heading
+  line, no count of what is outside. The host's bar shows the pick and the
+  rows are the message. (`focusOf` in `src/live/sift.ts` still counts what the
+  focus alone is hiding, only to tell an emptied list from an empty one.)
+- **A focus that leaves no row** says one sentence where the rows would be —
+  *Nothing in the picked part is in this list.* — and nothing else: no count,
+  no names, no button.
 - **`view.goto` to a row outside the focus** is answered `found: false` with
   that reason, and no filter is moved for it, because clearing the filters
   would not put the row on screen.
@@ -230,8 +226,8 @@ And one the reader caused: **Nothing here matches what you asked for**, which
 names how many exist and hands them all back with one press.
 
 And one the host's bar caused: **Nothing in the picked part is in this list**,
-when parts of the epic are picked out and every row is outside them. It names
-the parts and how many rows are outside, and says where to unpick them.
+when parts of the epic are picked out and every row is outside them. One
+sentence, and the only thing this page says about the picked parts.
 
 ### And the failures, which are three sentences now
 
@@ -613,8 +609,8 @@ of the shared reading is Jalez/kehikko#25.
   including the two whose column a narrow row drops — stays reachable.
 - The parts focus is held in three places: `test/sift.test.ts` (what narrows,
   that a ref in no part is outside, that the count is of what the rest of the
-  narrowing would draw), `test/narrow.test.tsx` (the heading's second line is
-  absent at rest and carries no hiding rule when it is there), and
+  narrowing would draw), `test/narrow.test.tsx` (the heading draws nothing
+  about picked parts), and
   `test/app.test.tsx` (that `context.parts` reaches the rows through the real
   bridge, that a later context re-draws them, and that a `goto` outside the
   focus is refused without moving a filter). None of it has been run in a real
