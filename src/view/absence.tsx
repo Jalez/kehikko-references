@@ -352,34 +352,21 @@ export function NothingInScope({
  * Parts of the epic are picked out, and every row the list would otherwise
  * draw is outside them.
  *
- * Its own panel for the reason the two above have one, and a stronger version
- * of it: nobody narrowed this in the container's header, and nothing on this
- * page can undo it. The parts are picked in the host's bar, so there is no
- * button here — a press that promised to show everything and could not would
- * be the broken control the other panels are careful not to draw. What there
- * is instead is the count, the names, and where the control is.
- *
- * A reference no part lists is outside every focus. That is the protocol's
- * rule, and it is why an epic whose parts list three refs can leave thirty
- * here: they are counted, in this sentence and in the heading, and not shown.
+ * One sentence, where the rows would be, and the only thing this page says
+ * about the picked parts. It used to be a panel — a title, the count and the
+ * names, and a paragraph on where the parts are picked — under a heading line
+ * that said the same; the host's bar already shows the pick, so what is owed
+ * here is only that an empty list is not mistaken for a broken one, or for a
+ * filter somebody set in the header. No button: nothing on this page can
+ * unpick a part, and a press that promised to would be a broken control.
  */
 export function NothingInFocus({ focus }: { focus: Focus }) {
-  const one = focus.picked.length === 1
   return (
-    <Panel title={one ? 'Nothing in the picked part is in this list.' : 'Nothing in the picked parts is in this list.'}>
-      <p>
-        This epic is focused on {one ? 'one part' : `${focus.picked.length} parts`} — {focus.picked.join(', ')} — and{' '}
-        {focus.outside === 1
-          ? 'the one reference this list would otherwise show is'
-          : `all ${focus.outside} references this list would otherwise show are`}{' '}
-        outside {one ? 'it' : 'them'}. A reference is in a part when the epic lists it under that part’s heading, or a
-        step assigned to the part names it.
+    <div className="@container h-full overflow-y-auto">
+      <p data-absence="focus" className="mx-auto max-w-prose px-3 py-5 text-sm break-words text-muted-foreground @md:px-4 @md:py-10">
+        {focus.picked.length === 1 ? 'Nothing in the picked part is in this list.' : 'Nothing in the picked parts is in this list.'}
       </p>
-      <p>
-        Nothing has gone missing. The parts are picked in the host’s bar, beside the epic; unpick them there and the
-        list is whole again.
-      </p>
-    </Panel>
+    </div>
   )
 }
 

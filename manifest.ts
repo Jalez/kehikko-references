@@ -199,8 +199,8 @@ export const ID = 'kehikot.references'
  *
  * `3.2.0`: the list honours the parts focus. While parts of the open epic are
  * picked out in the host's bar (`context.parts`, protocol 0.29.0), only the
- * rows those parts list are drawn, a second heading line says which parts and
- * how many rows are outside them, and a `goto` to a row outside them is
+ * rows those parts list are drawn (a second heading line counting the rows
+ * outside them came with it and has since been taken out), and a `goto` to a row outside them is
  * answered `found: false` with that reason. A minor, because with nothing
  * picked — and under a host that has never heard of parts — it behaves exactly
  * as 3.1.0 did.
@@ -369,8 +369,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    *
    * `parts`, because the rows narrow to the references of the parts of the
    * epic a person picked out in the host's bar — a row's anchor is its ref,
-   * and the rule and the sentence are the protocol's — and the heading says which parts and how many rows are outside
-   * them. With none picked the list is what it was. The picking is the host's
+   * and the rule is the protocol's. Nothing announces it; a list the pick
+   * emptied says one sentence. With none picked the list is what it was. The picking is the host's
    * own control, so there is no capability for it below.
    *
    * Not `passage`. Nothing here reads one.

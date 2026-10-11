@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { FOCUS_WHERE } from 'kehikot-module-protocol'
 
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -270,39 +269,18 @@ describe('the table’s heading, at every width', () => {
 })
 
 /**
- * The second heading line, which exists only while parts of the epic are
- * picked out in the host's bar.
+ * The parts focus, about which the heading says nothing.
  *
- * What is held: that it is absent at rest, so a project that never divided an
- * epic sees the heading it always saw; that when it is there it carries no
- * hiding rule at any width, because it is the one narrowing nobody set in this
- * container; and that the number comes before the names, because the names are
- * what a narrow container clips.
+ * It used to grow a second line while a part was picked — how many rows were
+ * outside and which parts. The line is gone: the host's bar shows the pick,
+ * and the heading is the one line it always was. What is held is that the
+ * heading has no way to be handed a focus at all.
  */
 describe('the parts focus, in the heading', () => {
-  const one = { picked: ['The posting seam'], shown: 6, outside: 14, sentence: '14 references outside the picked part (The posting seam).' }
-
-  test('nothing is drawn while no part is picked out', () => {
-    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
+  test('the heading is one line and draws nothing about picked parts', () => {
+    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} />)
     expect(container.querySelector('[data-heading="focus"]')).toBeNull()
     expect(container.textContent).not.toContain('outside')
-  })
-
-  test('a picked part is named, with how many rows are outside it', () => {
-    const { container } = render(
-      <Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} focus={one} />,
-    )
-    const line = container.querySelector('[data-heading="focus"]')!
-    expect(line.textContent).toBe('14 references outside the picked part (The posting seam).')
-    expect(line.getAttribute('title')).toBe(FOCUS_WHERE)
-  })
-
-  test('the line carries no rule that hides it at any width', () => {
-    const { container } = render(
-      <Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} focus={one} />,
-    )
-    const line = container.querySelector('[data-heading="focus"]')!
-    expect(line.className).not.toContain('hidden')
-    expect(line.className).toContain('truncate')
+    expect(container.textContent).not.toContain('picked part')
   })
 })
