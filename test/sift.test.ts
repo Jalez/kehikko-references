@@ -13,7 +13,9 @@ import {
   SCOPE,
   SHOW_ALL,
   facetsOfRow,
+  anchorOf,
   focusOf,
+  outOfFocus,
   hides,
   narrowing,
   nothingInScope,
@@ -263,6 +265,7 @@ describe('reading back what the host chose', () => {
       picked: ['gh#41'],
       marks: [],
       parts: [],
+      held: ['gh#41'],
     })
   })
 
@@ -463,6 +466,7 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['The seam'],
       shown: 2,
       outside: 2,
+      empty: '',
     })
   })
 
@@ -474,6 +478,7 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['The seam', 'The tests'],
       shown: 3,
       outside: 1,
+      empty: '',
     })
   })
 
@@ -495,7 +500,47 @@ describe('the parts of the epic picked out in the host’s bar', () => {
       picked: ['all'],
       shown: 4,
       outside: 0,
+      empty: '',
     })
+  })
+
+  test('keep: a row a person selected is drawn though no picked part lists it, in its own place', () => {
+    /* `!1848` is in the unpicked part and `gh#99` in none; both are selected. */
+    const sifting = { ...EVERYTHING, parts: [seam(true), tests(false)], held: ['!1848', 'gh#99'] }
+    expect(sift(rows, sifting).map((r) => r.ref)).toEqual(rows.map((r) => r.ref))
+    /* Both are still outside the picked part — the protocol counts them so — and both are drawn. */
+    expect(focusOf(rows, sifting)).toMatchObject({ shown: 4, outside: 2, empty: '' })
+    expect(outOfFocus(sifting, rows.find((r) => r.ref === 'gh#99')!)).toBe(false)
+    /* Unselected again, it is the pick's to hide. */
+    expect(outOfFocus({ ...sifting, held: [] }, rows.find((r) => r.ref === 'gh#99')!)).toBe(true)
+  })
+
+  test('keep is not a way round a person’s own filter: a selected row a toggle hides stays hidden', () => {
+    const sifting = { ...EVERYTHING, hidden: ['issue:closed' as const], parts: [seam(false), tests(true)], held: ['gh#41'] }
+    expect(sift(rows, sifting).map((r) => r.ref)).not.toContain('gh#41')
+  })
+
+  test('the selection is what is in hand whether or not the kehikko group is narrowing to it', () => {
+    expect(siftingOf({}, { selection: ['gh#99'] })).toMatchObject({ picked: null, held: ['gh#99'] })
+  })
+
+  test('a pick that leaves no row hands back the protocol’s sentence, and only then', () => {
+    const elsewhere = part('elsewhere', ['gl#1'], true)
+    expect(focusOf(rows, { ...EVERYTHING, parts: [elsewhere] })).toMatchObject({ shown: 0, outside: 4, empty: 'No reference is in the picked part.' })
+    expect(focusOf(rows, { ...EVERYTHING, parts: [elsewhere, part('more', [], true)] })?.empty).toBe('No reference is in the picked parts.')
+    /* A list that was empty before the pick keeps its own words. */
+    expect(focusOf([], { ...EVERYTHING, parts: [elsewhere] })?.empty).toBe('')
+  })
+
+  test('the rule is the same from a host that sends documents with a part and one that sends only files', () => {
+    const withDocuments = { ...seam(true), documents: ['docs/seam.md'], files: [] }
+    const withFiles = { ...seam(true), files: ['chapters/seam.tex'] }
+    expect(sift(rows, { ...EVERYTHING, parts: [withDocuments] }).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
+    expect(sift(rows, { ...EVERYTHING, parts: [withFiles] }).map((r) => r.ref)).toEqual(['#2274', 'gh#41'])
+  })
+
+  test('anchorOf: a row is about the reference it is, and nothing else', () => {
+    expect(anchorOf({ ref: 'gh#41' })).toEqual({ ref: 'gh#41' })
   })
 
   test('it is not something one press here can put back, and `hides` still sees it', () => {

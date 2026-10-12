@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { anchorInFocus } from 'kehikot-module-protocol'
 import { probeServer } from 'kehikot-module-protocol/client'
 import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/client/react'
 
@@ -10,8 +9,8 @@ import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
   SHOW_ALL,
-  anchorOf,
   focusOf,
+  outOfFocus,
   hides,
   narrowing,
   nothingInScope,
@@ -341,7 +340,7 @@ export function App() {
       return
     }
 
-    if (!anchorInFocus(sifting.parts, anchorOf(row))) {
+    if (outOfFocus(sifting, row)) {
       answer(
         false,
         `${message.ref} is in this list, but it is outside the parts of the epic picked out in the host’s bar, so it is not drawn.`,
@@ -690,7 +689,7 @@ export function App() {
             total={rows.length}
             everything={() => void outOfScope()}
           />
-        ) : shown.length === 0 && focus && focus.outside > 0 ? (
+        ) : shown.length === 0 && focus?.empty ? (
           /* Before `NothingMatches` as well: there ARE rows that match what the
              header asks for, and the parts picked in the host's bar are what
              is hiding them. "Show all" would not bring them back. */

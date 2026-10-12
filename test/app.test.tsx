@@ -1178,7 +1178,7 @@ describe('following the open epic as its content changes', () => {
   const PICKED = ['gh#2']
   const at = (minute: number) => `2026-08-27T10:${String(minute).padStart(2, '0')}:00Z`
   const hostChanged = (minute: number, epic: string | null = 'an-epic') => ({ source: 'host', epic, at: at(minute) })
-  const journeysChanged = (minute: number) => ({ source: 'kehikot.journeys', epic: null, at: at(minute) })
+  const elsewhereChanged = (minute: number) => ({ source: 'kehikot.sketches', epic: null, at: at(minute) })
 
   /** Answer the two questions most recently asked. */
   const names = (host: ReturnType<typeof stubHost>, refs: string[], umbrella: string | null = 'gh#5') => {
@@ -1241,9 +1241,9 @@ describe('following the open epic as its content changes', () => {
     expect(host.calls('epic.get')).toHaveLength(2)
   })
 
-  test('a change under the journeys asks too, though the host cannot say which epic it was for', async () => {
+  test('a change said for no epic in particular asks too: the host could not say which epic it was for', async () => {
     const host = await listed()
-    told(host, [journeysChanged(1)])
+    told(host, [elsewhereChanged(1)])
     await settle()
     expect(host.calls('steps.list')).toHaveLength(2)
     expect(host.calls('epic.get')).toHaveLength(2)
@@ -1252,15 +1252,23 @@ describe('following the open epic as its content changes', () => {
     expect(drawn()).toEqual(['gh#2'])
   })
 
-  test('a change to another epic, or to another module’s material, asks nothing', async () => {
+  test('a change to another epic asks nothing, whoever it is from', async () => {
     const host = await listed()
     told(host, [hostChanged(1, 'another-epic')])
     await settle()
-    told(host, [hostChanged(1, 'another-epic'), { source: 'kehikot.paper', epic: 'an-epic', at: at(2) }])
+    told(host, [hostChanged(1, 'another-epic'), { source: 'kehikot.sketches', epic: 'another-epic', at: at(2) }])
     await settle()
     expect(host.calls('steps.list')).toHaveLength(1)
     expect(host.calls('epic.get')).toHaveLength(1)
     expect(drawn()).toEqual(['gh#2', 'gh#3', 'gh#5'])
+  })
+
+  test('a change for the open epic asks, whichever module says it: this page names none', async () => {
+    const host = await listed()
+    told(host, [{ source: 'kehikot.sketches', epic: 'an-epic', at: at(2) }])
+    await settle()
+    expect(host.calls('steps.list')).toHaveLength(2)
+    expect(host.calls('epic.get')).toHaveLength(2)
   })
 
   test('the same changes said again ask nothing, and neither does a greeting that already carries some', async () => {
@@ -1283,8 +1291,8 @@ describe('following the open epic as its content changes', () => {
 
     /* Three more land before the host has answered. */
     told(host, [hostChanged(2)])
-    told(host, [hostChanged(2), journeysChanged(3)])
-    told(host, [hostChanged(4), journeysChanged(3)])
+    told(host, [hostChanged(2), elsewhereChanged(3)])
+    told(host, [hostChanged(4), elsewhereChanged(3)])
     await settle()
     expect(host.calls('steps.list')).toHaveLength(2)
     expect(host.calls('epic.get')).toHaveLength(2)
@@ -1428,10 +1436,10 @@ describe('focused on parts of the epic', () => {
   test('a focus that leaves no row says so in one sentence where the rows would be, and nowhere else', async () => {
     await listed({ parts: [part('elsewhere', 'Filed elsewhere', ['gl#404'], true)] })
     expect(drawn()).toEqual([])
-    expect(screen.getByText('Nothing in the picked part is in this list.')).toBeTruthy()
+    expect(screen.getByText('No reference is in the picked part.')).toBeTruthy()
     expect(document.body.textContent).not.toContain('matches what you asked for')
     expect(document.querySelector('[data-heading="focus"]')).toBeNull()
-    expect(document.querySelector('[data-absence="focus"]')?.textContent).toBe('Nothing in the picked part is in this list.')
+    expect(document.querySelector('[data-absence="focus"]')?.textContent).toBe('No reference is in the picked part.')
     expect(document.body.textContent).not.toContain('host’s bar')
     expect(document.body.textContent).not.toContain('outside the')
   })
