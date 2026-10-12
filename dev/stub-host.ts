@@ -85,6 +85,10 @@ const page = `<!doctype html>
   var project = q.has('project') ? q.get('project') : ${JSON.stringify(DEFAULT_PROJECT)};
   var epic = q.get('epic') || 'practices-are-the-only-governor';
   var selection = [];
+  /* The parts of the epic, with which are picked. A real host has a picker in its bar; here a
+     console (or a probe) says them: \`stub.parts([{ id, heading, refs, picked }])\`. Empty is an
+     epic with no parts, which is what this stub was before it knew of them. */
+  var parts = [];
   /* What the module offered to be narrowed by, and what this container is
      narrowed to. A real host keeps the second per container and outlives the
      module's reload; this one keeps it for as long as the page is open, which is
@@ -141,6 +145,7 @@ const page = `<!doctype html>
   if (q.get('narrow')) document.getElementById('frame').id = 'narrow', document.getElementById('narrow').style.height = '80vh';
 
   var frame = document.querySelector('iframe');
+  window.stub = { parts: function (list) { parts = list || []; tell(); }, select: function (refs) { selection = refs || []; tell(); } };
 
   function context() {
     return {
@@ -149,6 +154,7 @@ const page = `<!doctype html>
       projectPath: project || null,
       theme: q.get('theme') === 'dark' ? 'dark' : 'light',
       selection: selection,
+      parts: parts,
       filters: chosen,
       tracker: { at: trackerAt, refreshing: trackerBusy }
     };

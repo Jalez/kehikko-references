@@ -353,7 +353,7 @@ export function NothingInScope({
  * draw is outside them.
  *
  * One sentence, where the rows would be, and the only thing this page says
- * about the picked parts. It used to be a panel — a title, the count and the
+ * about the picked parts: the protocol's (`emptySaid`), the same in every module. It used to be a panel — a title, the count and the
  * names, and a paragraph on where the parts are picked — under a heading line
  * that said the same; the host's bar already shows the pick, so what is owed
  * here is only that an empty list is not mistaken for a broken one, or for a
@@ -364,7 +364,7 @@ export function NothingInFocus({ focus }: { focus: Focus }) {
   return (
     <div className="@container h-full overflow-y-auto">
       <p data-absence="focus" className="mx-auto max-w-prose px-3 py-5 text-sm break-words text-muted-foreground @md:px-4 @md:py-10">
-        {focus.picked.length === 1 ? 'Nothing in the picked part is in this list.' : 'Nothing in the picked parts is in this list.'}
+        {focus.empty}
       </p>
     </div>
   )

@@ -262,14 +262,14 @@ describe('what this page calls a project', () => {
 
 describe('every row is outside the picked parts', () => {
   test('one sentence in the empty place, and nothing else — no count, no names, no second line, no press', () => {
-    render(<NothingInFocus focus={{ picked: ['The posting seam'], shown: 0, outside: 14 }} />)
-    expect(document.body.textContent).toBe('Nothing in the picked part is in this list.')
+    render(<NothingInFocus focus={{ picked: ['The posting seam'], shown: 0, outside: 14, empty: 'No reference is in the picked part.' }} />)
+    expect(document.body.textContent).toBe('No reference is in the picked part.')
     /* The focus is the host's control: a button here could not undo it. */
     expect(document.querySelectorAll('button')).toHaveLength(0)
   })
 
   test('several parts are said in their own number', () => {
-    render(<NothingInFocus focus={{ picked: ['The method', 'The results'], shown: 0, outside: 1 }} />)
-    expect(document.body.textContent).toBe('Nothing in the picked parts is in this list.')
+    render(<NothingInFocus focus={{ picked: ['The method', 'The results'], shown: 0, outside: 1, empty: 'No reference is in the picked parts.' }} />)
+    expect(document.body.textContent).toBe('No reference is in the picked parts.')
   })
 })

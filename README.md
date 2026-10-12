@@ -85,8 +85,8 @@ panel rather than "nothing matches what you asked for", because nobody asked.
 
 Since 3.1.0 the scope follows the epic while it is open (issue #7), which is
 `reacts: ['content']`. `context.content` says whose material changed and for
-which epic; when the entries for the host's epics or for the journeys move for
-the open epic — `contentStamp` — the page asks `steps.list` and `epic.get`
+which epic; when any entry moves for
+the open epic, whoever keeps the material — `contentStamp` — the page asks `steps.list` and `epic.get`
 again, and only those. The list is re-scoped where it stands: the answer
 replaces the epic's refs and nothing else, so the filters, the selection and
 where the reader had scrolled to are as they were. A burst of changes while a
@@ -355,8 +355,8 @@ issue is usually finished work and a closed change usually abandoned. So each of
 `open issues`, `closed issues`, `open MRs/PRs`, `closed MRs/PRs` and `merged
 MRs/PRs` is its own toggle, and so is each reason a closed ref closed — `done`,
 `won’t do`, `duplicates`, `superseded`, `closed, reason unknown`. The vocabulary
-and the group id are the protocol's, so Journeys offers the same toggles under
-the same id and a choice means the same thing in both containers.
+and the group id are the protocol's, so any module that offers the same toggles does so under
+the same id and a choice means the same thing in every container.
 
 The reason a ref closed comes from a person's mark when there is one
 (`context.dispositions`), and otherwise from the tracker: GitHub's `stateReason`

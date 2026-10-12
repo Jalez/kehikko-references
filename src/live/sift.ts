@@ -1,6 +1,6 @@
 import {
   LIMITS,
-  anchorInFocus,
+  emptySaid,
   isFocused,
   narrowToFocus,
   pickedParts,
@@ -55,9 +55,9 @@ import type { Reference } from './reference.ts'
  * choices can only say a cell of their product — "issues" AND "closed" — and
  * the thing people actually wanted was "hide closed MRs/PRs, keep closed
  * issues", because a closed issue is usually finished and a closed change is
- * usually abandoned. And the vocabulary was References' own, so Journeys would
- * have had to copy it and the two copies would have drifted. The facets are the
- * protocol's, so `hide` means the same thing in both containers and is stored
+ * usually abandoned. And the vocabulary was References' own, so any other list of
+ * references would have had to copy it and the copies would have drifted. The facets are the
+ * protocol's, so `hide` means the same thing in every container and is stored
  * under the same group id.
  *
  * Then the cap. `LIMITS.FILTER_GROUPS` is four, and the four were spent —
@@ -107,8 +107,10 @@ import type { Reference } from './reference.ts'
  * the host's bar. `context.parts` lists every part of the open epic with the
  * refs the host says belong to it, and flags the picked ones. While any is
  * picked this list draws only the rows a picked part lists — a row's anchor is
- * its ref, and the protocol's one rule decides — and a ref no part lists is
- * outside every focus.
+ * its ref (`anchorOf`), and the protocol's one rule decides, applied by the
+ * protocol (`narrowToFocus`) — and a ref no part lists is in no part. The rows
+ * a person has selected are in hand and are kept (`held`): a tick in the
+ * host's bar does not take a selection away.
  *
  * It is the fifth thing that can hide a row and the first that is not a filter
  * group: this module does not offer it, cannot set it, and `filters.set` does
@@ -120,7 +122,8 @@ import type { Reference } from './reference.ts'
  * which cost a row at every width when the host's bar already shows the pick
  * and the rows drawn are the message. It is kept for one thing — telling a
  * list the focus EMPTIED from one with no rows, so that the empty place can
- * say one sentence about why (`NothingInFocus` in `view/absence.tsx`).
+ * say one sentence about why: the protocol's `emptySaid`, drawn by
+ * `NothingInFocus` in `view/absence.tsx`.
  *
  * With nothing picked — an epic with no parts, no epic, a host that has never
  * heard of parts — every function below behaves exactly as it did before the
@@ -210,14 +213,24 @@ export interface Sifting {
    * this container — see the essay above — so `narrowing` does not read it.
    */
   parts: readonly EpicPart[]
+  /**
+   * The refs a person has in hand: the canvas's selection, whether or not the
+   * `Kehikko` group is narrowing to it.
+   *
+   * Read by the parts focus and by nothing else. A selected row is drawn
+   * whatever parts are picked — it is what `keep` is, in the protocol's rule —
+   * and every other narrowing treats it as any row: a person's own filter
+   * still hides what they asked it to hide.
+   */
+  held: readonly string[]
 }
 
-export const EVERYTHING: Sifting = { query: '', hidden: [], scope: null, picked: null, marks: [], parts: [] }
+export const EVERYTHING: Sifting = { query: '', hidden: [], scope: null, picked: null, marks: [], parts: [], held: [] }
 
 /**
  * The four group ids, named because three things have to agree on them: the
  * offer, the reading of what the host chose, and the tests. `hide` is the
- * protocol's, because Journeys stores the same group under the same id.
+ * protocol's, so any module offering the same group stores it under the same id.
  */
 export const SCOPE = 'scope'
 export const HIDE = HIDE_GROUP
@@ -438,6 +451,7 @@ export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
     picked: chosen[KEHIKKO] === PICKED ? [...selection] : null,
     marks: [...marks],
     parts: [...parts],
+    held: [...selection],
   }
 }
 
@@ -516,19 +530,36 @@ export interface Focus {
   picked: string[]
   shown: number
   outside: number
+  /** The protocol's sentence for a list the focus emptied; `''` while the focus leaves any row. */
+  empty: string
 }
 
-/** What ties a row to a part: the reference it is. */
+/** What one row is called in the protocol's sentence for an empty view. */
+export const NOUN = 'reference'
+
+/** What ties a row to a part: the reference it is. THE anchor function of this module. */
 export const anchorOf = (row: { ref: string }): Anchor => ({ ref: row.ref })
+
+/** The rows the picked parts leave, by the protocol's rule, with what is in hand kept. Every row when nothing is picked. */
+function inFocus<Row extends { ref: string }>(rows: readonly Row[], sifting: Sifting) {
+  const held = new Set(sifting.held)
+  return narrowToFocus(sifting.parts, rows, anchorOf, { keep: (row) => held.has(row.ref) })
+}
+
+/** Whether the picked parts alone are what keeps this row from being drawn. */
+export function outOfFocus(sifting: Sifting, row: Reference): boolean {
+  return inFocus([row], sifting).shown.length === 0
+}
 
 export function focusOf(rows: readonly Reference[], sifting: Sifting): Focus | null {
   if (!isFocused(sifting.parts)) return null
   const unfocused = sift(rows, { ...sifting, parts: [] })
-  const { shown, outside } = narrowToFocus(sifting.parts, unfocused, anchorOf)
+  const { shown, outside } = inFocus(unfocused, sifting)
   return {
     picked: pickedParts(sifting.parts).map((part) => part.heading || part.id),
     shown: shown.length,
     outside,
+    empty: unfocused.length > 0 && shown.length === 0 ? emptySaid(sifting.parts, NOUN) : '',
   }
 }
 
@@ -543,17 +574,17 @@ export function sift(rows: readonly Reference[], sifting: Sifting): Reference[] 
   const terms = sifting.query.toLowerCase().split(/\s+/).filter(Boolean)
   const picked = sifting.picked === null ? null : new Set(sifting.picked)
   const scope = sifting.scope === null ? null : new Set(sifting.scope.refs)
-  const narrowed = rows.filter((row) => {
+  /* The parts picked out in the host's bar, first, and by the protocol's own
+     rule over the list: every row when none is picked; otherwise the rows a
+     picked part lists and the ones a person has selected. `focusOf` counts
+     what it put aside. */
+  const narrowed = inFocus(rows, sifting).shown.filter((row) => {
     /* Exact strings, on both sides. `gh#41` and `#41` are two different
        references, and every module on this canvas spells them the way this
        list draws them — see `select` in `use-kehikot.ts` — so normalising here
        would show a row for a pick that was never about it. */
     if (scope && !scope.has(row.ref)) return false
     if (picked && !picked.has(row.ref)) return false
-    /* The parts picked out in the host's bar. True for every row when none is
-       picked; a ref no picked part lists is outside the focus, and `focusOf`
-       counts it. */
-    if (!anchorInFocus(sifting.parts, anchorOf(row))) return false
     return matches(row, terms)
   })
   /* The toggles through the facets module's own `sift`, so that "a row with no

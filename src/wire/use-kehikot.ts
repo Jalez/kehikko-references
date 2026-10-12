@@ -3,10 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { askReading, askRefresh } from '@/live/ask.ts'
 import type { Sight } from '@/live/sight.ts'
 import {
-  CONTENT_HOST,
   contentStamp,
   filterChoiceSchema,
   type CanvasContainer,
+  type ContentChange,
   type Disposition,
   type EpicPart,
   type FilterChoice,
@@ -50,22 +50,19 @@ import { useHost, type KeptCodec, type Where } from 'kehikot-module-protocol/cli
 const AS_KEPT: KeptCodec<string> = { read: (state) => state, write: (kept) => kept }
 
 /**
- * Whose material the open epic's refs are read out of, in the words
- * `context.content` uses for a source.
+ * A string that moves when anything about the open epic has changed, whoever
+ * keeps it.
  *
- * `CONTENT_HOST` is the epics the host keeps — what `steps.list` and `epic.get`
- * answer from. The other is the Journeys module, by the id it registers under:
- * a journey is where an epic's steps are edited, so a change there is a change
- * to what the open epic names (issue #7 asks for both). The host announces an
- * edit under the journeys without saying which epic it was for, and
- * `contentStamp` counts that for any.
- *
- * Spelled here because this is the only place in this program that names
- * another module, and it names it only as a source to listen for: nothing is
- * asked of Journeys and nothing is sent to it.
+ * What the open epic names is read from the host (`steps.list`, `epic.get`),
+ * and the host answers out of material other programs edit. Which programs is
+ * not this module's to know and it names none: every change the host announces
+ * for this epic — or for no epic in particular, which counts for any — is a
+ * reason to ask the host again. The cost of listening to all of them is a
+ * re-read that answers what was already drawn.
  */
-const JOURNEYS = 'kehikot.journeys'
-const EPIC_KEPT_BY = [CONTENT_HOST, JOURNEYS] as const
+function epicStamp(content: readonly ContentChange[] | undefined, epic: string): string {
+  return contentStamp(content, { sources: [...new Set((content ?? []).map((one) => one.source))], epic })
+}
 
 /**
  * What came of asking the host to move this container's filters.
@@ -391,7 +388,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
    * The second thing the question about the epic is keyed to, and the
    * `content` this module's manifest says it reacts to — the same arrangement
    * as `seenAt` for the tracker. The stamp is a string that moves only when
-   * the host's epics or the journeys changed for THIS epic, so a context that
+   * something changed for THIS epic, whoever keeps it, so a context that
    * carries the same list again — every click on the canvas does — and one
    * about another epic or another module's material both compare equal and ask
    * nothing.
@@ -598,11 +595,11 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
     /* The epic is asked about again when it changes, and when the project
        does: two projects can each have an epic with the same slug. */
     const epic = typeof context.epic === 'string' && context.epic ? context.epic : null
-    /* And when its material changes while it is open: the host's epics or
-       the journeys, for this epic. Empty with no epic open — there is
+    /* And when its material changes while it is open: anything the host says
+       changed for this epic, whoever keeps it. Empty with no epic open — there is
        nothing to ask about — and from a host that has never heard of
        content changes, which never moves it. */
-    const stamp = epic ? contentStamp(context.content, { sources: EPIC_KEPT_BY, epic }) : ''
+    const stamp = epic ? epicStamp(context.content, epic) : ''
     if (moved || epic !== epicOn.current) {
       epicOn.current = epic
       /* A new epic is read whole, so whatever is said to have changed in it

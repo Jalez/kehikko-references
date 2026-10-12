@@ -167,7 +167,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-
  * in any tab in this browser could call it and read the answer — the tracker of
  * every private repository checked out on this machine, off loopback, with no
  * prompt. Loopback is a fence around the machine and not around the programs on
- * it, and that is not theoretical: Journeys had the same shape and it was
+ * it, and that is not theoretical: another module had the same shape and it was
  * demonstrated with a one-line `curl` carrying `Origin: https://evil.example`.
  *
  * Declaring storage closes it at the root rather than papering over it. With a
@@ -332,14 +332,14 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * `selection`, because the program genuinely moves: the `Kehikko` group
    * offered to the container header has an option that narrows this list to
    * the references picked out on the canvas, and while it is on, every pick —
-   * a row here, a step ticked in Journeys, anything in any other container —
+   * a row here, anything picked in any other container —
    * changes which rows are drawn. That is the test the protocol's essay on
    * `reacts` sets, and it is met; it would not have been met by the ticks
    * alone, which this page has always drawn from the selection without doing
    * anything about it. A tick is display. Narrowing is a reaction.
    *
    * Together with `selection:set` below this manifest now names both ends of
-   * one relationship, and so does Journeys'. The host's `relations.ts` draws
+   * one relationship. The host's `relations.ts` draws
    * the pair as "Consumes / Provides to" in the registered list, and draws it
    * as weaker evidence than a carried event on purpose — both ends are what
    * the modules say about themselves, and the host performs no delivery it
@@ -360,8 +360,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * change. See `standingOn` in `src/wire/use-kehikot.ts`.
    *
    * `content`, because the scope is what the open epic names, and an epic is
-   * edited while it is open (issue #7): when `context.content` says the host's
-   * epics or the journeys changed for this epic, the page asks `steps.list`
+   * edited while it is open (issue #7): when `context.content` says something
+   * changed for this epic, whoever keeps it, the page asks `steps.list`
    * and `epic.get` again and the rows under "This epic" change. See `stampOn`
    * in the same file. Only the receiving half: this app keeps no material of
    * its own, so there is no `content:report` below and nothing here ever calls
