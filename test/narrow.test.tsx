@@ -181,6 +181,15 @@ describe('the table’s heading, at every width', () => {
     expect(heading.getAttribute('title')).toContain('7 of 24 shown')
   })
 
+  test('the count wraps rather than being cut: truncating it hid the scope', () => {
+    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={0} total={6} scope="epic" />)
+    const count = container.querySelector('[data-heading="count"]')!
+    expect(count.className).not.toContain('truncate')
+    expect(count.className).toContain('break-words')
+    expect(count.textContent).toContain('0 of 6 shown')
+    expect(count.textContent).toContain('this epic')
+  })
+
   test('says which scope the count is of, and how old the reading is', () => {
     const now = Date.parse('2026-10-05T12:00:00Z')
     const { container } = render(
