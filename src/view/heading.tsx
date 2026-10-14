@@ -208,7 +208,7 @@ export function Heading({
         {/* The count, in the cell that is never dropped. `tabular-nums` so the
             numbers do not shuffle sideways while somebody types in the filter
             and the left figure changes on every keystroke. */}
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] tabular-nums text-muted-foreground">
+        <span data-heading="count" className="min-w-0 flex-1 break-words font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
           <span className="hidden @sm:inline">{projectName(project)} · </span>
           <span className="@sm:hidden">{brief}</span>
           <span className="hidden @sm:inline">{count}</span>
