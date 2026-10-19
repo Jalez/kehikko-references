@@ -242,7 +242,7 @@ export interface Kehikot {
    *
    * ## Asked of the host, not read off the disk
    *
-   * The epic lives in `.kehikot/roadmap/epics/<slug>.json` under the project,
+   * The epic lives in the host's folder under the project's `.kehikot/`,
    * and this app's own server could read it there. It does not, because the
    * file is the host's, and the host already answers `steps.list` and
    * `epic.get` out of it: a second reader of somebody else's file is a second

@@ -97,7 +97,7 @@ import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-
  * narrowed by default to the references the open epic names (issue #1), and
  * those are an epic's steps' refs and its umbrella: `steps.list` answers the
  * first under `steps:read` and `epic.get` the second under `epics:read`. They
- * are asked of the host rather than read off `.kehikot/roadmap/epics/` by this
+ * are asked of the host rather than read off the host's epic files by this
  * app's server, because those files are the host's and the host already
  * answers out of them — see `epicRefs` in `src/wire/use-kehikot.ts`. Either
  * refused alone still narrows to what the other granted; both refused leaves
