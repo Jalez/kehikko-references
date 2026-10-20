@@ -101,15 +101,6 @@ export function App() {
   const server = useServerStanding()
 
   /**
-   * Every row of the current reading, before any narrowing.
-   *
-   * Held apart from the sifted list because three things need the whole of it:
-   * the count that says how much is hidden, the "show all" that puts it back,
-   * and `goto`, which has to be able to find a reference the filter is hiding.
-   */
-  const [rows, setRows] = useState<ReturnType<typeof collect>>([])
-
-  /**
    * The `goto` handler, reached through a ref so that the bridge can be
    * connected before the handler exists.
    *
@@ -151,6 +142,26 @@ export function App() {
     if (!asked) return `Nothing here sorts by ${String(value)}.`
     setOrdering(asked)
   })
+
+  /**
+   * Every row of the current reading, before any narrowing.
+   *
+   * Held apart from the sifted list because three things need the whole of it:
+   * the count that says how much is hidden, the "show all" that puts it back,
+   * and `goto`, which has to be able to find a reference the filter is hiding.
+   *
+   * ## Derived in the same render as `sight`, never an effect behind it
+   *
+   * It used to be state set by an effect on `sight`, which left one commit in
+   * which `sight.at` was already `'read'` and `rows` was still `[]`. The offer
+   * below ran in that commit and said `[]` — "there is nothing here to narrow
+   * by" — and the host, which keeps this container's filters and prunes them
+   * against every offer, wrote `{}` over them. Every reload, every module
+   * restart and every app start forgot the filters, and the next offer a
+   * millisecond later had nothing left to restore. A memo cannot be a render
+   * behind what it is made from, so that commit no longer exists.
+   */
+  const rows = useMemo(() => (sight.at === 'read' ? collect(sight.reading.rows) : []), [sight])
 
   /**
    * The whole narrowing, which is entirely the host's now.
@@ -506,11 +517,11 @@ export function App() {
     [selection, select],
   )
 
-  /* One place turns a reading into rows, and it is an effect rather than a memo
-     because `sight` changing to a different project has to REPLACE the rows
-     rather than leave the previous project's on screen while the next arrives. */
+  /* A new reading — or a different project's — puts nobody on any row. The rows
+     themselves are `rows` above, a memo of the same `sight`, so a different
+     project REPLACES them in the same render rather than leaving the previous
+     project's on screen while the next arrives. */
   useEffect(() => {
-    setRows(sight.at === 'read' ? collect(sight.reading.rows) : [])
     setLandedOn(null)
   }, [sight])
 
