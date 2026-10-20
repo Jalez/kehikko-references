@@ -5,7 +5,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
-import { DEFAULT_ORDER, order, type Ordering } from '@/live/order.ts'
+import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
   SHOW_ALL,
@@ -82,8 +82,8 @@ export function App() {
    * cases that matter.
    *
    * The order stays because it is not a filter. It hides nothing, so the host
-   * neither draws it nor remembers it, and it lives on the column headings —
-   * see `view/heading.tsx`.
+   * neither draws it nor remembers it, and it is the View menu's "Sort by"
+   * switch (`kehikot.header`), which costs no row of its own.
    */
   const [ordering, setOrdering] = useState<Ordering>(DEFAULT_ORDER)
   const [landedOn, setLandedOn] = useState<string | null>(null)
@@ -137,6 +137,7 @@ export function App() {
     selectionRefused,
     chosen,
     offerFilters,
+    header,
     refreshable,
     setFilters,
     kept,
@@ -145,7 +146,11 @@ export function App() {
     aimed,
     marks,
     parts,
-  } = useKehikot(ID, onGoto)
+  } = useKehikot(ID, onGoto, ({ item, value }) => {
+    const asked = orderPressed(item, value)
+    if (!asked) return `Nothing here sorts by ${String(value)}.`
+    setOrdering(asked)
+  })
 
   /**
    * The whole narrowing, which is entirely the host's now.
@@ -197,6 +202,18 @@ export function App() {
     const groups = offer(rows, sight.at === 'read', canvas, sifting.hidden)
     if (groups) offerFilters(groups)
   }, [rows, sight.at, canvas, sifting.hidden, offerFilters])
+
+  /**
+   * The order, declared as the container's View menu (`kehikot.header`).
+   *
+   * Declared again whenever it changes, because the module owns the state and
+   * the host remembers nothing of it. A press — from the menu, or an agent's —
+   * lands in the handler passed to `useKehikot` and sets `ordering`, which is
+   * also the one thing written back to be remembered.
+   */
+  useEffect(() => {
+    header([orderItem(ordering)])
+  }, [ordering, header])
 
   /**
    * What this page says about being read again, which is the whole of the
@@ -602,15 +619,13 @@ export function App() {
         to about a hundred pixels over a list that had three hundred to divide.
         Every one of those things is somewhere better now — the filters and the
         query in the container's own header as `kehikot.filters`, the refresh
-        and the freshness line as `kehikot.refreshable`, the order on the
-        columns it orders — except the count, which could not go, because the
+        and the freshness line as `kehikot.refreshable`, the order in the
+        View menu — except the count, which could not go, because the
         host cannot count rows it does not render. `view/heading.tsx` has the
         whole argument.
       */}
       <Heading
         project={sight.project}
-        ordering={ordering}
-        onOrder={setOrdering}
         showing={shown.length}
         total={rows.length}
         scope={sifting.scope?.from ?? null}

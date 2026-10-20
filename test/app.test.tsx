@@ -122,6 +122,7 @@ function stubHost(door: Door = stubDoor({})) {
 
   return {
     said,
+    post,
     greet: (
       projectPath: string | null,
       kept: string | null = null,
@@ -685,6 +686,58 @@ describe('picking references out', () => {
   })
 })
 
+/** The order the page last declared in its header's "Sort by" switch. */
+const sortedBy = (host: ReturnType<typeof stubHost>) => {
+  const header = host.said.findLast((message) => message.type === MESSAGE.HEADER) as
+    | { items: { id: string; value: string; options: { id: string; label: string }[] }[] }
+    | undefined
+  return header?.items.find((item) => item.id === 'order')
+}
+const press = (host: ReturnType<typeof stubHost>, value: string) =>
+  act(() => host.post({ type: MESSAGE.PRESS, protocol: PROTOCOL, id: `p-${value}`, item: 'order', value }))
+
+
+describe('the order lives in the View menu, not on a row of its own', () => {
+  const open = async () => {
+    const door = stubDoor({ [PROJECT]: answered(8) })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    return host
+  }
+  const refs = () => [...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))
+
+  test('declares one Sort by switch with every order, on the default', async () => {
+    const host = await open()
+    const item = sortedBy(host)
+    expect(item?.value).toBe('moved')
+    expect(item?.options.map((o) => o.id)).toEqual(['moved', 'stale', 'ref', 'state', 'kind'])
+  })
+
+  test('draws no sort buttons and no heading row of columns', async () => {
+    await open()
+    expect(document.querySelectorAll('[data-heading] button')).toHaveLength(0)
+  })
+
+  test('a press re-sorts the list, is answered, and the header declares the new value', async () => {
+    const host = await open()
+    press(host, 'ref')
+    await settle()
+    expect(refs()[0]).toBe('gh#1')
+    expect(sortedBy(host)?.value).toBe('ref')
+    expect(host.said.findLast((m) => m.type === MESSAGE.PRESSED)).toMatchObject({ id: 'p-ref', ok: true })
+  })
+
+  test('a press naming an order this module does not have is refused with a sentence', async () => {
+    const host = await open()
+    press(host, 'priority')
+    await settle()
+    expect(host.said.findLast((m) => m.type === MESSAGE.PRESSED)).toMatchObject({ ok: false })
+    expect(sortedBy(host)?.value).toBe('moved')
+  })
+})
+
 describe('remembering the order, which is all this module keeps for itself', () => {
   const shown = async (kept: string | null, rows = 8) => {
     const door = stubDoor({ [PROJECT]: answered(rows) })
@@ -695,17 +748,11 @@ describe('remembering the order, which is all this module keeps for itself', () 
     return host
   }
 
-  /** Which column heading is currently carrying the sort. */
-  const sortedBy = () =>
-    [...document.querySelectorAll('[data-heading] button[aria-pressed="true"]')].map((one) =>
-      one.getAttribute('aria-label'),
-    )
-
   test('what the greeting kept is on screen before anything else happens', async () => {
-    await shown('{"v":3,"o":"ref"}')
+    const host = await shown('{"v":3,"o":"ref"}')
     /* The identifier heading carries the sort, which is the thing that proves
        the order was applied rather than merely stored. */
-    expect(sortedBy().join(' ')).toContain('identifier')
+    expect(sortedBy(host)?.value).toBe('ref')
   })
 
   test('every shape written before the filters moved is dropped whole rather than half-applied', async () => {
@@ -713,22 +760,20 @@ describe('remembering the order, which is all this module keeps for itself', () 
        host holds all three per container now, and reading either string in part
        would restore an order and silently drop a filter somebody set. Both open
        in the defaults instead, and `moved` is the default. */
-    await shown('{"v":1,"q":"number 3","k":"issue","s":"closed","o":"ref"}')
-    expect(sortedBy().join(' ')).toContain('last moved')
+    expect(sortedBy(await shown('{"v":1,"q":"number 3","k":"issue","s":"closed","o":"ref"}'))?.value).toBe('moved')
     cleanup()
-    await shown('{"v":2,"q":"number 3","o":"ref"}')
-    expect(sortedBy().join(' ')).toContain('last moved')
+    expect(sortedBy(await shown('{"v":2,"q":"number 3","o":"ref"}'))?.value).toBe('moved')
   })
 
   test('a host keeping nothing leaves the page in its defaults, which is a state it is correct in', async () => {
-    await shown(null)
+    const host = await shown(null)
     expect(document.body.textContent).toContain('8 references')
-    expect(sortedBy().join(' ')).toContain('last moved')
+    expect(sortedBy(host)?.value).toBe('moved')
   })
 
   test('a change to the order is handed to the host to keep, once it settles', async () => {
     const host = await shown(null)
-    fireEvent.click(screen.getByRole('button', { name: /identifier/i }))
+    press(host, 'ref')
     /* Nothing yet. The delay was chosen for a query that changed on every
        keystroke and is kept for a smaller reason: two orders tried in a row
        should be one write, and nothing is waiting on it. */

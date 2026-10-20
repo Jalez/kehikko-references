@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -163,9 +163,9 @@ describe('the table’s heading, at every width', () => {
     /* A filtered list looks exactly like a short list. This is the sentence
        that tells them apart, and it is the one thing on this surface a host
        could not have drawn. */
-    const { rerender } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={24} total={24} />)
+    const { rerender } = render(<Heading project={PROJECT} showing={24} total={24} />)
     expect(screen.getByText('24 references')).toBeDefined()
-    rerender(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
+    rerender(<Heading project={PROJECT} showing={7} total={24} />)
     expect(screen.getByText('7 of 24 shown')).toBeDefined()
     /* And the short form for a narrow container, which is a shortening rather
        than a dropping: `7/24` is still both numbers. */
@@ -175,14 +175,14 @@ describe('the table’s heading, at every width', () => {
   test('the whole of it is on the element’s own title, path and all', () => {
     /* The same rule every row keeps: what a narrow container takes away is
        still on the tooltip, in the order the wide layout would have drawn it. */
-    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={7} total={24} />)
+    const { container } = render(<Heading project={PROJECT} showing={7} total={24} />)
     const heading = container.querySelector('[data-heading]')!
     expect(heading.getAttribute('title')).toContain(PROJECT)
     expect(heading.getAttribute('title')).toContain('7 of 24 shown')
   })
 
   test('the count wraps rather than being cut: truncating it hid the scope', () => {
-    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={0} total={6} scope="epic" />)
+    const { container } = render(<Heading project={PROJECT} showing={0} total={6} scope="epic" />)
     const count = container.querySelector('[data-heading="count"]')!
     expect(count.className).not.toContain('truncate')
     expect(count.className).toContain('break-words')
@@ -195,8 +195,6 @@ describe('the table’s heading, at every width', () => {
     const { container } = render(
       <Heading
         project={PROJECT}
-        ordering="moved"
-        onOrder={() => {}}
         showing={7}
         total={24}
         scope="epic"
@@ -229,51 +227,11 @@ describe('the table’s heading, at every width', () => {
     expect(ageOf('yesterday-ish', now)).toBe('reading not dated')
   })
 
-  test('every order is reachable, including the two whose column a narrow row drops', () => {
-    /* The date, the labels and the people drop out of a narrow row. A sort
-       control that dropped with its column would make "oldest first"
-       unreachable in a 220-pixel container, which is most of them — so the date
-       control loses its WORD and keeps its place. */
-    const asked: string[] = []
-    render(<Heading project={PROJECT} ordering="moved" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
-    for (const control of screen.getAllByRole('button')) {
-      expect(control.className).not.toContain('hidden')
-    }
-    expect(screen.getAllByRole('button')).toHaveLength(4)
-  })
-
-  test('the date heading toggles between the two questions it answers', () => {
-    /* `moved` is "what is happening" and `stale` is "what has been sitting",
-       which are two questions rather than one read backwards. */
-    const asked: string[] = []
-    const press = (ordering: 'moved' | 'stale') => {
-      cleanup()
-      render(<Heading project={PROJECT} ordering={ordering} onOrder={(o) => asked.push(o)} showing={24} total={24} />)
-      fireEvent.click(screen.getByRole('button', { name: /oldest|newest|last moved/i }))
-    }
-    press('moved')
-    press('stale')
-    expect(asked).toEqual(['stale', 'moved'])
-  })
-
-  test('a one-direction heading sets its order and says which one is in force', () => {
-    const asked: string[] = []
-    render(<Heading project={PROJECT} ordering="ref" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
-    const ref = screen.getByRole('button', { name: /identifier/i })
-    expect(ref.getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: /by state/i }))
-    expect(asked).toEqual(['state'])
-  })
-
-  test('the kind order has a control even though the kind has no column', () => {
-    /* A glyph on two rows out of twenty-four is those two rows standing out; a
-       column would be noise on all of them. So the mark stays inside the
-       identifier cell and its ORDER gets the leading cell, named in a tooltip —
-       the trade the tracker link on every row already makes. */
-    const asked: string[] = []
-    render(<Heading project={PROJECT} ordering="moved" onOrder={(o) => asked.push(o)} showing={24} total={24} />)
-    fireEvent.click(screen.getByRole('button', { name: /by kind/i }))
-    expect(asked).toEqual(['kind'])
+  test('the heading carries no sort controls: the order is the View menu\'s', () => {
+    /* It used to draw five buttons on column headings. The row is the count and
+       nothing else now, so a narrow container loses no order and no space. */
+    render(<Heading project={PROJECT} showing={24} total={24} />)
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 })
 
@@ -287,7 +245,7 @@ describe('the table’s heading, at every width', () => {
  */
 describe('the parts focus, in the heading', () => {
   test('the heading is one line and draws nothing about picked parts', () => {
-    const { container } = render(<Heading project={PROJECT} ordering="moved" onOrder={() => {}} showing={6} total={24} />)
+    const { container } = render(<Heading project={PROJECT} showing={6} total={24} />)
     expect(container.querySelector('[data-heading="focus"]')).toBeNull()
     expect(container.textContent).not.toContain('outside')
     expect(container.textContent).not.toContain('picked part')

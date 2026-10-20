@@ -11,6 +11,7 @@ import {
   type EpicPart,
   type FilterChoice,
   type FilterGroup,
+  type HeaderItemInput,
   type ModuleContext,
 } from 'kehikot-module-protocol'
 import { HostRefused, probeServer, type Connection, type HostEvents, type Refusal } from 'kehikot-module-protocol/client'
@@ -185,6 +186,12 @@ export interface Kehikot {
    */
   offerFilters: (groups: FilterGroup[]) => void
   /**
+   * Declare this page's header items, whole (`kehikot.header`). The host draws
+   * them in the container's own menus; the page holds the state and declares
+   * again after every change.
+   */
+  header: (items: HeaderItemInput[]) => void
+  /**
    * Say that this page can read its tracker again, and when it last did.
    *
    * Fire and forget like the filter offer, and remembered by the client so that
@@ -304,7 +311,10 @@ export interface Kehikot {
  */
 export type GotoHandler = NonNullable<HostEvents['onGoto']>
 
-export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
+/** A press of one of this module's header items, as the host relays it. */
+export type PressHandler = NonNullable<HostEvents['onPress']>
+
+export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandler): Kehikot {
   const [read_, setSight] = useState<Sight>({ at: 'listening' })
   const [asked, setAsked] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -638,6 +648,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       onHello: (context) => arrived(context, true),
       onContext: (context) => arrived(context, false),
       onGoto,
+      ...(onPress ? { onPress } : {}),
       /**
        * The host's refresh control, or the interval somebody set for this
        * container. Both arrive here and neither says which it was.
@@ -694,6 +705,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
   const { where, projectPath, selection, chosen, parts, resize, refreshable, remember: keep } = host
   /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
   const offerFilters = host.filters
+  const header = host.header
 
   /**
    * Ask, then read the answer rather than assuming it.
@@ -788,6 +800,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       selectionRefused,
       chosen,
       offerFilters,
+      header,
       refreshable,
       setFilters,
       kept,
@@ -811,6 +824,7 @@ export function useKehikot(id: string, onGoto: GotoHandler): Kehikot {
       selectionRefused,
       chosen,
       offerFilters,
+      header,
       refreshable,
       setFilters,
       kept,
