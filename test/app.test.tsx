@@ -1505,3 +1505,135 @@ describe('focused on parts of the epic', () => {
     expect(host.said.findLast((message) => message.type === MESSAGE.WENT)).toMatchObject({ found: true })
   })
 })
+
+/**
+ * What survives a reload: the choice the host holds for THIS container.
+ *
+ * The host keeps a container's filters in its own store, per placement — one
+ * kehikko, one module — and reconciles that record against every offer this
+ * page makes, dropping whatever the offer no longer has. So this page never
+ * stores a filter, and the one way it can lose one is by OFFERING less than it
+ * means to: an empty offer is "there is nothing here to narrow by", and the host
+ * writes that down. These cases stand in for that store, with the host's rule
+ * (`settle` in the host's `src/host/filters.ts`) written out below, and walk
+ * the sequence a reload actually is: a greeting with nothing chosen (a host that
+ * has just started has no offer to reconcile against yet), a reading, an offer,
+ * and the reconciled choice coming back in a context.
+ */
+describe('what a reload keeps', () => {
+  type Group = { id: string; kind?: string; fallback?: string; options: { id: string }[] }
+
+  /** The host's own rule for what is written down after an offer. */
+  const settled = (offer: readonly Group[], choice: Choice): Choice => {
+    const kept: Choice = {}
+    for (const group of offer) {
+      const wanted = choice[group.id]
+      if (wanted === undefined) continue
+      if (group.kind === 'text') {
+        if (typeof wanted === 'string' && wanted !== '') kept[group.id] = wanted
+        continue
+      }
+      if (group.kind === 'toggles') {
+        const on = Array.isArray(wanted) ? group.options.filter((o) => wanted.includes(o.id)).map((o) => o.id) : []
+        if (on.length) kept[group.id] = on
+        continue
+      }
+      if (typeof wanted !== 'string' || wanted === group.fallback) continue
+      if (group.options.some((option) => option.id === wanted)) kept[group.id] = wanted
+    }
+    return kept
+  }
+
+  /**
+   * One host process's store of containers, keyed the way the host keys them:
+   * by kehikko. A References container is one placement on one kehikko.
+   */
+  const store = (initial: Record<string, Choice>) => ({ ...initial })
+
+  /**
+   * Load the page in the container on kehikko `key`, the way a fresh host
+   * does, and let every offer it makes be reconciled against the store.
+   */
+  const load = async (stores: Record<string, Choice>, key: string, count = 8) => {
+    const host = stubHost(stubDoor({ [PROJECT]: answered(count) }))
+    const kehikko = { id: key === 'aaaa1111' ? 1 : 2, name: key, key }
+    render(<App />)
+    /* `{}`: a host that has just started has no offer from this module yet,
+       so it has nothing reconciled to send. */
+    act(() => host.greet(PROJECT, null, [], {}, { kehikko }))
+    await settle()
+    let seen = 0
+    for (let round = 0; round < 4; round += 1) {
+      const offers = host.said.filter((message) => message.type === MESSAGE.FILTERS).slice(seen)
+      if (!offers.length) break
+      seen += offers.length
+      for (const offered of offers) stores[key] = settled((offered.groups ?? []) as Group[], stores[key] ?? {})
+      act(() => host.context(PROJECT, [], 'an-epic', stores[key]!, { kehikko }))
+      await settle()
+    }
+    return host
+  }
+
+  test('a reload keeps the filters: the first offer never claims there is nothing to narrow by', async () => {
+    const stores = store({ aaaa1111: { scope: 'all', hide: ['issue:closed'], search: 'number' } })
+    const host = await load(stores, 'aaaa1111')
+    /* Not one empty offer. The reading arrives a render before its rows are
+       counted; offering in between said `[]`, and the host wrote `{}` over
+       every filter this container had. */
+    const offers = host.said.filter((message) => message.type === MESSAGE.FILTERS)
+    expect(offers.length).toBeGreaterThan(0)
+    expect(offers.every((message) => ((message.groups as unknown[]) ?? []).length > 0)).toBe(true)
+    expect(stores.aaaa1111).toEqual({ scope: 'all', hide: ['issue:closed'], search: 'number' })
+    /* And the list is drawn narrowed by them: eight issues, two closed and
+       hidden, all of the rest titled "number …". */
+    expect(document.body.textContent).toContain('6 of 8 shown')
+  })
+
+  test('the same container keeps its filters across any number of reloads', async () => {
+    const stores = store({ aaaa1111: { scope: 'all', hide: ['issue:open'] } })
+    for (let reload = 0; reload < 3; reload += 1) {
+      await load(stores, 'aaaa1111')
+      expect(document.body.textContent).toContain('2 of 8 shown')
+      cleanup()
+      mailbox.forget?.()
+    }
+    expect(stores.aaaa1111).toEqual({ scope: 'all', hide: ['issue:open'] })
+  })
+
+  test('two containers on two kehikot keep separate filters', async () => {
+    const stores = store({ aaaa1111: { scope: 'all', hide: ['issue:open'] }, bbbb2222: { scope: 'all' } })
+    await load(stores, 'aaaa1111')
+    expect(document.body.textContent).toContain('2 of 8 shown')
+    cleanup()
+    mailbox.forget?.()
+    await load(stores, 'bbbb2222')
+    expect(document.body.textContent).toContain('8 references')
+    expect(document.body.textContent).not.toContain('of 8 shown')
+    /* Neither load wrote over the other's record. */
+    expect(stores).toEqual({ aaaa1111: { scope: 'all', hide: ['issue:open'] }, bbbb2222: { scope: 'all' } })
+  })
+
+  test('a stored value that names something gone is dropped quietly, and the rest is kept', async () => {
+    /* `kind` is a group from before the facets, and `issue:retired` is no facet
+       at all. Neither narrows anything, and neither survives the offer. */
+    const stores = store({ aaaa1111: { scope: 'all', kind: 'issue', hide: ['issue:retired', 'issue:open'] } })
+    await load(stores, 'aaaa1111')
+    expect(stores.aaaa1111).toEqual({ scope: 'all', hide: ['issue:open'] })
+    expect(document.body.textContent).toContain('2 of 8 shown')
+  })
+
+  test('the filters are kept by the host per container, and nothing of them is written by this page', async () => {
+    const stores = store({ aaaa1111: { scope: 'all', hide: ['issue:open'], search: 'number' } })
+    const host = await load(stores, 'aaaa1111')
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 500))
+    })
+    /* The only thing this module asks the host to keep for it is the order;
+       a filter written there too would be a second memory, shared by every
+       container of this module, and it would disagree with the header. */
+    for (const call of host.calls('state.set') as { state: string }[]) {
+      expect(Object.keys(JSON.parse(call.state)).sort()).toEqual(['o', 'v'])
+    }
+    expect(host.asked()).not.toContain('filters.set')
+  })
+})
