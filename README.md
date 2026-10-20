@@ -414,39 +414,25 @@ between. Nothing measures itself any more, and the CSS-only version's hazard —
 two buttons called `Closed`, one of them unpressable, both reachable by the
 browser's own find — is not a thing this module can have.
 
-### The order is on the columns it orders
+### The order is the View menu's "Sort by"
 
-Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — and they are the
-column headings now, in shadcn's shape: a quiet button with the label and an
-arrow saying which column is in force.
+Five orders — `Recent`, `Oldest`, `Number`, `State`, `Kind` — declared as one
+`kehikot.header` switch (`orderItem` in `src/live/order.ts`), which the host draws
+in the container's View menu beside the filters. It was five buttons on column
+headings (issue #18: "Wasting space with the sort by column"), and the row they
+needed cost its height and a set of spacer cells at every width.
 
-It did not go to the header with the filters, and the reason is the one this
-module has always given: **a filter hides rows and an order does not.** The
-failure the count exists to prevent is somebody reading a list of two and
-concluding the other twenty-two are not there, and only a filter can cause it. So
-a filter has to be *readable* without pressing anything and an order only has to
-be *visible*. `filterGroupSchema` would express an order perfectly well — five
-options, a fallback of `Recent` — and it would put a control that hides nothing
-in the place a reader has learned to check when a list looks short.
-
-Four of the five have an obvious column. The fifth is `kind`, which has no column
-because the mark that says a row is a change lives inside the identifier cell — a
-glyph on two rows out of twenty-four is those two rows standing out, where a
-column would be noise on all of them. So its control is the leading cell above
-the checkboxes, drawn as the same glyph and named in its tooltip.
-
-**Every order stays reachable at every width, which the columns do not.** The
-date, the labels and the people drop out of a narrow row, and a sort control that
-dropped with its column would make "oldest first" unreachable in a 220-pixel
-container. So the date control keeps its place and loses its word instead. The
-arithmetic: at 220 pixels the checkbox cell takes 28 and the tracker cell 30,
-leaving 162; kind (16) plus `Ref` (36) plus `State` (46) plus the date arrow (16)
-is 114, leaving 48 for a count that measures about 40 as `37/412`.
+It is a header switch rather than a filter group, and the old reasoning still
+holds: **a filter hides rows and an order does not**, so the order is not offered
+as a `kehikot.filters` group, which is where a reader looks when a list seems
+short. The module owns the state, declares the header again after every press,
+and still remembers the chosen order through `state.set`. An agent may press it
+(`agents: true`); it is only a view choice. Every order is reachable at any
+width through the host's own menu, by keyboard.
 
 ### What is left, at 220 pixels
 
-The table, and one heading row of about twenty-four pixels carrying four sort
-controls and the count. Where there were two rows of chrome and a header — about
+The table, and one heading row of about twenty pixels carrying only the count. Where there were two rows of chrome and a header — about
 a hundred pixels over a list that had three hundred to divide — there is now one
 line, and it is the table's heading rather than a strip of controls above it.
 

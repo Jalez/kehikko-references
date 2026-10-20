@@ -1,3 +1,5 @@
+import type { HeaderItemInput } from 'kehikot-module-protocol'
+
 import type { Reference } from './reference.ts'
 
 /**
@@ -82,6 +84,38 @@ export const ORDER_LABELS: Record<Ordering, string> = {
   ref: 'Number',
   state: 'State',
   kind: 'Kind',
+}
+
+/** Every order, in the sequence the View menu lists them. */
+export const ORDERS = Object.keys(ORDER_LABELS) as Ordering[]
+
+/** The one header item that sets the order. Its id is what a press names. */
+export const ORDER_ITEM = 'order'
+
+/**
+ * The order as the container's View menu: one switch, five options.
+ *
+ * The order used to be five buttons on a row of column headings, and that row
+ * cost a line of height at every width for controls that are used once. A
+ * `kehikot.header` switch is where the host already keeps every module's view
+ * choices, so the choice costs no space here at all. Nothing about the orders
+ * changed: the same five, the same labels, the same remembered one.
+ */
+export function orderItem(ordering: Ordering): HeaderItemInput {
+  return {
+    kind: 'switch',
+    id: ORDER_ITEM,
+    label: 'Sort by',
+    value: ordering,
+    options: ORDERS.map((id) => ({ id, label: ORDER_LABELS[id] })),
+    agents: true,
+  }
+}
+
+/** The order a press asks for, or `null` when it names something this module does not have. */
+export function orderPressed(item: string, value: unknown): Ordering | null {
+  if (item !== ORDER_ITEM || typeof value !== 'string') return null
+  return (ORDERS as string[]).includes(value) ? (value as Ordering) : null
 }
 
 /** Whether the reader has moved off the order the list arrives in. Drives the label. */
