@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { PROTOCOL, manifestSchema, speaks } from 'kehikot-module-protocol'
+import { PROTOCOL, manifestSchema, showsProject, speaks } from 'kehikot-module-protocol'
 
 import { ID, MANIFEST } from '../manifest.ts'
 
@@ -25,6 +25,11 @@ describe('the manifest a host reads', () => {
    * list actually narrows — a tick drawn from the selection is display, not a
    * reaction, and would not have earned the word.
    */
+  test('can show a whole project: "All epics" rests the scope on Everything (protocol 2.9.0)', () => {
+    expect(MANIFEST.declares.scopes).toEqual(['epic', 'project'])
+    expect(showsProject(MANIFEST)).toBe(true)
+  })
+
   test('says it both sets the selection and narrows when it changes', () => {
     expect(MANIFEST.declares.uses).toContain('selection:set')
     expect(MANIFEST.declares.uses).toContain('filters:set')

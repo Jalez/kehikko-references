@@ -394,5 +394,11 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
     uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh'],
     storage: true,
+    /*
+     * "All epics" (protocol 2.9.0): with `context.scope: 'project'` the Scope group rests on
+     * Everything — the project's whole reading — and comes back to the epic's scope when an epic
+     * is picked again, without writing the stored choice. See `restsOnEverything` in `src/live/sift.ts`.
+     */
+    scopes: ['epic', 'project'],
   },
 })
