@@ -622,8 +622,9 @@ export function App() {
        widest inside a column two hundred pixels across. So the heading asks
        this element how wide it is — and asks it through the same `@container`
        the row's own middle is, so the heading's columns and the row's cannot
-       part company at any width. */
-    <div ref={frame} className="@container flex h-full flex-col">
+       part company at any width. It is named `frame` so that a row's title
+       can ask it directly, past the row's own container (`reference-row.tsx`). */
+    <div ref={frame} className="@container/frame flex h-full flex-col">
       {/*
         The table's heading, which is the only chrome left.
 

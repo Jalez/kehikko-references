@@ -2,8 +2,10 @@ import { ExternalLink, GitPullRequest } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
+import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
 import { roleSaid } from '@/live/roles.ts'
+import { Markers } from './markers.tsx'
 import { StateWord } from './state-word.tsx'
 
 /**
@@ -73,17 +75,15 @@ import { StateWord } from './state-word.tsx'
  *
  * A `@xx:` class is measured against the nearest container ANCESTOR of the
  * element carrying it, and an element is not its own ancestor. So the thresholds
- * written on the pressable box — the stack-or-line decision — are still measured
- * against the container, exactly as they were, while the thresholds written on its
- * children — the labels, the date, the people — are measured against the box
- * itself, which is 58 pixels narrower.
+ * written on the pressable box — the gap, the fixed columns — are measured
+ * against the frame, while the thresholds written on its children — the labels,
+ * the date, the people — are measured against the box itself, which is narrower
+ * by the checkbox, the markers and the tracker link.
  *
- * That split is correct rather than accidental. "Is there room for a second
- * line" is a question about the container; "is there room for the people column" is a
- * question about what is left after the checkbox and the tracker link have taken
- * theirs. The measured effect is that the columns drop 58 pixels of container width
- * earlier than they used to, which is the honest answer to a row that now has
- * two more things in it.
+ * That split is correct rather than accidental: "is there room for the people
+ * column" is a question about what is left after the row's controls have taken
+ * theirs. The one child that asks about the frame instead is the title, by
+ * name (`@sm/frame:`), for the reason given below.
  *
  * ## What narrowing takes away, in order, and why that order
  *
@@ -104,30 +104,38 @@ import { StateWord } from './state-word.tsx'
  * is on it" is half of what somebody scans for — but they are searchable too,
  * and the two things that are NOT searchable have to survive.
  *
- * Never dropped, at any width: **the identifier, the state and the title**. The
- * identifier is what somebody is looking for; the state is what they came to
- * check; the title is how they recognise the right one when the identifier is
- * only half remembered. A row that has lost any of those three has stopped
- * being a row and become a hint.
+ * Dropped under 24rem of the frame: **the title** (issue #24). That used to
+ * be the one thing never dropped, and the reason it no longer is, is where
+ * this list is read at that width: beside Journeys, where pressing a row shows
+ * that reference in the journey with its title at full length. A narrow row is
+ * for finding the one to press and seeing who holds it, so its width goes to
+ * the identifier, the state and the markers. The title stays reachable: it is
+ * in the row's tooltip, and an `sr-only` copy keeps it in the pressable box's
+ * accessible name at every width.
+ *
+ * This threshold is measured against the FRAME (`@sm/frame:`, the app's named
+ * container), not the pressable box: the markers sit beside that box, so its
+ * width differs from row to row, and a title that came and went with how many
+ * markers a row has would make a column of rows that do not agree.
+ *
+ * Never dropped, at any width: **the identifier, the state and the markers**
+ * (`markers.tsx`: the stack, who is assigned, where the review stands, and
+ * activity by somebody else). The identifier is what somebody is looking for;
+ * the state is what they came to check; the markers say whether somebody
+ * already holds it, which is what a narrow list beside a journey is for (#25).
  *
  * Nor is the checkbox ever dropped, and nor is the tracker link. They are the
  * row's two verbs, and a row you cannot act on at 220 pixels is a row somebody
  * has to widen a container to use.
  *
- * ## Two lines under 20rem, because one line stops holding three things
+ * ## One line at every width
  *
- * That rule used to be a claim rather than a fact. At 220 pixels — an ordinary
- * container on a grid canvas — the identifier column and the state column were fixed
- * at 5.5rem and 4.5rem, and what was left for the title, measured in a browser,
- * was **twelve pixels**. The title was on the row, in the document, findable by
- * Ctrl+F, and unreadable. "Never dropped" had quietly become "never deleted",
- * which is not the same promise.
- *
- * So under 20rem the row stops being a line and becomes two: the identifier and
- * the state share the first, the title gets the whole of the second. It costs
- * about sixteen pixels of height per row, and it buys the title 172 pixels
- * instead of 12 at that width. A reader who can see four rows and read them is
- * better served than one who can see seven and cannot.
+ * Under 20rem the row used to be two lines, the identifier and the state on
+ * the first and the title on the whole of the second, because a one-line row
+ * left the title twelve pixels at 220. With the title dropped under 24rem that
+ * second line has nothing to hold, so the row is one line, 36 pixels, at every
+ * width — more rows on screen in exactly the narrow container that has the
+ * least height to spare.
  *
  * The fixed columns come back at 28rem and not before. They exist for
  * alignment — a column of ragged identifiers is a column you have to read
@@ -227,7 +235,7 @@ function KindMark({ row }: { row: Reference }) {
  * explaining rather than repeating, and a more specific tooltip on a smaller
  * target is the browser's own rule.
  */
-function overview(row: Reference): string {
+export function overview(row: Reference, now: number = Date.now()): string {
   /* The kind is second, right after the identifier, because it is the thing the
      row itself says least about and the thing somebody hunting for their pull
      request among two dozen issues most needs. It is spelled out in words here
@@ -239,6 +247,13 @@ function overview(row: Reference): string {
   parts.push(row.people.length ? row.people.join(', ') : 'nobody')
   const mine = roleSaid(row.myRoles)
   if (mine) parts.push(`my role: ${mine}`)
+  if (row.stack) parts.push(`stacked ${row.stack.at} of ${row.stack.of}: ${row.stack.members.map((m) => m.ref).join(' → ')}`)
+  const assigned = assignedSaid(row)
+  if (assigned) parts.push(assigned)
+  const review = reviewOf(row.reviewers)
+  if (review) parts.push(review.said)
+  const last = unaddressed(row, now)
+  if (last) parts.push(last)
   return parts.join(' · ')
 }
 
@@ -285,9 +300,12 @@ export function ReferenceRow({
   selected,
   onPick,
   onToggle,
+  now,
 }: {
   row: Reference
   landed: boolean
+  /** The clock the activity marker says "3 h ago" against. Tests pass one; the page reads it at drawing. */
+  now?: number
   /** As the host last said the canvas's selection stands. Never what this page asked for. */
   selected: boolean
   /** Plain click: this row becomes the whole selection. */
@@ -295,13 +313,18 @@ export function ReferenceRow({
   /** The checkbox: this row joins or leaves whatever is already selected. */
   onToggle: (ref: string) => void
 }) {
+  const at = now ?? Date.now()
   return (
     <li
       data-ref={row.ref}
       data-kind={row.kind}
       data-selected={selected ? 'true' : 'false'}
       className={cn(
-        'flex items-stretch border-b border-border/60 last:border-b-0',
+        /* `flex-wrap` for the narrowest frames only: where the identifier, the
+           state and every marker do not fit on one line, the markers and the
+           link go to a second line rather than over the state. Nothing wraps
+           while they fit, which is every row at 24rem and most at 220px. */
+        'flex flex-wrap items-stretch border-b border-border/60 last:border-b-0',
         landed && 'landed',
         /* An inset shadow rather than a border, because a border on a selected
            row would make it one pixel taller than an unselected one and the
@@ -311,7 +334,7 @@ export function ReferenceRow({
            a reader is looking at forty rows and one checkbox. */
         selected && 'bg-primary/10 shadow-[inset_2px_0_0_0_var(--primary)]',
       )}
-      title={overview(row)}
+      title={overview(row, at)}
       /* `content-visibility` is why there is no windowing library in this
          project. The browser skips laying out and painting rows that are
          nowhere near the viewport, and `contain-intrinsic-size` tells it what
@@ -354,30 +377,34 @@ export function ReferenceRow({
       <button
         type="button"
         onClick={() => onPick(row.ref)}
-        className="@container flex min-h-9 min-w-0 flex-1 flex-col justify-center gap-0.5 py-1.5 pr-1 pl-1 text-left text-sm hover:bg-accent/60 @xs:h-9 @xs:flex-row @xs:items-center @xs:gap-2 @xs:py-0 @md:gap-3"
+        className="@container flex h-9 min-w-32 flex-1 items-center gap-2 pr-1 pl-1 text-left text-sm hover:bg-accent/60 @md:gap-3 @sm/frame:min-w-0"
       >
-        {/* One element in the stacked layout and none in the wide one:
-            `@xs:contents` dissolves this wrapper so the identifier and the
-            state become items of the row's own flex line, in the same order,
-            rather than a nested box with its own spacing rules to keep in
-            step. */}
-        <span className="flex items-center gap-2 @xs:contents">
-          {/* The mark rides INSIDE the identifier's box rather than beside it,
-              so that the fixed 5.5rem column above 28rem still holds one thing
-              and the column of numbers keeps its right edge. A separate column
-              would have been fourteen pixels of mostly-empty space on every row
-              to serve two of them. */}
-          <span className="flex shrink-0 items-center justify-end gap-1 @md:w-[5.5rem]">
-            <KindMark row={row} />
-            <span className="truncate text-right font-mono text-xs tabular-nums text-muted-foreground">{row.ref}</span>
-          </span>
-
-          <span className="shrink-0 @md:w-[4.5rem]">
-            <StateWord row={row} />
-          </span>
+        {/* The mark rides INSIDE the identifier's box rather than beside it,
+            so that the fixed 5.5rem column above 28rem still holds one thing
+            and the column of numbers keeps its right edge. A separate column
+            would have been fourteen pixels of mostly-empty space on every row
+            to serve two of them. */}
+        <span className="flex shrink-0 items-center justify-end gap-1 @md:w-[5.5rem]">
+          <KindMark row={row} />
+          <span className="truncate text-right font-mono text-xs tabular-nums text-muted-foreground">{row.ref}</span>
         </span>
 
-        <span className={cn('min-w-0 flex-1 truncate', !row.title && 'text-muted-foreground italic')}>
+        <span className="shrink-0 @md:w-[4.5rem]">
+          <StateWord row={row} />
+        </span>
+
+        {/* Under 24rem of the frame the title is not drawn (issue #24) and
+            this copy keeps it in the button's accessible name, so a screen
+            reader still hears what the row is; above it the drawn title is
+            the name and this one is gone. */}
+        <span data-title-spoken className="sr-only @sm/frame:hidden">
+          {row.title || 'no title in the reading'}
+        </span>
+
+        <span
+          data-title
+          className={cn('hidden min-w-0 flex-1 truncate @sm/frame:block', !row.title && 'text-muted-foreground italic')}
+        >
           {row.title || (row.unreadable ? 'this reference arrived with no reading at all' : 'no title in the reading')}
         </span>
 
@@ -417,6 +444,8 @@ export function ReferenceRow({
           {row.people.length ? row.people.join(', ') : <span className="italic">nobody</span>}
         </span>
       </button>
+
+      <Markers row={row} now={at} onPick={onPick} />
 
       <Tracker row={row} />
     </li>

@@ -49,6 +49,7 @@ const row = (over: Partial<Reference>): Reference => ({
   url: null,
   labels: [],
   people: [],
+  assignees: [],
   unreadable: false,
   ...over,
 })
