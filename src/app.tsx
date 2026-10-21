@@ -138,6 +138,7 @@ export function App() {
     aimed,
     marks,
     parts,
+    wholeProject,
   } = useKehikot(ID, onGoto, ({ item, value }) => {
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
@@ -185,8 +186,8 @@ export function App() {
   /* The refs the Scope group's My role options narrow to, read off the rows. */
   const roles = useMemo(() => roleRefs(rows), [rows])
   const canvas = useMemo(
-    () => ({ selection, epicRefs, aimed, marks, parts, roles }),
-    [selection, epicRefs, aimed, marks, parts, roles],
+    () => ({ selection, epicRefs, aimed, marks, parts, roles, wholeProject }),
+    [selection, epicRefs, aimed, marks, parts, roles, wholeProject],
   )
   const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 

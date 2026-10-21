@@ -84,6 +84,11 @@ a **Scope** group, on by default:
   draws its own sentence. In the Scope group because all four filter groups
   are spent and "what is waiting on my review" is a set of references — one
   press from the default.
+- **All epics** in the host (protocol 2.9.0, `context.scope: 'project'`): the
+  group rests on **Everything** by itself — offered as `Everything (all epics)`,
+  without "This epic", which has no one epic to name — and goes back to the
+  epic's scope when an epic is picked again. Nothing is written to the stored
+  choice. Picked containers and the role options still narrow.
 
 ### My role
 

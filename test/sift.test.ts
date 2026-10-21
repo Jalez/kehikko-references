@@ -364,6 +364,32 @@ describe('the scope', () => {
   })
 })
 
+describe('"All epics" in the host (protocol 2.9.0)', () => {
+  test('the scope rests on Everything, with no "This epic" to offer, and the list is the whole project', () => {
+    const scope = offer(rows, true, { epicRefs: null, wholeProject: true })![0]!
+    expect(scope).toMatchObject({ id: SCOPE, fallback: ALL })
+    expect(scope.options).toEqual([{ id: ALL, label: 'Everything (all epics) 4' }])
+    expect(filterGroupSchema.safeParse(scope).success).toBe(true)
+    /* What the host hands back is the fallback, or the stored "epic" from before: both are everything. */
+    expect(sift(rows, siftingOf({ [SCOPE]: ALL }, { wholeProject: true }))).toHaveLength(4)
+    expect(sift(rows, siftingOf({}, { wholeProject: true, epicRefs: ['gh#41'] }))).toHaveLength(4)
+    expect(siftingOf({ [SCOPE]: IN_SCOPE }, { wholeProject: true }).scope).toBeNull()
+  })
+
+  test('picked containers still narrow while any are picked', () => {
+    const scope = offer(rows, true, { wholeProject: true, aimed: ['!1848'] })![0]!
+    expect(scope.options.map((one) => one.label)).toEqual(['Picked containers 1', 'Everything (all epics) 4'])
+    expect(scope.fallback).toBe(ALL)
+    expect(sift(rows, siftingOf({ [SCOPE]: IN_SCOPE }, { wholeProject: true, aimed: ['!1848'] })).map((r) => r.ref)).toEqual(['!1848'])
+    expect(sift(rows, siftingOf({}, { wholeProject: true, aimed: ['!1848'] }))).toHaveLength(4)
+  })
+
+  test('an epic picked again: back on the epic’s scope by itself, nothing written', () => {
+    expect(offer(rows, true, { epicRefs: ['gh#41'], wholeProject: false })![0]!.fallback).toBe(IN_SCOPE)
+    expect(sift(rows, siftingOf({}, { epicRefs: ['gh#41'] })).map((r) => r.ref)).toEqual(['gh#41'])
+  })
+})
+
 /**
  * The kehikko group: narrowed to what the kehikko has picked out.
  *

@@ -338,6 +338,27 @@ export interface Canvas {
   parts?: readonly EpicPart[]
   /** The refs the My role options narrow to, from the reading; `null` when it does not say who the person is. */
   roles?: RoleRefs | null
+  /**
+   * The host is on "All epics" (`context.scope: 'project'`, protocol 2.9.0). See `wholeProject`.
+   */
+  wholeProject?: boolean
+}
+
+/**
+ * ## "All epics": the scope rests on Everything, and comes back to the epic by itself
+ *
+ * With the host on every epic at once there is no ONE epic for "This epic" to name, and the
+ * project's whole reading is what the person asked to see. So while `wholeProject` is true the
+ * scope group is offered with Everything as its resting option (`fallback`) and without "This
+ * epic" — the host draws Everything chosen, and the list shows every row — and the stored choice
+ * is not written: nothing here calls `filters.set`. When an epic is picked again the offer has
+ * "This epic" back as its fallback, and the list is on the epic's scope again by itself.
+ *
+ * Picked containers still narrow while any are picked (the option is offered, labelled so), and
+ * the My role options are offered as ever: both are about references, not about one epic.
+ */
+export function restsOnEverything(canvas: Canvas): boolean {
+  return canvas.wholeProject === true
 }
 
 /**
@@ -366,6 +387,7 @@ export function offer(
   if (!read) return null
   if (rows.length === 0) return []
   const { selection = [], epicRefs = null, aimed = null, marks = [], roles = null } = canvas
+  const whole = restsOnEverything(canvas)
   const reach = (refs: readonly string[]) => {
     const here = new Set(refs)
     return rows.filter((row) => here.has(row.ref)).length
@@ -394,8 +416,9 @@ export function offer(
     id: SCOPE,
     label: 'Scope',
     options: [
-      { id: IN_SCOPE, label: scoped },
-      { id: ALL, label: `Everything ${rows.length}` },
+      /* On "All epics" there is no epic to scope to; picked containers still are one. */
+      ...(whole ? (aimed ? [{ id: IN_SCOPE, label: `Picked containers ${reach(aimed)}` }] : []) : [{ id: IN_SCOPE, label: scoped }]),
+      { id: ALL, label: whole ? `Everything (all epics) ${rows.length}` : `Everything ${rows.length}` },
       /* Whatever the counts, like the rest of this group: `Asked to review 0`
          is the answer to the question somebody opened the menu with. */
       ...(roles
@@ -405,7 +428,7 @@ export function offer(
           ]
         : []),
     ],
-    fallback: IN_SCOPE,
+    fallback: whole ? ALL : IN_SCOPE,
   }
 
   /*
@@ -469,6 +492,8 @@ export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
   const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [], roles = null } = canvas
   const query = chosen[SEARCH]
   const scope = chosen[SCOPE]
+  /* "All epics": Everything unless a person asked for picked containers or a role. See `restsOnEverything`. */
+  const whole = restsOnEverything(canvas)
   return {
     query: typeof query === 'string' ? query.slice(0, LIMITS.FILTER_TEXT) : '',
     hidden: hiddenIn(chosen, HIDE),
@@ -476,7 +501,7 @@ export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
     /* A My role option narrows to the rows the reading says; with no word on
        who the person is it narrows nothing, as an epic not read does. */
     scope:
-      scope === ALL
+      scope === ALL || (whole && scope !== REVIEW && scope !== MINE && !(scope === IN_SCOPE && aimed))
         ? null
         : scope === REVIEW || scope === MINE
           ? roles

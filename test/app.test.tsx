@@ -1089,6 +1089,31 @@ describe('narrowed to the open epic', () => {
     expect(scope.options.map((option) => option.label)).toEqual(['This epic 3', 'Everything 8'])
   })
 
+  test('"All epics" in the host: Everything without a press, and the epic scope again when an epic is picked', async () => {
+    const host = stubHost(stubDoor({ [PROJECT]: answered(8) }))
+    render(<App />)
+    act(() => host.greet(PROJECT, null, [], {}, { epic: null, scope: 'project' }))
+    await settle()
+    /* No epic to ask about, and the whole project shown. */
+    expect(host.calls('steps.list')).toEqual([])
+    expect(document.body.textContent).toContain('8 references')
+    const scope = (host.offered() as { options: { id: string; label: string }[]; fallback: string }[])[0]!
+    expect(scope.fallback).toBe('all')
+    expect(scope.options.map((option) => option.label)).toEqual(['Everything (all epics) 8'])
+    /* Nothing written: the stored choice is the host's and stays as it was. */
+    expect(host.calls('filters.set')).toEqual([])
+
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { scope: 'epic' }))
+    await settle()
+    named(host)
+    await settle()
+    expect(document.body.textContent).toContain('3 of 8 shown')
+    const back = (host.offered() as { options: { label: string }[]; fallback: string }[])[0]!
+    expect(back.fallback).toBe('epic')
+    expect(back.options.map((option) => option.label)).toEqual(['This epic 3', 'Everything 8'])
+    expect(host.calls('filters.set')).toEqual([])
+  })
+
   test('Everything is one choice away', async () => {
     const host = await listed({ scope: 'all' })
     named(host)

@@ -299,6 +299,12 @@ export interface Kehikot {
    * control is.
    */
   parts: readonly EpicPart[]
+  /**
+   * Whether the host is on "All epics" (`context.scope: 'project'`, protocol 2.9.0): no epic, and
+   * not "no epic". The scope group then rests on Everything — see `wholeProject` in `live/sift.ts`.
+   * False from a host that does not say.
+   */
+  wholeProject: boolean
 }
 
 /**
@@ -703,6 +709,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
    */
   const kept = host.where === 'hosted' ? host.kept : undefined
   const { where, projectPath, selection, chosen, parts, resize, refreshable, remember: keep } = host
+  const wholeProject = host.scope === 'project'
   /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
   const offerFilters = host.filters
   const header = host.header
@@ -809,6 +816,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       aimed,
       marks,
       parts,
+      wholeProject,
     }),
     [
       sight,
@@ -833,6 +841,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       aimed,
       marks,
       parts,
+      wholeProject,
     ],
   )
 }
