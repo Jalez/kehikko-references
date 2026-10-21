@@ -4,6 +4,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
+import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
@@ -163,7 +164,14 @@ export function App() {
    * millisecond later had nothing left to restore. A memo cannot be a render
    * behind what it is made from, so that commit no longer exists.
    */
-  const rows = useMemo(() => (sight.at === 'read' ? collect(sight.reading.rows) : []), [sight])
+  const rows = useMemo(() => {
+    if (sight.at !== 'read') return []
+    /* Pinned here, before the first row with a face is drawn, so no picture is
+       ever asked for outside the page's image policy. Once per page: a second
+       call is a no-op (see `pinImagePolicy`). */
+    pinImagePolicy(avatarHostsOfReading(sight.reading))
+    return collect(sight.reading.rows)
+  }, [sight])
 
   /**
    * The whole narrowing, which is entirely the host's now.

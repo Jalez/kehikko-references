@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { BellDot, CircleAlert, CircleCheck, Eye, Hourglass, Layers, UserCheck } from 'lucide-react'
+import { BellDot, Layers } from 'lucide-react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { assignedSaid, reviewOf, stackSaid, unaddressed, type ReviewWord } from '@/live/markers.ts'
+import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
+import { Faces } from './faces.tsx'
 
 /**
  * A row's markers, drawn at every width beside the pressable box (issues #23
@@ -17,19 +18,25 @@ import type { Reference } from '@/live/reference.ts'
  * OUTSIDE the row's button because a focusable thing inside a button is not
  * reachable at all, and because the stack marker is a button of its own.
  *
- * Never colour alone: every state has its own shape — an hourglass for a
- * review asked and not started, an eye for one under way, a ring with a tick
- * for approved, a ring with a bang for changes requested — and its words in
- * the label. Colour is only the second telling.
+ * Who is assigned and who reviews are drawn as their faces (protocol 2.10.0;
+ * `faces.tsx`): tiny round avatars, overlapping, `+N` past three, initials
+ * where there is no picture. The marker's tooltip and label name every one
+ * of them and, for reviewers, where each stands.
+ *
+ * Never colour alone: every reviewer's state has its own shape, a badge on
+ * their face — an hourglass for a review asked and not started, an eye for
+ * one under way, a ring with a tick for approved, a ring with a bang for
+ * changes requested — and its words in the label. Colour is only the second
+ * telling.
  *
  * The cluster carries `title=""` so the row's own whole-row `title` does not
  * pop up over a marker's tooltip and say everything again at once.
  */
 
-const MARK = 'inline-flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring'
+const MARK = 'inline-flex h-6 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring'
 
 /** A marker that only explains itself: focusable, labelled, with the label's sentence as its tooltip. */
-function Mark({ name, said, label, children, className }: { name: string; said: string; label: string; children: ReactNode; className?: string }) {
+function Mark({ name, said, label, children, className = 'w-6' }: { name: string; said: string; label: string; children: ReactNode; className?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -42,11 +49,15 @@ function Mark({ name, said, label, children, className }: { name: string; said: 
   )
 }
 
-const REVIEW_ICON: Record<ReviewWord, ReactNode> = {
-  asked: <Hourglass className="size-3.5" aria-hidden="true" />,
-  reviewing: <Eye className="size-3.5" aria-hidden="true" />,
-  changes: <CircleAlert className="size-3.5" aria-hidden="true" />,
-  approved: <CircleCheck className="size-3.5" aria-hidden="true" />,
+/**
+ * A marker drawing faces: as wide as they are under 24rem of the frame, and from
+ * there the width its column has in this list (`facesColumns`, set on the list
+ * as `--faces-assigned` and `--faces-review`), so the columns stay aligned.
+ * Outside a list, room for three faces and a `+N`.
+ */
+const FACES_MARK = {
+  assigned: 'w-auto px-0.5 @sm/frame:w-[var(--faces-assigned,56px)]',
+  review: 'w-auto px-0.5 @sm/frame:w-[var(--faces-review,56px)]',
 }
 
 /**
@@ -119,13 +130,15 @@ function StackMark({ row, onPick }: { row: Reference; onPick: (ref: string) => v
 const CLUSTER = 'ml-auto flex shrink-0 items-center justify-end gap-0.5'
 const SLOT = {
   stack: <span aria-hidden="true" className="hidden w-11 @sm/frame:block" />,
+  assigned: <span aria-hidden="true" data-slot="assigned" className="hidden h-6 w-[var(--faces-assigned,56px)] @sm/frame:block" />,
+  review: <span aria-hidden="true" data-slot="review" className="hidden h-6 w-[var(--faces-review,56px)] @sm/frame:block" />,
   mark: <span aria-hidden="true" className="hidden size-6 @sm/frame:block" />,
 }
 const SLOTS = (
   <>
     {SLOT.stack}
-    {SLOT.mark}
-    {SLOT.mark}
+    {SLOT.assigned}
+    {SLOT.review}
     {SLOT.mark}
   </>
 )
@@ -139,22 +152,17 @@ export function Markers({ row, now, onPick }: { row: Reference; now: number; onP
     <span data-markers title="" className={CLUSTER}>
       {row.stack ? <StackMark row={row} onPick={onPick} /> : SLOT.stack}
       {assigned ? (
-        <Mark name="assigned" said={assigned} label={assigned}>
-          <UserCheck className="size-3.5" aria-hidden="true" />
+        <Mark name="assigned" said={assigned} label={assigned} className={FACES_MARK.assigned}>
+          <Faces faces={row.assignedFaces} />
         </Mark>
-      ) : SLOT.mark}
+      ) : SLOT.assigned}
       {review ? (
-        <Mark
-          name={`review-${review.word}`}
-          said={review.said}
-          label={review.said}
-          className={cn(review.word === 'approved' && 'text-emerald-700 dark:text-emerald-400', review.word === 'changes' && 'text-amber-700 dark:text-amber-400')}
-        >
-          {REVIEW_ICON[review.word]}
+        <Mark name={`review-${review.word}`} said={review.said} label={review.said} className={FACES_MARK.review}>
+          <Faces faces={row.reviewerFaces ?? []} />
         </Mark>
-      ) : SLOT.mark}
+      ) : SLOT.review}
       {last ? (
-        <Mark name="unaddressed" said={last} label={`Unaddressed activity. ${last}`} className="text-foreground">
+        <Mark name="unaddressed" said={last} label={`Unaddressed activity. ${last}`} className="w-6 text-foreground">
           <BellDot className="size-3.5" aria-hidden="true" />
         </Mark>
       ) : SLOT.mark}

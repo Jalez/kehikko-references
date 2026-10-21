@@ -1,5 +1,6 @@
 import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
+import { assignedFaces, faceOf, reviewerFaces } from './faces.ts'
 import { stackPlaces, type StackPlace } from './markers.ts'
 import type { Reference } from './reference.ts'
 
@@ -87,9 +88,20 @@ function fromRow(row: TrackerRow, merged: ReadonlySet<string>, stack: StackPlace
     labels: row.labels,
     people: [...new Set(people)],
     assignees: row.assignees,
+    assignedFaces: assignedFaces(row),
     /* The host's word, or nothing: absent is "not known", never "no role". */
     ...(row.myRoles ? { myRoles: [...row.myRoles] } : {}),
-    ...(row.reviewers ? { reviewers: row.reviewers } : {}),
+    /* A reviewer the host named by login only takes their display name from
+       `people` (2.10.0), so the tooltip says "Mona Lisa" where it can. */
+    ...(row.reviewers
+      ? {
+          reviewers: row.reviewers.map((r) => {
+            const named = faceOf(row, r.login).name
+            return r.name || named === r.login ? r : { ...r, name: named }
+          }),
+          reviewerFaces: reviewerFaces(row),
+        }
+      : {}),
     ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
     ...(stack ? { stack } : {}),
     unreadable: false,
@@ -118,6 +130,7 @@ function unreadableRow(ref: string, raw: Record<string, unknown>): Reference {
     labels: [],
     people: [],
     assignees: [],
+    assignedFaces: [],
     unreadable: true,
   }
 }

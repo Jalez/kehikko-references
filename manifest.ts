@@ -197,6 +197,13 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.5.0`: faces. The assigned and review markers draw people as tiny round
+ * avatars, overlapping, `+N` past three, a reviewer's state as a badge shape on
+ * their face, initials where there is no picture (protocol 2.10.0 `people`).
+ * Pictures load only from the forge's own avatar hosts, under an `img-src`
+ * the page pins from its first reading. A minor: a host without 2.10.0 sends
+ * no `people`, and every face is initials.
+ *
  * `3.4.0`: the narrow row (issues #23, #24, #25). A change in a stack says
  * where (`2/3`, the stack in its tooltip, an entry pressed selects it), and
  * markers say who is assigned, where the review stands and whether the last
@@ -264,7 +271,7 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.4.0'
+export const VERSION = '3.5.0'
 
 /**
  * The port this app would rather have.

@@ -113,13 +113,15 @@ from a name.
   its row would. The stack is worked out over every row read
   (`stackPlaces` in `live/markers.ts`), so a filter that hides the change
   underneath does not unstack this one.
-- **Assigned** — a person icon when somebody is assigned, naming them, and
-  `(you among them)` when you are one. Nothing when nobody is: the row's
-  tooltip says `nobody`, and a marker on most rows would be noise.
-- **Review** — on a change somebody was asked to review: an hourglass
-  (asked, not started), an eye (being reviewed), a ring with a bang (changes
-  requested) or a ring with a tick (approved), the strongest any reviewer
-  gives, with every reviewer named with theirs in the tooltip.
+- **Assigned** — the faces of whoever is assigned (see *Faces* below), naming
+  them in the tooltip, and `(you among them)` when you are one. Nothing when
+  nobody is: the row's tooltip says `nobody`, and a marker on most rows would
+  be noise.
+- **Review** — on a change somebody was asked to review: each reviewer's face
+  with a badge for where they stand — an hourglass (asked, not started), an eye
+  (reviewing), a ring with a bang (changes requested) or a ring with a tick
+  (approved). The tooltip leads with the strongest any reviewer gives and names
+  every reviewer with theirs.
 - **Unaddressed activity** — a bell on an OPEN reference whose last activity
   (protocol 2.8.0 `lastActivity`) was somebody else's: `Last activity: mona, a
   review, 3 h ago`. Only when the host says whose it was against who you are
@@ -134,10 +136,42 @@ only the second telling. The row's own tooltip says all of them too.
 
 From 24rem of the frame every row's marker cluster is one width — an empty
 slot where a marker is not — so the date, role and people columns line up down
-the list. Below it the cluster is only as wide as what it says, and in the
+the list. The assigned and review columns are as wide as this list needs
+(`facesColumns`: 20px for one face, 12 more per face up to three and a `+N`, so
+56px at most), set once on the list as `--faces-assigned` and `--faces-review`:
+a list where nobody has more than one assignee pays for one face, not four. Below it the cluster is only as wide as what it says, and in the
 narrowest frames a row whose identifier, state and markers do not fit on one
 line puts the markers and the tracker link on a second line rather than over
 the state.
+
+### Faces
+
+The assignee and reviewer markers draw people as tiny round avatars (16px),
+overlapping by 4px, at most three and then `+N` (`src/view/faces.tsx`). The
+pictures come from the host's reading (protocol 2.10.0 `people`, a map from
+each login a row names to `{ name?, avatarUrl? }`); a person with no picture,
+or whose picture fails to load, is their initials on a plain disc. Every
+`<img>` has the person's name as its `alt`, `referrerpolicy="no-referrer"` and
+`loading="lazy"`; the marker's `aria-label` and tooltip name everybody, not
+only the three drawn. A reviewer's state is a badge shape on their face, so it
+is never colour alone.
+
+A picture is loaded only from the forge's own avatar hosts (`src/live/faces.ts`):
+
+- GitHub: `avatars.githubusercontent.com`, nothing else.
+- GitLab: the row's own GitLab host (its `/uploads/…` pictures) and
+  `secure.gravatar.com`, which GitLab hands out for a person with no upload —
+  on a GitLab row only.
+
+Anything else (another host, `http:`, credentials in the URL) is refused in
+`collect` and drawn as initials. The page's Content Security Policy says the
+same: the first reading that names a source pins `img-src 'self'` plus exactly
+those hosts as a `<meta http-equiv="Content-Security-Policy">`
+(`pinImagePolicy`), and no picture is asked for before then or from a host it
+does not name. It is pinned at run time because which GitLab a project reads
+is known only from its reading, and once because a policy can be narrowed but
+never widened: a later reading on a GitLab host the pinned policy does not name
+shows initials until the page is loaded again.
 
 The scope never narrows to nothing it has not read. No epic open, or a host that
 refuses both questions, leaves the whole project on screen and the option says
@@ -617,6 +651,7 @@ src/live/sift.ts        the only place a row may be hidden, all three groups off
 src/live/order.ts       five orders, and where a value the reading lacks belongs
 src/live/keep.ts        the one setting this module still owns, and how it is distrusted
 src/live/markers.ts     the stack, who holds it, and activity by somebody else: every marker's sentence
+src/live/faces.ts       people's faces: which avatar hosts are allowed, the image policy, initials, column widths
 src/live/sight.ts       the states of knowing
 src/view/               the row and its markers, the list, the table’s heading, failing sources, and the words for absence
 dev/stub-host.ts        a host that is not one, for looking at all of the above
@@ -625,7 +660,7 @@ dev/measure.tsx         the numbers in this file
 
 ## Tests
 
-`bun test` — 287 of them, and none needs a host, a login, or a network. The
+`bun test` — 314 of them, and none needs a host, a login, or a network. The
 host is a function in `test/ask.test.ts` and a stand-in on the real bridge in
 `test/app.test.tsx`; the readings it answers with are built in
 `test/fixtures.ts` and checked against the protocol's own schemas. The host side
@@ -672,6 +707,12 @@ of the shared reading is Jalez/kehikko#25.
   assigned sentence, and the activity marker: somebody else draws it, the person
   themselves does not, and a host that does not know who the person is draws
   nothing.
+- `test/faces.test.tsx` holds the faces: the avatar shown (16px, lazy, no
+  referrer, `alt` the name), initials when there is no picture or it fails to
+  load, a picture on a disallowed host refused, nothing loaded before the image
+  policy is pinned or from a host it does not name, the policy itself (exactly
+  the avatar hosts, pinned once), overlap and `+N`, every reviewer's state badge
+  a different shape, and the faces columns as wide as the list needs.
 - The parts focus is held in three places: `test/sift.test.ts` (what narrows,
   that a ref in no part is outside, that the count is of what the rest of the
   narrowing would draw), `test/narrow.test.tsx` (the heading draws nothing

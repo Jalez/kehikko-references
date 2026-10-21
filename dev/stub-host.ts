@@ -136,7 +136,8 @@ const page = `<!doctype html>
       { n: 30, base: 'main', head: 'db-1', below: null, above: ['gh#31'], title: 'Split the store into readers and writers',
         reviewers: [{ login: 'mona', state: 'approved' }], last: { login: 'mona', at: ago(3), kind: 'review', mine: false } },
       { n: 31, base: 'db-1', head: 'db-2', below: 'gh#30', above: ['gh#32'], title: 'Move the readers onto the new store',
-        reviewers: [{ login: 'hubot', state: 'commented' }, { login: 'mona', state: 'requested' }], last: { login: 'jalez', at: ago(1), kind: 'commit', mine: true } },
+        reviewers: [{ login: 'hubot', state: 'commented' }, { login: 'mona', state: 'requested' }, { login: 'nina', state: 'changes' },
+          { login: 'otto', state: 'approved' }, { login: 'pia', state: 'requested' }], last: { login: 'jalez', at: ago(1), kind: 'commit', mine: true } },
       { n: 32, base: 'db-2', head: 'db-3', below: 'gh#31', above: [], title: 'Drop the old store',
         reviewers: [{ login: 'jalez', state: 'requested' }], last: { login: 'hubot', at: ago(26), kind: 'comment', mine: false } }
     ];
@@ -147,7 +148,10 @@ const page = `<!doctype html>
         labels: [], assignees: c.n === 32 ? [] : ['ada lovelace'], assigneeLogins: c.n === 32 ? [] : ['ada'], author: 'jalez', authorLogin: 'jalez', links: [],
         updatedAt: '2026-08-28T10:00:00Z', readAt: trackerAt, baseBranch: c.base, headBranch: c.head,
         stack: c.below ? { below: c.below, above: c.above } : { above: c.above },
-        reviewers: c.reviewers, myRoles: c.n === 32 ? ['author', 'reviewer-asked'] : ['author'], lastActivity: c.last
+        reviewers: c.reviewers, myRoles: c.n === 32 ? ['author', 'reviewer-asked'] : ['author'], lastActivity: c.last,
+        /* Faces (protocol 2.10.0): mona has a picture, the rest are initials. */
+        people: { jalez: { name: 'Jaakko Rajala' }, ada: { name: 'Ada Lovelace' }, nina: { name: 'Nina Simone' },
+          mona: { name: 'Mona Lisa Octocat', avatarUrl: 'https://avatars.githubusercontent.com/u/583231?s=48&v=4' } }
       });
     });
     return rows;

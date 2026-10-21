@@ -1,3 +1,6 @@
+import type { CSSProperties } from 'react'
+
+import { facesColumns } from '@/live/faces.ts'
 import type { Reference } from '@/live/reference.ts'
 import { ReferenceRow } from './reference-row.tsx'
 
@@ -45,8 +48,12 @@ export function ReferenceList({
   onToggle: (ref: string) => void
 }) {
   const picked = new Set(selection)
+  /* The faces columns are as wide as this list needs (`facesColumns`), set
+     once here and read by every row's markers and empty slots. */
+  const columns = facesColumns(rows)
+  const widths = { '--faces-assigned': `${columns.assigned}px`, '--faces-review': `${columns.review}px` } as CSSProperties
   return (
-    <ul className="divide-border">
+    <ul className="divide-border" style={widths}>
       {rows.map((row) => (
         <ReferenceRow
           key={row.key}
