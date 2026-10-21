@@ -23,6 +23,7 @@ import {
 } from 'kehikot-module-protocol/facets'
 
 import type { Reference } from './reference.ts'
+import type { RoleRefs } from './roles.ts'
 
 /**
  * Narrowing the list, which is the only place this app is allowed to hide a
@@ -139,7 +140,7 @@ import type { Reference } from './reference.ts'
  * umbrella. See `scopeOf`.
  */
 export interface Scope {
-  from: 'epic' | 'containers'
+  from: 'epic' | 'containers' | 'review' | 'mine'
   refs: readonly string[]
 }
 
@@ -242,6 +243,22 @@ export const IN_SCOPE = 'epic'
 /** The other option of the scope and kehikko groups, and the one every "show me everything" press asks for. */
 export const ALL = 'all'
 
+/**
+ * The Scope group's two My role options (review orchestration, C6): the rows
+ * where the person is asked to review, and the rows where they have any role.
+ *
+ * ## Why in the Scope group, and not a fifth
+ *
+ * `LIMITS.FILTER_GROUPS` is four and all four are spent. Scope already answers
+ * "which references", and "what am I asked to review" is a set of references —
+ * usually across the whole project, not one epic — so it is one press from the
+ * default here, where the Kehikko group (about the canvas pick) would have
+ * needed two and the `hide` group is the protocol's facets and takes no other
+ * ids. Offered only while the reading says who the person is; see `roleRefs`.
+ */
+export const REVIEW = 'review'
+export const MINE = 'mine'
+
 /** The option of the `kehikko` group that narrows to the canvas selection. */
 export const PICKED = 'picked'
 
@@ -319,6 +336,8 @@ export interface Canvas {
   marks?: readonly Disposition[]
   /** `context.parts`. */
   parts?: readonly EpicPart[]
+  /** The refs the My role options narrow to, from the reading; `null` when it does not say who the person is. */
+  roles?: RoleRefs | null
 }
 
 /**
@@ -346,7 +365,7 @@ export function offer(
 ): FilterGroup[] | null {
   if (!read) return null
   if (rows.length === 0) return []
-  const { selection = [], epicRefs = null, aimed = null, marks = [] } = canvas
+  const { selection = [], epicRefs = null, aimed = null, marks = [], roles = null } = canvas
   const reach = (refs: readonly string[]) => {
     const here = new Set(refs)
     return rows.filter((row) => here.has(row.ref)).length
@@ -377,6 +396,14 @@ export function offer(
     options: [
       { id: IN_SCOPE, label: scoped },
       { id: ALL, label: `Everything ${rows.length}` },
+      /* Whatever the counts, like the rest of this group: `Asked to review 0`
+         is the answer to the question somebody opened the menu with. */
+      ...(roles
+        ? [
+            { id: REVIEW, label: `Asked to review ${roles.review.length}` },
+            { id: MINE, label: `Mine, any role ${roles.mine.length}` },
+          ]
+        : []),
     ],
     fallback: IN_SCOPE,
   }
@@ -439,13 +466,23 @@ export function offer(
  * working the first time somebody pastes something long into it.
  */
 export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
-  const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [] } = canvas
+  const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [], roles = null } = canvas
   const query = chosen[SEARCH]
+  const scope = chosen[SCOPE]
   return {
     query: typeof query === 'string' ? query.slice(0, LIMITS.FILTER_TEXT) : '',
     hidden: hiddenIn(chosen, HIDE),
     /* Anything but an explicit `all` is the resting option, which narrows. */
-    scope: chosen[SCOPE] === ALL ? null : copied(scopeOf(epicRefs, aimed)),
+    /* A My role option narrows to the rows the reading says; with no word on
+       who the person is it narrows nothing, as an epic not read does. */
+    scope:
+      scope === ALL
+        ? null
+        : scope === REVIEW || scope === MINE
+          ? roles
+            ? { from: scope, refs: [...roles[scope]] }
+            : null
+          : copied(scopeOf(epicRefs, aimed)),
     /* Copied, so that a sifting is a value: the arrays the host handed over are
        state elsewhere and a later context replaces them. */
     picked: chosen[KEHIKKO] === PICKED ? [...selection] : null,

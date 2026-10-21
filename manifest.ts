@@ -197,6 +197,11 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.3.0`: My role. Each row says what the person is on it (protocol 2.7.0
+ * `myRoles`: asked to review, reviewed, author, assignee), and the Scope group
+ * gains `Asked to review` and `Mine, any role`. A minor, because a host that
+ * does not send `myRoles` gets exactly 3.2.0: no column text, no new options.
+ *
  * `3.2.0`: the list honours the parts focus. While parts of the open epic are
  * picked out in the host's bar (`context.parts`, protocol 0.29.0), only the
  * rows those parts list are drawn (a second heading line counting the rows
@@ -251,7 +256,7 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.2.0'
+export const VERSION = '3.3.0'
 
 /**
  * The port this app would rather have.
@@ -318,7 +323,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   guidance:
     'Every issue, merge request and pull request the host reads for this project — GitHub and GitLab ' +
     'together — is listed here, and the list shows the ones the open epic names unless the header’s scope is ' +
-    'set to Everything — check the scope before concluding a reference does not exist. Before ' +
+    'set to something else (Everything, or the person’s own: Asked to review, Mine) — check the scope before ' +
+    'concluding a reference does not exist. Before ' +
     'deciding what to work on, read the list rather than assuming the work is the one thing you were ' +
     'pointed at — very often a change is already open for it. Picking a row sets the canvas selection ' +
     'and other modules react to it, so select the reference you are working on and leave it selected ' +

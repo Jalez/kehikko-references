@@ -77,6 +77,22 @@ a **Scope** group, on by default:
 - **Everything** is the other option, one press away, and every "show all" on
   this page — the empty-list panels, `goto` — asks for it explicitly, because
   `{}` would put the scope back on the epic.
+- **Asked to review** and **Mine, any role** narrow, across the whole project,
+  to the references the host says you are asked to review, and to every one you
+  have a role on (protocol 2.7.0 `myRoles`: asked to review, reviewed, author,
+  assignee). Offered only while the reading says who you are; an empty one
+  draws its own sentence. In the Scope group because all four filter groups
+  are spent and "what is waiting on my review" is a set of references — one
+  press from the default.
+
+### My role
+
+Each row says what you are on it — `Reviewer (asked) · Author` — in a column
+from 32rem (after the labels and the date are gone, before the people), and in
+its tooltip at every width. Empty on a row you have no role on. The roles are
+the host's (`myRoles`, worked out from who you are on that tracker); this app
+computes nothing about people. A host older than 2.7.0, or one that does not
+know who you are, leaves the column empty and the two Scope options unoffered.
 
 The scope never narrows to nothing it has not read. No epic open, or a host that
 refuses both questions, leaves the whole project on screen and the option says

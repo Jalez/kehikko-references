@@ -5,6 +5,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
 import { reading, writing } from '@/live/keep.ts'
+import { roleRefs } from '@/live/roles.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
@@ -181,9 +182,11 @@ export function App() {
    * the refs those parts list. Those are the reactions the manifest declares.
    * See `Sifting` in `sift.ts`.
    */
+  /* The refs the Scope group's My role options narrow to, read off the rows. */
+  const roles = useMemo(() => roleRefs(rows), [rows])
   const canvas = useMemo(
-    () => ({ selection, epicRefs, aimed, marks, parts }),
-    [selection, epicRefs, aimed, marks, parts],
+    () => ({ selection, epicRefs, aimed, marks, parts, roles }),
+    [selection, epicRefs, aimed, marks, parts, roles],
   )
   const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 
