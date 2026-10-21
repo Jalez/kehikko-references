@@ -69,38 +69,69 @@ function rowBox(container: HTMLElement): HTMLElement {
   return li
 }
 
-describe('the three things a row may never stop showing', () => {
-  const three: ('identifier' | 'state' | 'title')[] = ['identifier', 'state', 'title']
+describe('what a row may never stop showing, and the title it now may (issue #24)', () => {
+  const two: ('identifier' | 'state')[] = ['identifier', 'state']
 
-  test.each(three)('the %s carries no rule that hides it at any width', (which) => {
+  /** Every class on the element and its ancestors inside the row. */
+  const rulesUp = (found: HTMLElement, line: HTMLElement) => {
+    const out: string[] = []
+    for (let node: HTMLElement | null = found; node && node !== line.parentElement; node = node.parentElement) {
+      out.push(...node.className.toString().split(/\s+/))
+    }
+    return out
+  }
+
+  test.each(two)('the %s carries no rule that hides it at any width', (which) => {
     const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const line = rowLine(container)
-    /* First, second and third in document order: the identifier and the state
-       are wrapped together in the stacked layout and dissolve into the line
-       above 20rem, so the identifier is found by walking rather than by
-       counting children. */
     const spans = [...line.querySelectorAll('span')]
     const identifier = spans.find((s) => s.textContent === 'gh#131')
     const state = spans.find((s) => s.textContent === 'open')
-    const title = spans.find((s) => (s.textContent ?? '').startsWith('Until Journeys'))
-    const found = { identifier, state, title }[which]
+    const found = { identifier, state }[which]
     expect(found).toBeDefined()
     /* Walk up to the row itself: a hiding rule on any ancestor inside the row
        hides the child just as thoroughly as one on the child. */
-    for (let node: HTMLElement | null = found!; node && node !== line.parentElement; node = node.parentElement) {
-      expect(node.className).not.toContain('hidden')
-    }
+    for (const rule of rulesUp(found!, line)) expect(rule).not.toMatch(/(^|:)(hidden|sr-only)$/)
   })
 
-  test('the row is two lines when it is narrow and one line when it is not', () => {
-    /* Not a measurement — happy-dom has no layout — but the pair of rules that
-       makes the measurement come out. `flex-col` is the stacked layout and
-       `@xs:flex-row` is the line, and one without the other is a row that is
-       either always stacked or never rescued. */
+  test('the title is not drawn under 24rem of the frame, and is drawn from it', () => {
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const title = rowLine(container).querySelector('[data-title]') as HTMLElement
+    expect(title.textContent).toStartWith('Until Journeys')
+    const rules = title.className.split(/\s+/)
+    expect(rules).toContain('hidden')
+    /* Measured against the FRAME by name, not the pressable box: the markers
+       beside the box make its width differ from row to row. */
+    expect(rules).toContain('@sm/frame:block')
+  })
+
+  test('where the title is not drawn it is still the pressable box’s accessible name, and in the row’s tooltip', () => {
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const spoken = rowLine(container).querySelector('[data-title-spoken]') as HTMLElement
+    expect(spoken.textContent).toStartWith('Until Journeys')
+    const rules = spoken.className.split(/\s+/)
+    /* Read by a screen reader below 24rem, gone above it where the drawn one is the name. */
+    expect(rules).toContain('sr-only')
+    expect(rules).toContain('@sm/frame:hidden')
+    expect(rowBox(container).getAttribute('title')).toContain('Until Journeys')
+  })
+
+  test('the markers carry no rule that hides them at any width', () => {
+    const rows = collect([
+      row('gh#131', { kind: 'change', assignees: ['ada'], reviewers: [{ login: 'mona', state: 'requested' }], lastActivity: { login: 'mona', at: '2026-08-27T08:00:00Z', kind: 'comment', mine: false } }),
+    ])
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const cluster = container.querySelector('[data-markers]') as HTMLElement
+    const marks = [...cluster.querySelectorAll('[data-marker]')] as HTMLElement[]
+    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'unaddressed'])
+    for (const m of [cluster, ...marks]) expect(m.className).not.toMatch(/(^|\s|:)hidden(\s|$)/)
+  })
+
+  test('the row is one line at every width: no stacked layout left to fall back to', () => {
     const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const className = rowLine(container).className
-    expect(className).toContain('flex-col')
-    expect(className).toContain('@xs:flex-row')
+    expect(className).toContain('h-9')
+    expect(className).not.toContain('flex-col')
   })
 
   test('the width thresholds are container queries and never viewport ones', () => {

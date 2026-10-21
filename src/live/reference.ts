@@ -20,7 +20,9 @@
  *   somebody came here to check.
  */
 
-import type { MyRole } from 'kehikot-module-protocol'
+import type { MyRole, TrackerActivity, TrackerReviewer } from 'kehikot-module-protocol'
+
+import type { StackPlace } from './markers.ts'
 
 /** Which tracker it lives on, as the host's reading says — the row's `tracker`, never parsed out of the ref. */
 export type Origin = 'gitlab' | 'github'
@@ -97,6 +99,17 @@ export interface Reference {
    * See `roles.ts`.
    */
   myRoles?: MyRole[]
+  /** Who is assigned, as the tracker names them, apart from `people`: the assigned marker says only these. */
+  assignees: string[]
+  /** A change's reviewers and where each stands (protocol 2.7.0). Absent when the host did not say. */
+  reviewers?: TrackerReviewer[]
+  /**
+   * The last thing done on it, by whom, and whether that was the person (protocol 2.8.0). `mine` is
+   * the host's word; absent when the host does not know who the person is. See `markers.ts`.
+   */
+  lastActivity?: TrackerActivity
+  /** Where it sits in a stack of open changes, from the host's `stack` links across the reading (2.8.0). */
+  stack?: StackPlace
   /**
    * The row filed under this reference was not a row the protocol describes —
    * it named a ref, and little else this app could read.

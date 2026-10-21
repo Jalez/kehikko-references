@@ -129,6 +129,27 @@ const page = `<!doctype html>
         labels: [], assignees: ['grace hopper'], links: [], updatedAt: '2026-08-2' + (m % 9) + 'T12:00:00Z', readAt: trackerAt
       });
     }
+    /* A stack of three open pull requests (issue #23), with who holds each and
+       activity by somebody else on two (issue #25): what the markers draw. */
+    var ago = function (h) { return new Date(Date.now() - h * 3600000).toISOString().replace(/\.\d+Z$/, 'Z'); };
+    var stack = [
+      { n: 30, base: 'main', head: 'db-1', below: null, above: ['gh#31'], title: 'Split the store into readers and writers',
+        reviewers: [{ login: 'mona', state: 'approved' }], last: { login: 'mona', at: ago(3), kind: 'review', mine: false } },
+      { n: 31, base: 'db-1', head: 'db-2', below: 'gh#30', above: ['gh#32'], title: 'Move the readers onto the new store',
+        reviewers: [{ login: 'hubot', state: 'commented' }, { login: 'mona', state: 'requested' }], last: { login: 'jalez', at: ago(1), kind: 'commit', mine: true } },
+      { n: 32, base: 'db-2', head: 'db-3', below: 'gh#31', above: [], title: 'Drop the old store',
+        reviewers: [{ login: 'jalez', state: 'requested' }], last: { login: 'hubot', at: ago(26), kind: 'comment', mine: false } }
+    ];
+    stack.forEach(function (c) {
+      rows.push({
+        ref: 'gh#' + c.n, tracker: 'github', host: 'github.com', repo: 'example/repo', number: c.n,
+        kind: 'change', state: 'open', title: c.title, url: 'https://github.com/example/repo/pull/' + c.n,
+        labels: [], assignees: c.n === 32 ? [] : ['ada lovelace'], assigneeLogins: c.n === 32 ? [] : ['ada'], author: 'jalez', authorLogin: 'jalez', links: [],
+        updatedAt: '2026-08-28T10:00:00Z', readAt: trackerAt, baseBranch: c.base, headBranch: c.head,
+        stack: c.below ? { below: c.below, above: c.above } : { above: c.above },
+        reviewers: c.reviewers, myRoles: c.n === 32 ? ['author', 'reviewer-asked'] : ['author'], lastActivity: c.last
+      });
+    });
     return rows;
   }
   function trackerReading() {

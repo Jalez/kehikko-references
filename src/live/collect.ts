@@ -1,5 +1,6 @@
 import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
+import { stackPlaces, type StackPlace } from './markers.ts'
 import type { Reference } from './reference.ts'
 
 /**
@@ -55,7 +56,7 @@ const link = (v: unknown): string | null => {
 }
 
 /** One row of the reading, as this app draws one. */
-function fromRow(row: TrackerRow, merged: ReadonlySet<string>): Reference {
+function fromRow(row: TrackerRow, merged: ReadonlySet<string>, stack: StackPlace | undefined): Reference {
   /* Author first on a change, then assignees: the author is the person
      somebody scanning a list of changes is most often looking for, and the
      list is cut off by width long before it is cut off by length. An issue's
@@ -85,8 +86,12 @@ function fromRow(row: TrackerRow, merged: ReadonlySet<string>): Reference {
     url: link(row.url),
     labels: row.labels,
     people: [...new Set(people)],
+    assignees: row.assignees,
     /* The host's word, or nothing: absent is "not known", never "no role". */
     ...(row.myRoles ? { myRoles: [...row.myRoles] } : {}),
+    ...(row.reviewers ? { reviewers: row.reviewers } : {}),
+    ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
+    ...(stack ? { stack } : {}),
     unreadable: false,
   }
 }
@@ -112,6 +117,7 @@ function unreadableRow(ref: string, raw: Record<string, unknown>): Reference {
     url: link(raw.url),
     labels: [],
     people: [],
+    assignees: [],
     unreadable: true,
   }
 }
@@ -135,13 +141,17 @@ export function collect(rows: unknown): Reference[] {
     ),
   )
 
+  /* Stacks are worked out over every row read, not over what is shown: a
+     filter that hides the change underneath does not unstack this one. */
+  const stacks = stackPlaces(parsed.flatMap(({ row }) => (row.success ? [row.data] : [])))
+
   const out: Reference[] = []
   const seen = new Set<string>()
   for (const { raw, row } of parsed) {
     const ref = row.success ? row.data.ref : isObject(raw) ? str(raw.ref) : ''
     if (!ref || seen.has(ref)) continue
     seen.add(ref)
-    out.push(row.success ? fromRow(row.data, merged) : unreadableRow(ref, raw as Record<string, unknown>))
+    out.push(row.success ? fromRow(row.data, merged, stacks.get(row.data.ref)) : unreadableRow(ref, raw as Record<string, unknown>))
   }
 
   return out.sort((a, b) => {

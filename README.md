@@ -94,6 +94,46 @@ the host's (`myRoles`, worked out from who you are on that tracker); this app
 computes nothing about people. A host older than 2.7.0, or one that does not
 know who you are, leaves the column empty and the two Scope options unoffered.
 
+### Markers: the stack, who holds it, and activity by somebody else
+
+Beside the row's pressable box, at every width, up to four markers (issues #23
+and #25). Each says only what the host's reading says; none is worked out here
+from a name.
+
+- **The stack** — `⧉ 2/3` on a change whose base branch is another open
+  change's head branch (protocol 2.8.0 `stack`, which the host works out across
+  its reading). Its tooltip lists the whole stack bottom first, refs and
+  titles, this one marked; a fork in the stack is indented. Pressing it opens
+  the same list as buttons, and pressing one selects that change, as pressing
+  its row would. The stack is worked out over every row read
+  (`stackPlaces` in `live/markers.ts`), so a filter that hides the change
+  underneath does not unstack this one.
+- **Assigned** — a person icon when somebody is assigned, naming them, and
+  `(you among them)` when you are one. Nothing when nobody is: the row's
+  tooltip says `nobody`, and a marker on most rows would be noise.
+- **Review** — on a change somebody was asked to review: an hourglass
+  (asked, not started), an eye (being reviewed), a ring with a bang (changes
+  requested) or a ring with a tick (approved), the strongest any reviewer
+  gives, with every reviewer named with theirs in the tooltip.
+- **Unaddressed activity** — a bell on an OPEN reference whose last activity
+  (protocol 2.8.0 `lastActivity`) was somebody else's: `Last activity: mona, a
+  review, 3 h ago`. Only when the host says whose it was against who you are
+  (`lastActivity.mine`); when it does not know who you are there is no marker,
+  never a guess from a name. Closed and merged references have nothing left to
+  address.
+
+Every marker is its own focusable element with an `aria-label` saying the
+whole sentence, and its shadcn tooltip (`components/ui/tooltip.tsx`) opens on
+keyboard focus as well as hover. Every state has its own shape; colour is
+only the second telling. The row's own tooltip says all of them too.
+
+From 24rem of the frame every row's marker cluster is one width — an empty
+slot where a marker is not — so the date, role and people columns line up down
+the list. Below it the cluster is only as wide as what it says, and in the
+narrowest frames a row whose identifier, state and markers do not fit on one
+line puts the markers and the tracker link on a second line rather than over
+the state.
+
 The scope never narrows to nothing it has not read. No epic open, or a host that
 refuses both questions, leaves the whole project on screen and the option says
 `This epic (not read)`. An epic that names nothing in the reading draws its own
@@ -314,43 +354,52 @@ narrows, pieces drop from the right in this order:
    reachable, because the filter searches them.
 2. **The date** (under 36rem) — it answers "is this fresh", which the header
    answers once for the whole list.
-3. **The people** (under 24rem) — reluctantly, and last, because *who is on it*
-   is half of what somebody scans for. Searchable too.
+3. **The people** (under 24rem) — reluctantly, because *who is on it* is half
+   of what somebody scans for. Searchable too, and the markers say who holds
+   it at every width.
+4. **The title** (under 24rem of the frame, issue #24) — see below.
 
-Never dropped, at any width: **the identifier, the state and the title**. The
-identifier is what somebody is looking for, the state is what they came to
-check, and the title is how they recognise the right one when they only half
-remember the number. A row that has lost one of those three has stopped being a
-row and become a hint.
+Never dropped, at any width: **the identifier, the state and the markers**.
+The identifier is what somebody is looking for, the state is what they came to
+check, and the markers say whether somebody already holds it.
 
 Whatever the width takes away is on the row as its own `title`, in the order the
 wide layout would have drawn it. "The filter searches it" is a fair answer to
 somebody who knows the word to type and no answer at all to somebody who does
 not, so hovering a row says everything the row would say at full width.
 
-### Two lines under 20rem, and the measurement that forced it
+### The title goes under 24rem, and the row is one line
 
-"Never dropped" was a claim rather than a fact until it was measured. In a
-Chromium container 220 pixels wide — an ordinary size on a grid canvas — the fixed
-5.5rem identifier column and 4.5rem state column left the title **twelve
-pixels**. The row was in the document and findable by Ctrl+F, and unreadable.
+The title used to be the one thing never dropped. It is dropped under 24rem of
+the frame now because of where the list is read at that width: beside Journeys,
+where pressing a row shows that reference in the journey with its title at full
+length. A narrow row is for finding the one to press and seeing who holds it,
+so its width goes to the identifier, the state and the markers. The title is in
+the row's tooltip, and an `sr-only` copy keeps it in the pressable box's
+accessible name, so a screen reader hears what the row is at every width.
 
-So under 20rem the row is two lines: the identifier and the state share the
-first, the title has the whole of the second. It costs about sixteen pixels of
-height per row, and the same measurement reads **154 pixels** of title — it was
-196 before the row grew a checkbox and a tracker link, which take 28 and 30
-pixels off the width at every size. The fixed columns, which exist so a column of
-identifiers can be scanned rather than read, come back at 28rem, where there is
-width to pay for them.
+The threshold asks the frame by name (`@sm/frame:`, the app's root is
+`@container/frame`) rather than the pressable box, because the markers sit
+beside that box: its width differs from row to row, and a title that came and
+went with how many markers a row has would make a column of rows that disagree.
+
+Under 20rem the row used to be two lines — the identifier and the state on the
+first, the title on the whole of the second — because a one-line row in a
+220-pixel container left the title **twelve pixels**. With no title to hold,
+that second line went with it: the row is one line, 36 pixels, at every width
+it fits, which is more rows on screen in the container with the least height
+to spare. The fixed columns, which exist so a column of identifiers can be
+scanned rather than read, come back at 28rem, where there is width to pay for
+them.
 
 The `@container` is the pressable middle of the row rather than the row, and the
 consequence is not what it looks like: a `@xx:` class is measured against the
 nearest container *ancestor*, and an element is not its own ancestor. So the
-stack-or-line decision, written on that box, is still measured against the container;
-the labels, date and people columns, written on its children, are measured
-against the box, which is 58 pixels narrower. Which is right — "is there room for
-a second line" is a question about the container, and "is there room for the people"
-is a question about what is left after the two controls have taken theirs.
+classes on that box are measured against the frame; the labels, date and people
+columns, written on its children, are measured against the box, which is
+narrower by the checkbox, the markers and the link. Which is right — "is there
+room for the people" is a question about what is left after the row's controls
+have taken theirs.
 
 ### Every filter is in the container's header, and the toolbar is gone
 
@@ -562,15 +611,16 @@ src/live/collect.ts     the shared reading's rows -> rows, and the promise that 
 src/live/sift.ts        the only place a row may be hidden, all three groups offered to the header, and why
 src/live/order.ts       five orders, and where a value the reading lacks belongs
 src/live/keep.ts        the one setting this module still owns, and how it is distrusted
+src/live/markers.ts     the stack, who holds it, and activity by somebody else: every marker's sentence
 src/live/sight.ts       the states of knowing
-src/view/               the row, the list, the table's heading, failing sources, and the words for absence
+src/view/               the row and its markers, the list, the table’s heading, failing sources, and the words for absence
 dev/stub-host.ts        a host that is not one, for looking at all of the above
 dev/measure.tsx         the numbers in this file
 ```
 
 ## Tests
 
-`bun test` — 243 of them, and none needs a host, a login, or a network. The
+`bun test` — 287 of them, and none needs a host, a login, or a network. The
 host is a function in `test/ask.test.ts` and a stand-in on the real bridge in
 `test/app.test.tsx`; the readings it answers with are built in
 `test/fixtures.ts` and checked against the protocol's own schemas. The host side
@@ -604,11 +654,19 @@ of the shared reading is Jalez/kehikko#25.
 - `test/order.test.ts` holds every order to being a permutation and holds the two
   judgement calls. `test/keep.test.ts` throws nine kinds of rubbish at what the
   host hands back. `test/narrow.test.tsx` holds which pieces of a row are allowed
-  to carry a hiding rule at all — none of the three that may never be dropped —
-  and that every threshold is a container query and never a viewport one. Its
+  to carry a hiding rule at all — never the identifier, the state or the
+  markers; the title only under 24rem of the frame, and then in the accessible
+  name and the tooltip — that the row is one line, and that every threshold is
+  a container query and never a viewport one. Its
   second half is the table's heading: that the count always names both numbers,
   that the whole of it is on the heading's own `title`, and that every order —
   including the two whose column a narrow row drops — stays reachable.
+- `test/markers.test.tsx` holds the stack order (bottom first whatever order the
+  reading gave, a fork after the change it shares, a missing change ending the
+  walk), that pressing an entry of the stack selects it, the review word and the
+  assigned sentence, and the activity marker: somebody else draws it, the person
+  themselves does not, and a host that does not know who the person is draws
+  nothing.
 - The parts focus is held in three places: `test/sift.test.ts` (what narrows,
   that a ref in no part is outside, that the count is of what the rest of the
   narrowing would draw), `test/narrow.test.tsx` (the heading draws nothing

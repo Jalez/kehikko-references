@@ -197,6 +197,14 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.4.0`: the narrow row (issues #23, #24, #25). A change in a stack says
+ * where (`2/3`, the stack in its tooltip, an entry pressed selects it), and
+ * markers say who is assigned, where the review stands and whether the last
+ * activity was somebody else's (protocol 2.8.0 `stack` and `lastActivity`).
+ * Under 24rem of the frame the title is not drawn; it stays in the tooltip and
+ * the accessible name. A minor: a host without 2.8.0 sends no stack and no
+ * activity, and those markers are simply not drawn.
+ *
  * `3.3.0`: My role. Each row says what the person is on it (protocol 2.7.0
  * `myRoles`: asked to review, reviewed, author, assignee), and the Scope group
  * gains `Asked to review` and `Mine, any role`. A minor, because a host that
@@ -256,7 +264,7 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.3.0'
+export const VERSION = '3.4.0'
 
 /**
  * The port this app would rather have.
