@@ -50,6 +50,7 @@ const row = (over: Partial<Reference>): Reference => ({
   labels: [],
   people: [],
   assignees: [],
+  assignedFaces: [],
   unreadable: false,
   ...over,
 })

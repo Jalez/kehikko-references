@@ -22,6 +22,7 @@
 
 import type { MyRole, TrackerActivity, TrackerReviewer } from 'kehikot-module-protocol'
 
+import type { Face, ReviewerFace } from './faces.ts'
 import type { StackPlace } from './markers.ts'
 
 /** Which tracker it lives on, as the host's reading says — the row's `tracker`, never parsed out of the ref. */
@@ -101,8 +102,15 @@ export interface Reference {
   myRoles?: MyRole[]
   /** Who is assigned, as the tracker names them, apart from `people`: the assigned marker says only these. */
   assignees: string[]
+  /**
+   * Who is assigned, as the assigned marker draws them: a face each, with a picture only from the
+   * forge's own avatar hosts (protocol 2.10.0 `people`; see `faces.ts`). Initials where there is none.
+   */
+  assignedFaces: Face[]
   /** A change's reviewers and where each stands (protocol 2.7.0). Absent when the host did not say. */
   reviewers?: TrackerReviewer[]
+  /** The same reviewers as faces with their state, for the review marker. Absent with `reviewers`. */
+  reviewerFaces?: ReviewerFace[]
   /**
    * The last thing done on it, by whom, and whether that was the person (protocol 2.8.0). `mine` is
    * the host's word; absent when the host does not know who the person is. See `markers.ts`.
