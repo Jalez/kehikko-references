@@ -1,4 +1,5 @@
 import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-module-protocol'
+import pkg from './package.json'
 
 /**
  * What this app says about itself when a host asks.
@@ -271,7 +272,8 @@ export const ID = 'kehikot.references'
  * going to version 3, dropping everything but the order. `src/live/keep.ts` says
  * why.
  */
-export const VERSION = '3.5.0'
+/** The module's version: package.json's, the one place it is written. A release is tagged with it. */
+export const VERSION: string = pkg.version
 
 /**
  * The port this app would rather have.
