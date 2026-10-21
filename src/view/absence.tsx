@@ -310,6 +310,24 @@ export function NothingInScope({
 }) {
   const named = scope.refs.length
   const containers = scope.from === 'containers'
+  /* A My role option, which somebody chose: their own sentence, since the
+     remedy is neither an epic nor a container. */
+  if (scope.from === 'review' || scope.from === 'mine') {
+    const review = scope.from === 'review'
+    return (
+      <Panel title={review ? 'Nobody is asking you to review anything here.' : 'You have no role on anything here.'}>
+        <p>
+          {review
+            ? 'This list is narrowed to the issues and changes where you are asked to review, and none in this project’s tracker asks you now.'
+            : 'This list is narrowed to the issues and changes where you are the author, an assignee or a reviewer, and you are none of those on any of them.'}
+        </p>
+        <p>Nothing has gone missing: the project has {total} {total === 1 ? 'reference' : 'references'}.</p>
+        <Button variant="outline" size="sm" onClick={everything}>
+          Show everything
+        </Button>
+      </Panel>
+    )
+  }
   return (
     <Panel
       title={

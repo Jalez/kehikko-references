@@ -20,6 +20,8 @@
  *   somebody came here to check.
  */
 
+import type { MyRole } from 'kehikot-module-protocol'
+
 /** Which tracker it lives on, as the host's reading says — the row's `tracker`, never parsed out of the ref. */
 export type Origin = 'gitlab' | 'github'
 
@@ -87,6 +89,14 @@ export interface Reference {
    * the title needs.
    */
   people: string[]
+  /**
+   * The person's roles on it, as the host worked them out from who they are
+   * on its tracker (protocol 2.7.0): asked to review, reviewed, author,
+   * assignee. Absent when the host did not say — it does not know who the
+   * person is there, or is older — which is not the same as `[]`, no role.
+   * See `roles.ts`.
+   */
+  myRoles?: MyRole[]
   /**
    * The row filed under this reference was not a row the protocol describes —
    * it named a ref, and little else this app could read.

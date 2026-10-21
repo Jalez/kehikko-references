@@ -85,6 +85,8 @@ function fromRow(row: TrackerRow, merged: ReadonlySet<string>): Reference {
     url: link(row.url),
     labels: row.labels,
     people: [...new Set(people)],
+    /* The host's word, or nothing: absent is "not known", never "no role". */
+    ...(row.myRoles ? { myRoles: [...row.myRoles] } : {}),
     unreadable: false,
   }
 }

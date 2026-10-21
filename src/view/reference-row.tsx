@@ -3,6 +3,7 @@ import { ExternalLink, GitPullRequest } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import type { Reference } from '@/live/reference.ts'
+import { roleSaid } from '@/live/roles.ts'
 import { StateWord } from './state-word.tsx'
 
 /**
@@ -94,6 +95,10 @@ import { StateWord } from './state-word.tsx'
  * Dropped next: **the date** (under 36rem). It answers "is this fresh", which
  * is a question about the list rather than about the row, and the header
  * answers it once for everything by naming when the reading was taken.
+ *
+ * Dropped after the date: **my role** (under 32rem) — `Reviewer (asked)` and
+ * the like, on the rows the person has one. It is reachable at any width: the
+ * row's tooltip says it, and the Scope group narrows to it.
  *
  * Dropped last: **the people** (under 24rem). They go reluctantly, because "who
  * is on it" is half of what somebody scans for — but they are searchable too,
@@ -232,6 +237,8 @@ function overview(row: Reference): string {
   if (row.labels.length) parts.push(row.labels.join(', '))
   if (row.at) parts.push(day(row.at))
   parts.push(row.people.length ? row.people.join(', ') : 'nobody')
+  const mine = roleSaid(row.myRoles)
+  if (mine) parts.push(`my role: ${mine}`)
   return parts.join(' · ')
 }
 
@@ -389,6 +396,19 @@ export function ReferenceRow({
             {day(row.at)}
           </span>
         )}
+
+        {/* My role: what the person is on this one — `Reviewer (asked) ·
+            Author` — in a fixed column so it lines up down the list, empty on
+            a row they have no role on (most of them; a word on each would be a
+            column of noise). Dropped under 32rem, after the labels and the
+            date and before the people; the tooltip says it at every width and
+            the Scope group narrows to it. */}
+        <span
+          data-role
+          className="hidden w-28 shrink-0 truncate text-right text-xs text-foreground @lg:block"
+        >
+          {roleSaid(row.myRoles)}
+        </span>
 
         <span className="hidden w-32 shrink-0 truncate text-right text-xs text-muted-foreground @sm:block">
           {/* Nobody is a fact worth showing. An issue with no assignee is not a
