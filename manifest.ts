@@ -314,6 +314,9 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   protocol: PROTOCOL,
   id: ID,
   name: 'References',
+  /* The icon a host draws beside the name: a key of the protocol's module icons, never a path
+     or URL; the same key Kehikot's official list gives it. */
+  icon: 'lucide:link',
   version: VERSION,
   /**
    * What this IS, and the two words in it that were argued over.
