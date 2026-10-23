@@ -48,6 +48,41 @@ import { ID, MANIFEST, VERSION } from './manifest.ts'
  */
 export const BUILD = establishBuild({ version: VERSION, dir: import.meta.dirname })
 
+/**
+ * The doors this app answers on are `doors()` from the protocol, served by the
+ * one process that serves the page: the manifest at its well-known path, the
+ * page (generated, with this process's build printed into it, `no-store`,
+ * `frame-ancestors`) at `/`, and the health check through `answer` in
+ * `doors.ts`. See the protocol's docs/module-plumbing.md.
+ *
+ * A module is ONE ORIGIN or it is nothing: the protocol refuses a manifest
+ * whose `entry` points anywhere but the origin that served the manifest. So the
+ * manifest, the health check and the page cannot be split across two processes
+ * on two ports, however tidy that would be.
+ *
+ * ## Who may frame this page, and the stub host
+ *
+ * This module declares storage, so a host frames it WITH `allow-same-origin`
+ * and it keeps its real origin. Having an origin is what makes
+ * `frame-ancestors` mean something: without it any page anywhere could frame
+ * this one. `doors()` sends the header from `frameAncestors()` — whoever runs
+ * this decides, through `KEHIKOT_ORIGINS`, and the default is every address a
+ * host in this workspace actually serves on.
+ *
+ * `127.0.0.1:7821` is added to whatever that says, and it is the stub host in
+ * `dev/stub-host.ts`. That was not planned: the first time this page was
+ * measured in a browser after the header was added, the frame did not load at
+ * all and the probe reported "no module frame" at every width, with nothing in
+ * any log — because a refused frame is refused by the browser and this app
+ * never hears about it. A development harness that silently stops working the
+ * moment somebody adds a security header is a harness people stop trusting, so
+ * the one loopback port it runs on is named, as `ancestors` on `doors()`.
+ */
+export const STUB_HOST = 'http://127.0.0.1:7821'
+
+/** `/health` beside the protocol's own three: see `answer` in `doors.ts`. */
+export const ours = (path: string) => path === '/healthz' || path === '/health' || path === '/mcp' || path.startsWith('/api/')
+
 export type { Reply }
 
 /**
