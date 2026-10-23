@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import type { AddressOpenResult } from 'kehikot-module-protocol'
 
 import { facesColumns } from '@/live/faces.ts'
 import type { Reference } from '@/live/reference.ts'
@@ -25,6 +26,7 @@ export function ReferenceList({
   selection,
   onPick,
   onToggle,
+  onOpenLink,
 }: {
   rows: readonly Reference[]
   landedOn: string | null
@@ -46,6 +48,8 @@ export function ReferenceList({
   selection: readonly string[]
   onPick: (ref: string) => void
   onToggle: (ref: string) => void
+  /** Hand a row's tracker link to the canvas (`address.open`), or null to follow it in a new tab. */
+  onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
 }) {
   const picked = new Set(selection)
   /* The faces columns are as wide as this list needs (`facesColumns`), set
@@ -62,6 +66,7 @@ export function ReferenceList({
           selected={picked.has(row.ref)}
           onPick={onPick}
           onToggle={onToggle}
+          onOpenLink={onOpenLink ?? null}
         />
       ))}
     </ul>

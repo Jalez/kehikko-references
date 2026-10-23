@@ -5,6 +5,7 @@ import type { Sight } from '@/live/sight.ts'
 import {
   contentStamp,
   filterChoiceSchema,
+  type AddressOpenResult,
   type CanvasContainer,
   type ContentChange,
   type Disposition,
@@ -79,6 +80,12 @@ export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: st
 
 export interface Kehikot {
   sight: Sight
+  /**
+   * Hand a web address to the canvas (`address.open`, protocol 2.16.0), or
+   * `null` when the host does not answer it — an older host, or nothing
+   * framing the page — and a link should open the way it always did.
+   */
+  openAddress: ((url: string) => Promise<AddressOpenResult | null>) | null
   /** Whether anything is framing this page, and the project folder it named: what the shared cover asks. */
   where: Where
   projectPath: string | null
@@ -713,6 +720,13 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
   const offerFilters = host.filters
   const header = host.header
+  /* Only when the greeting said the host answers it: an older host keeps the plain link. */
+  const handsAddresses = host.where === 'hosted' && host.answers?.includes('address.open') === true
+  const hostOpenAddress = host.openAddress
+  const openAddress = useMemo(
+    () => (handsAddresses ? (url: string) => hostOpenAddress(url) : null),
+    [handsAddresses, hostOpenAddress],
+  )
 
   /**
    * Ask, then read the answer rather than assuming it.
@@ -795,6 +809,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   return useMemo(
     () => ({
       sight,
+      openAddress,
       where,
       projectPath,
       busy,
@@ -820,6 +835,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
     }),
     [
       sight,
+      openAddress,
       where,
       projectPath,
       busy,

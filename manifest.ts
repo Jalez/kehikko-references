@@ -404,7 +404,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   reacts: ['selection', 'containers', 'dispositions', 'tracker', 'content', 'parts'],
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh'],
+    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh', 'address:open'],
     storage: true,
     /*
      * "All epics" (protocol 2.9.0): with `context.scope: 'project'` the Scope group rests on

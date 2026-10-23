@@ -4,6 +4,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
+import { handLink, handsLink } from '@/live/links.ts'
+import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { roleSaid } from '@/live/roles.ts'
 import { Markers } from './markers.tsx'
 import { StateWord } from './state-word.tsx'
@@ -267,7 +269,7 @@ export function overview(row: Reference, now: number = Date.now()): string {
  * `title` because a sighted reader hovering the one dim icon in a column of live
  * ones deserves the sentence.
  */
-function Tracker({ row }: { row: Reference }) {
+function Tracker({ row, onOpenLink }: { row: Reference; onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null }) {
   const shared = 'flex shrink-0 items-center self-stretch px-2'
   if (!row.url) {
     return (
@@ -285,6 +287,13 @@ function Tracker({ row }: { row: Reference }) {
       href={row.url}
       target="_blank"
       rel="noreferrer"
+      onClick={(event) => {
+        /* Handed to the canvas (`address.open`) when the host answers it: the Browser
+           there opens it, or the person is asked. Otherwise the link is followed. */
+        if (!onOpenLink || !handsLink(row.url, true)) return
+        event.preventDefault()
+        void handLink(row.url, onOpenLink)
+      }}
       title={`Open ${row.ref} on ${TRACKER[row.origin]}`}
       aria-label={`Open ${row.ref} on ${TRACKER[row.origin]}`}
       className={cn(shared, 'text-muted-foreground hover:text-foreground focus-visible:text-foreground')}
@@ -300,10 +309,13 @@ export function ReferenceRow({
   selected,
   onPick,
   onToggle,
+  onOpenLink,
   now,
 }: {
   row: Reference
   landed: boolean
+  /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
+  onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
   /** The clock the activity marker says "3 h ago" against. Tests pass one; the page reads it at drawing. */
   now?: number
   /** As the host last said the canvas's selection stands. Never what this page asked for. */
@@ -447,7 +459,7 @@ export function ReferenceRow({
 
       <Markers row={row} now={at} onPick={onPick} />
 
-      <Tracker row={row} />
+      <Tracker row={row} onOpenLink={onOpenLink ?? null} />
     </li>
   )
 }

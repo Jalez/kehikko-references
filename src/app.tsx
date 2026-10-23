@@ -140,6 +140,7 @@ export function App() {
     marks,
     parts,
     wholeProject,
+    openAddress,
   } = useKehikot(ID, onGoto, ({ item, value }) => {
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
@@ -736,7 +737,7 @@ export function App() {
         ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => void clearAll()} />
         ) : (
-          <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} />
+          <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} />
         )}
       </div>
     </div>
