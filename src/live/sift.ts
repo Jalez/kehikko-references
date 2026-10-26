@@ -4,7 +4,7 @@ import {
   isFocused,
   narrowToFocus,
   pickedParts,
-  type Anchor,
+  type Anchors,
   type Disposition,
   type EpicPart,
   type FilterChoice,
@@ -599,8 +599,14 @@ export interface Focus {
 /** What one row is called in the protocol's sentence for an empty view. */
 export const NOUN = 'reference'
 
-/** What ties a row to a part: the reference it is. THE anchor function of this module. */
-export const anchorOf = (row: { ref: string }): Anchor => ({ ref: row.ref })
+/**
+ * What ties a row to a part: the reference it is. THE anchor function of this module.
+ *
+ * And, for a change that is part of an issue ("Part of #3912", protocol 2.26.0), that issue too: a
+ * part that lists `#3912` shows the work on it. Only that way round — see `withContributions`.
+ */
+export const anchorOf = (row: { ref: string; partOf?: readonly string[] }): Anchors =>
+  row.partOf?.length ? [{ ref: row.ref }, ...row.partOf.map((ref) => ({ ref }))] : { ref: row.ref }
 
 /** The rows the picked parts leave, by the protocol's rule, with what is in hand kept. Every row when nothing is picked. */
 function inFocus<Row extends { ref: string }>(rows: readonly Row[], sifting: Sifting) {

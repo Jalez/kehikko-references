@@ -1662,3 +1662,34 @@ describe('what a reload keeps', () => {
     expect(host.asked()).not.toContain('filters.set')
   })
 })
+
+describe('work that is part of an issue the epic names', () => {
+  /* GitLab's real case: `!3907` says "Part of #3912" and merged; `#3912` is still open. */
+  const READ: Answer = {
+    ok: true,
+    data: readingOf([
+      row('!3907', { state: 'merged', mergedAt: '2026-10-20T10:00:00Z', contributes: ['#3912'] }),
+      row('#3912', { contributedBy: ['!3907'] }),
+      row('#1'),
+      row('!2'),
+    ]),
+  }
+
+  test('"This epic" shows the change with its issue, and the row says what it is part of', async () => {
+    const host = stubHost(stubDoor({ [PROJECT]: READ }))
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    act(() => host.answer('steps.list', { ok: true, data: { steps: [{ refs: ['#3912'] }] } }))
+    act(() => host.answer('epic.get', { ok: true, data: { slug: 'an-epic', steps: [] } }))
+    await settle()
+    expect([...document.querySelectorAll('li[data-ref]')].map((li) => li.getAttribute('data-ref'))).toEqual([
+      '!3907',
+      '#3912',
+    ])
+    expect(document.querySelector('li[data-ref="!3907"] [data-tie]')?.textContent).toBe('part of #3912')
+    expect(document.querySelector('li[data-ref="#3912"] [data-tie]')?.textContent).toBe('has contributions from !3907')
+    const scope = (host.offered() as { options: { label: string }[] }[])[0]!
+    expect(scope.options.map((option) => option.label)).toEqual(['This epic 2', 'Everything 4'])
+  })
+})
