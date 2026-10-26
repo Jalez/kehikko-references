@@ -62,7 +62,7 @@ const AS_KEPT: KeptCodec<string> = { read: (state) => state, write: (kept) => ke
  * reason to ask the host again. The cost of listening to all of them is a
  * re-read that answers what was already drawn.
  */
-function epicStamp(content: readonly ContentChange[] | undefined, epic: string): string {
+export function epicStamp(content: readonly ContentChange[] | undefined, epic: string): string {
   return contentStamp(content, { sources: [...new Set((content ?? []).map((one) => one.source))], epic })
 }
 
@@ -875,11 +875,15 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 /**
  * The refs an epic names, out of what `steps.list` and `epic.get` answered.
  *
- * Read leniently, because the protocol gives neither answer a schema — a module
- * reading them is reading the host's own material. What is taken: every string
- * in every step's `refs`, from either answer, and the epic's `umbrella`. In the
- * order they were found and once each; anything that is not a non-empty string
- * is not a ref and is skipped.
+ * Read leniently: `epic.get` is the host's own material, which the protocol
+ * gives no schema, and `steps.list` from a host before 2.21.0 had none either.
+ * What is taken: every string in every step's `refs` and `related`, from either
+ * answer, and the epic's `umbrella`. From 2.21.0 `steps.list` is every steps
+ * provider's plan (`stepsListResult`), where a ref that is named beside a step
+ * without delivering it (prior art, related work) is in `related` rather than
+ * `refs` — and it was in a journey step's `refs` before, so it is taken from
+ * there too. In the order they were found and once each; anything that is not
+ * a non-empty string is not a ref and is skipped.
  */
 export function namedBy(steps: unknown, epic: unknown): string[] {
   const out = new Set<string>()
@@ -888,7 +892,11 @@ export function namedBy(steps: unknown, epic: unknown): string[] {
   }
   const fromSteps = (list: unknown) => {
     if (!Array.isArray(list)) return
-    for (const step of list) if (isObject(step) && Array.isArray(step.refs)) step.refs.forEach(take)
+    for (const step of list) {
+      if (!isObject(step)) continue
+      if (Array.isArray(step.refs)) step.refs.forEach(take)
+      if (Array.isArray(step.related)) step.related.forEach(take)
+    }
   }
   if (isObject(steps)) fromSteps(steps.steps)
   if (isObject(epic)) {
