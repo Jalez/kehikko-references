@@ -69,7 +69,10 @@ are its own: every step's `refs`, and its umbrella. So the container header has
 a **Scope** group, on by default:
 
 - **This epic** (the resting option) narrows to the refs the open epic names,
-  asked of the host with `steps.list` and `epic.get`.
+  asked of the host with `steps.list` and `epic.get`, and to the changes in the
+  reading that are part of one of those issues ("Part of #3912": protocol
+  2.26.0 `contributes` / `contributedBy`, `src/live/ties.ts`). Such a change's
+  row says `part of #3912`, and the issue's `has contributions from !3907`.
 - **While containers are picked out** on the kehikko, the same option narrows to
   the union of what they say they are showing (`context.containers`,
   `showing.refs`) instead, and its label says `Picked containers`. This
@@ -465,7 +468,8 @@ the same id and a choice means the same thing in every container.
 The reason a ref closed comes from a person's mark when there is one
 (`context.dispositions`), and otherwise from the tracker: GitHub's `stateReason`
 on the row, and for a GitLab issue the row's `closedByMerge` — or a `closed-by`
-link to a change the same reading has as merged. A closed ref with neither is "reason unknown" — a state
+link to a change the same reading has as merged. A change that is only part of
+the issue never counts there. A closed ref with neither is "reason unknown" — a state
 to settle, never counted as done. A row whose state nobody could read has no
 facets and no toggle ever hides it.
 

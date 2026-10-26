@@ -119,6 +119,14 @@ export interface Reference {
   /** Where it sits in a stack of open changes, from the host's `stack` links across the reading (2.8.0). */
   stack?: StackPlace
   /**
+   * On a change: the issues it says it delivers PART of — "Part of #3912" (protocol 2.26.0
+   * `contributes`, and the issues' `contributedBy` read back). Never a closing: see `ties.ts`.
+   * Absent when there is none, and from a host that does not say.
+   */
+  partOf?: string[]
+  /** On an issue: the changes that are part of it, the other end of `partOf`. Never makes it closed or done. */
+  contributions?: string[]
+  /**
    * The row filed under this reference was not a row the protocol describes —
    * it named a ref, and little else this app could read.
    *

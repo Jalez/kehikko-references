@@ -198,6 +198,13 @@ export const ID = 'kehikot.references'
  * Three, because the data source moved again; before it two, for the same
  * reason; and minors between, because every control did.
  *
+ * `3.10.0` (Jalez/kehikko#187): work that is part of an issue (protocol 2.26.0
+ * `contributes` and `contributedBy`). A change that says "Part of #3912" is
+ * under "This epic" with `#3912`, and in a picked part that lists it; its row
+ * says "part of #3912" and the issue's "has contributions from !3907". It never
+ * makes the issue closed or `closedByMerge`. A minor: a host without 2.26.0
+ * sends neither field, and the list is exactly 3.9.0's. See `src/live/ties.ts`.
+ *
  * `3.5.0`: faces. The assigned and review markers draw people as tiny round
  * avatars, overlapping, `+N` past three, a reviewer's state as a badge shape on
  * their face, initials where there is no picture (protocol 2.10.0 `people`).

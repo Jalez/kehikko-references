@@ -7,6 +7,7 @@ import type { Reference } from '@/live/reference.ts'
 import { handLink, handsLink } from '@/live/links.ts'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { roleSaid } from '@/live/roles.ts'
+import { tieSaid } from '@/live/ties.ts'
 import { Markers } from './markers.tsx'
 import { StateWord } from './state-word.tsx'
 
@@ -249,6 +250,8 @@ export function overview(row: Reference, now: number = Date.now()): string {
   parts.push(row.people.length ? row.people.join(', ') : 'nobody')
   const mine = roleSaid(row.myRoles)
   if (mine) parts.push(`my role: ${mine}`)
+  const tie = tieSaid(row)
+  if (tie) parts.push(tie)
   if (row.stack) parts.push(`stacked ${row.stack.at} of ${row.stack.of}: ${row.stack.members.map((m) => m.ref).join(' → ')}`)
   const assigned = assignedSaid(row)
   if (assigned) parts.push(assigned)
@@ -419,6 +422,19 @@ export function ReferenceRow({
         >
           {row.title || (row.unreadable ? 'this reference arrived with no reading at all' : 'no title in the reading')}
         </span>
+
+        {/* The tie to an issue — `part of #3912` on a change, `has contributions from !3907` on the
+            issue (protocol 2.26.0) — beside the title and kept while it truncates, so a merge request
+            that delivers a piece of an issue says which. Plain text, never a link. Under 24rem of the
+            frame it goes with the title and is still spoken, and the row's tooltip says it. */}
+        {tieSaid(row) && (
+          <span
+            data-tie
+            className="sr-only max-w-[45%] shrink-0 truncate text-xs text-muted-foreground @sm/frame:not-sr-only"
+          >
+            {tieSaid(row)}
+          </span>
+        )}
 
         {row.labels.length > 0 && (
           <span className="hidden shrink-0 gap-1 @3xl:flex">

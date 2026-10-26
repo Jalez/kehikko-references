@@ -7,6 +7,7 @@ import { collect } from '@/live/collect.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { roleRefs } from '@/live/roles.ts'
+import { withContributions } from '@/live/ties.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
@@ -194,9 +195,13 @@ export function App() {
    */
   /* The refs the Scope group's My role options narrow to, read off the rows. */
   const roles = useMemo(() => roleRefs(rows), [rows])
+  /* What "This epic" reaches: the refs it names, and the changes on the list that are part of one of
+     them ("Part of #3912", protocol 2.26.0), so a partial merge request is shown with its issue. The
+     same list from a host that does not say. See `withContributions` in `ties.ts`. */
+  const inEpic = useMemo(() => (epicRefs ? withContributions(epicRefs, rows) : null), [epicRefs, rows])
   const canvas = useMemo(
-    () => ({ selection, epicRefs, aimed, marks, parts, roles, wholeProject }),
-    [selection, epicRefs, aimed, marks, parts, roles, wholeProject],
+    () => ({ selection, epicRefs: inEpic, aimed, marks, parts, roles, wholeProject }),
+    [selection, inEpic, aimed, marks, parts, roles, wholeProject],
   )
   const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 

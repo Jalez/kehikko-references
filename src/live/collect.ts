@@ -3,6 +3,7 @@ import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 import { assignedFaces, faceOf, reviewerFaces } from './faces.ts'
 import { stackPlaces, type StackPlace } from './markers.ts'
 import type { Reference } from './reference.ts'
+import { tiesOf, type Ties } from './ties.ts'
 
 /**
  * The host's shared tracker reading, turned into rows.
@@ -57,7 +58,12 @@ const link = (v: unknown): string | null => {
 }
 
 /** One row of the reading, as this app draws one. */
-function fromRow(row: TrackerRow, merged: ReadonlySet<string>, stack: StackPlace | undefined): Reference {
+function fromRow(
+  row: TrackerRow,
+  merged: ReadonlySet<string>,
+  stack: StackPlace | undefined,
+  ties: Ties | undefined,
+): Reference {
   /* Author first on a change, then assignees: the author is the person
      somebody scanning a list of changes is most often looking for, and the
      list is cut off by width long before it is cut off by length. An issue's
@@ -72,7 +78,9 @@ function fromRow(row: TrackerRow, merged: ReadonlySet<string>, stack: StackPlace
     stateReason: row.stateReason ?? null,
     /* The row's own word when it has one. When it says nothing either way, a
        `closed-by` link to a change this same reading has as merged is the same
-       fact read off the other end — never a guess from a title. */
+       fact read off the other end — never a guess from a title. A change
+       that is only PART of the issue ("Part of #3912", `contributedBy`) is
+       not a `closed-by` link and never counts here: see `ties.ts`. */
     closedByMerge:
       row.kind === 'issue' &&
       (row.closedByMerge === true ||
@@ -104,6 +112,9 @@ function fromRow(row: TrackerRow, merged: ReadonlySet<string>, stack: StackPlace
       : {}),
     ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
     ...(stack ? { stack } : {}),
+    /* Absent rather than `[]` when there is no tie, so an older host's rows are the rows they were. */
+    ...(ties?.partOf.length ? { partOf: ties.partOf } : {}),
+    ...(ties?.contributions.length ? { contributions: ties.contributions } : {}),
     unreadable: false,
   }
 }
@@ -156,7 +167,10 @@ export function collect(rows: unknown): Reference[] {
 
   /* Stacks are worked out over every row read, not over what is shown: a
      filter that hides the change underneath does not unstack this one. */
-  const stacks = stackPlaces(parsed.flatMap(({ row }) => (row.success ? [row.data] : [])))
+  const readable = parsed.flatMap(({ row }) => (row.success ? [row.data] : []))
+  const stacks = stackPlaces(readable)
+  /* So are the ties between a change and the issue it is part of: both ends, across the reading. */
+  const ties = tiesOf(readable)
 
   const out: Reference[] = []
   const seen = new Set<string>()
@@ -164,7 +178,7 @@ export function collect(rows: unknown): Reference[] {
     const ref = row.success ? row.data.ref : isObject(raw) ? str(raw.ref) : ''
     if (!ref || seen.has(ref)) continue
     seen.add(ref)
-    out.push(row.success ? fromRow(row.data, merged, stacks.get(row.data.ref)) : unreadableRow(ref, raw as Record<string, unknown>))
+    out.push(row.success ? fromRow(row.data, merged, stacks.get(row.data.ref), ties.get(row.data.ref)) : unreadableRow(ref, raw as Record<string, unknown>))
   }
 
   return out.sort((a, b) => {
