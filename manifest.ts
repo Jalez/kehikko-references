@@ -129,11 +129,13 @@ import pkg from './package.json'
  * show while any are picked, and "Everything" is one press away. The rows the
  * scope hides are still read, still counted, and still reachable by `goto`.
  *
- * ## `scope: 'epic'`, which is now true in full
+ * ## Two scopes: the open epic, or the whole project
  *
- * `epic` means the tab is "told which epic is open and told again on every
- * switch", and this app uses both halves: the project whose reading to ask
- * for, and the epic to narrow to. It used to use only the first and say so here.
+ * `epic` by default (protocol 2.29.0): the project whose reading to ask for,
+ * and the epic to narrow to. `project` is the person's pick per container in
+ * the host — or "All epics" — and then the Scope group rests on Everything, the
+ * project's whole reading, without writing the stored choice
+ * (`restsOnEverything`). `declares.scopes` says the same to a host before 2.29.0.
  *
  * ## No `mcp`, and that is a decision rather than an omission
  *
@@ -357,7 +359,11 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     'and other modules react to it, so select the reference you are working on and leave it selected ' +
     'while you work.',
   entry: '/',
-  modes: [{ id: 'references', label: 'References', scope: 'epic' }],
+  /* What its content belongs to (protocol 2.29.0): one mode per scope, the default first. */
+  modes: [
+    { id: 'references', label: 'References', scope: 'epic', scopeSays: 'the references the open epic names, or what the picked containers show' },
+    { id: 'all', label: 'All epics', scope: 'project', scopeSays: 'every reference in this project’s reading, across all epics' },
+  ],
   /**
    * What this page DOES with the context it is handed — the receiving half of
    * the selection, and the newest claim in this file.
@@ -414,7 +420,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh', 'address:open'],
     storage: true,
     /*
-     * "All epics" (protocol 2.9.0): with `context.scope: 'project'` the Scope group rests on
+     * For a host before the `project` mode above (protocol 2.29.0). "All epics" (protocol 2.9.0):
+     * with `context.scope: 'project'` the Scope group rests on
      * Everything — the project's whole reading — and comes back to the epic's scope when an epic
      * is picked again, without writing the stored choice. See `restsOnEverything` in `src/live/sift.ts`.
      */

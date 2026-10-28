@@ -28,6 +28,9 @@ describe('the manifest a host reads', () => {
   test('can show a whole project: "All epics" rests the scope on Everything (protocol 2.9.0)', () => {
     expect(MANIFEST.declares.scopes).toEqual(['epic', 'project'])
     expect(showsProject(MANIFEST)).toBe(true)
+    /* Protocol 2.29.0: Epic by default, Project for a person to pick, each saying what it shows. */
+    expect(MANIFEST.modes.map((mode) => mode.scope)).toEqual(['epic', 'project'])
+    for (const mode of MANIFEST.modes) expect((mode.scopeSays ?? '').length).toBeGreaterThan(0)
   })
 
   test('says it both sets the selection and narrows when it changes', () => {
