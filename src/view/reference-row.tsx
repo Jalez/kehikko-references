@@ -10,6 +10,7 @@ import { roleSaid } from '@/live/roles.ts'
 import { tieSaid } from '@/live/ties.ts'
 import { Markers } from './markers.tsx'
 import { StateWord } from './state-word.tsx'
+import { CopyButton } from './copy-button.tsx'
 
 /**
  * One reference, in as little vertical space as the column it is in allows.
@@ -474,6 +475,8 @@ export function ReferenceRow({
       </button>
 
       <Markers row={row} now={at} onPick={onPick} />
+
+      <CopyButton row={row} />
 
       <Tracker row={row} onOpenLink={onOpenLink ?? null} />
     </li>
