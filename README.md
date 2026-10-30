@@ -108,7 +108,7 @@ know who you are, leaves the column empty and the two Scope options unoffered.
 
 ### Markers: the stack, who holds it, and activity by somebody else
 
-Beside the row's pressable box, at every width, up to four markers (issues #23
+Beside the row's pressable box, at every width, up to four markers and the state (issues #23
 and #25). Each says only what the host's reading says; none is worked out here
 from a name.
 
@@ -129,10 +129,22 @@ from a name.
   (reviewing), a ring with a bang (changes requested) or a ring with a tick
   (approved). The tooltip leads with the strongest any reviewer gives and names
   every reviewer with theirs.
-- **Unaddressed activity** — a bell on an OPEN reference whose last activity
-  (protocol 2.8.0 `lastActivity`) was somebody else's: `Last activity: mona, a
-  review, 3 h ago`. Only when the host says whose it was against who you are
-  (`lastActivity.mine`); when it does not know who you are there is no marker,
+- **State** — the row's state as a small coloured glyph, the pipeline mark's
+  size and just before it, so the two read as a pair (`StateMark`; words in
+  `live/state.ts`). A merge or pull request is `git-pull-request` open (green),
+  `git-pull-request-draft` draft (muted), `git-merge` merged (purple),
+  `git-pull-request-closed` closed (red); an issue is `circle-dot` open
+  (green), `circle-check` closed — purple when done (a merged closer or
+  `COMPLETED`), muted otherwise — and `circle-slash` not planned or a
+  duplicate. A state the reading did not carry is a question mark, never open.
+  Tooltip and `aria-label` say it in words: `Merge request · open`,
+  `Issue · closed by !4019`.
+- **Unaddressed activity** — on an OPEN reference whose last activity
+  (protocol 2.8.0 `lastActivity`) was somebody else's, a dot on the row's "⋯"
+  and the sentence — `Last activity: mona, a review, 3 h ago` — as its
+  description and as an item in its menu, with the bell, that opens the page in
+  your browser. Only when the host says whose it was against who you are
+  (`lastActivity.mine`); when it does not know who you are there is nothing,
   never a guess from a name. Closed and merged references have nothing left to
   address.
 
@@ -163,11 +175,13 @@ Cmd+C (Ctrl+C) does the linked copy while rows are selected, unless text is
 selected or focus is in a field (`takesCopyKey`). The copy is written in this
 page, never from a header item: a clipboard write needs the press in this frame.
 
-Clicking a row selects it, and a module that shows pages shows it. The row's
-`external-link` icon ("Open in your browser") goes the other way: it opens the
-tracker's page in the person's own browser (`openOutside` in `live/links.ts`), a
-new-window request that the desktop shell hands to the operating system's opener,
-and never hands the address to the canvas.
+Clicking a row selects it, and a module that shows pages shows it. Each row
+ends in a "⋯" menu (`view/row-menu.tsx`, a shadcn dropdown): "Open in your
+browser" opens the tracker's page in the person's own browser (`openOutside` in
+`live/links.ts`), a new-window request that the desktop shell hands to the
+operating system's opener, never handed to the canvas; "Copy reference"; and the
+last activity when it was somebody else's. From 24rem of the frame the copy button
+sits beside "⋯"; below that only "⋯" is left.
 
 ### Faces
 

@@ -86,7 +86,8 @@ describe('what a row may never stop showing, and the title it now may (issue #24
     const line = rowLine(container)
     const spans = [...line.querySelectorAll('span')]
     const identifier = spans.find((s) => s.textContent === 'gh#131')
-    const state = spans.find((s) => s.textContent === 'open')
+    /* The state is a glyph beside the pipeline mark now, outside the pressable box. */
+    const state = container.querySelector('li[data-ref] [data-marker^="state-"]') as HTMLElement | null
     const found = { identifier, state }[which]
     expect(found).toBeDefined()
     /* Walk up to the row itself: a hiding rule on any ancestor inside the row
@@ -123,8 +124,24 @@ describe('what a row may never stop showing, and the title it now may (issue #24
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const cluster = container.querySelector('[data-markers]') as HTMLElement
     const marks = [...cluster.querySelectorAll('[data-marker]')] as HTMLElement[]
-    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'unaddressed'])
+    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'state-change-open'])
     for (const m of [cluster, ...marks]) expect(m.className).not.toMatch(/(^|\s|:)hidden(\s|$)/)
+  })
+
+  test('under 24rem of the frame only "⋯" is left at the row’s end; from it the copy button is beside it', () => {
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const li = rowBox(container)
+    const menu = li.querySelector('[data-row-menu]') as HTMLElement
+    expect(menu.getAttribute('aria-label')).toBe('More for gh#131')
+    for (let node: HTMLElement | null = menu; node && node !== li; node = node.parentElement) {
+      expect(node.className).not.toMatch(/(^|\s|:)(hidden|sr-only)(\s|$)/)
+    }
+    const copy = li.querySelector('[data-copy]')!.parentElement as HTMLElement
+    expect(copy.className.split(/\s+/)).toContain('hidden')
+    expect(copy.className.split(/\s+/)).toContain('@sm/frame:flex')
+    /* Nothing else at the row's end: no loose open link, no bell. */
+    expect(li.querySelector('a[target="_blank"]')).toBeNull()
+    expect(li.querySelector('[data-marker="unaddressed"]')).toBeNull()
   })
 
   test('the row is one line at every width: no stacked layout left to fall back to', () => {

@@ -675,14 +675,11 @@ describe('picking references out', () => {
     expect(ticked()).toEqual([])
   })
 
-  test('the tracker is still reachable, as a link of its own on every row', async () => {
+  test('every row has its own "⋯" menu, named for the row', async () => {
     await listed(4)
-    const links = [...document.querySelectorAll('li[data-ref] a[target="_blank"]')]
-    expect(links).toHaveLength(4)
-    expect(links[0]?.getAttribute('href')).toContain('github.com')
-    /* And it says where it goes, because an icon that opens a new tab has to be
-       readable before it is pressed. */
-    expect(links[0]?.getAttribute('aria-label')).toBe('Open gh#1 in your browser')
+    const menus = [...document.querySelectorAll('li[data-ref] [data-row-menu]')]
+    expect(menus).toHaveLength(4)
+    expect(menus[0]?.getAttribute('aria-label')).toBe('More for gh#1')
   })
 })
 

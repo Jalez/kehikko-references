@@ -1,12 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { cleanup } from '@testing-library/react'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 
 import { MANIFEST } from '../manifest.ts'
-import { collect } from '@/live/collect.ts'
 import { handLink, handsLink, openOutside, stillFollow } from '@/live/links.ts'
-import { ReferenceList } from '@/view/reference-list.tsx'
-import { row } from './fixtures.ts'
 
 /**
  * Links handed to the canvas (`address.open`, protocol 2.16.0) — a pipeline's
@@ -62,58 +59,5 @@ describe('openOutside', () => {
       expect(openOutside(url, (to) => opened.push(to))).toBe(false)
     }
     expect(opened).toEqual(['https://github.com/example/repo/issues/7'])
-  })
-})
-
-describe('the row’s link opens the person’s own browser', () => {
-  const rows = collect([row('gh#7')])
-  const g = globalThis as unknown as { window: { open: unknown } }
-  let had: unknown
-  let opened: unknown[][]
-  beforeEach(() => {
-    had = g.window.open
-    opened = []
-    g.window.open = (...args: unknown[]) => void opened.push(args)
-  })
-  afterEach(() => {
-    g.window.open = had
-  })
-
-  test('a press opens a new window at the address, and never hands it to the canvas', () => {
-    const asked: string[] = []
-    const picked: string[] = []
-    const { container } = render(
-      <ReferenceList
-        rows={rows}
-        landedOn={null}
-        selection={[]}
-        onPick={(ref) => picked.push(ref)}
-        onToggle={() => {}}
-        onOpenLink={(url) => {
-          asked.push(url)
-          return Promise.resolve({ outcome: 'shown', why: '' })
-        }}
-      />,
-    )
-    const link = container.querySelector('a[data-open-outside]') as HTMLAnchorElement
-    expect(link.getAttribute('href')).toBe('https://github.com/example/repo/issues/7')
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(link.getAttribute('aria-label')).toBe('Open gh#7 in your browser')
-    expect(fireEvent.click(link)).toBe(false)
-    expect(opened).toEqual([['https://github.com/example/repo/issues/7', '_blank', 'noopener,noreferrer']])
-    expect(asked).toEqual([])
-    expect(picked).toEqual([])
-  })
-
-  test('the same without a host that answers address.open', () => {
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    fireEvent.click(container.querySelector('a[data-open-outside]') as HTMLAnchorElement)
-    expect(opened).toHaveLength(1)
-  })
-
-  test('says "Open in your browser" on hover', async () => {
-    const { container, findAllByText } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    fireEvent.focus(container.querySelector('a[data-open-outside]') as HTMLAnchorElement)
-    expect((await findAllByText('Open in your browser')).length).toBeGreaterThan(0)
   })
 })

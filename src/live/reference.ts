@@ -78,6 +78,8 @@ export interface Reference {
    * change in the same reading; never guessed from a title. See `collect.ts`.
    */
   closedByMerge: boolean
+  /** On an issue: the merged changes in this reading its `closed-by` links name, for "closed by !4019". Absent when none. */
+  closedBy?: string[]
   /** A change the tracker says is not finished being written. Never inferred. */
   draft: boolean
   title: string
