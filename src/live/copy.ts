@@ -60,6 +60,32 @@ export function payloadOfAll(rows: Copyable[]): Payload {
 }
 
 /**
+ * Just the references, space-separated (`!4019 !4039 #3911`), for a prompt or a
+ * commit message. The same text in both formats, so a rich paste gets no markup.
+ */
+export function idsOfAll(rows: Copyable[]): Payload {
+  const plain = rows.map((row) => row.ref).join(' ')
+  return { html: escapeHtml(plain), plain }
+}
+
+/**
+ * The selected rows in the order they are listed on screen, each ref once.
+ *
+ * The selection is the host's and is in the order somebody picked things in, and
+ * may name refs this list is not drawing (narrowed away, or picked in another
+ * container); a copy is of what the person can see, top to bottom.
+ */
+export function selectedInOrder<Row extends Copyable>(shown: readonly Row[], selection: readonly string[]): Row[] {
+  const picked = new Set(selection)
+  const seen = new Set<string>()
+  return shown.filter((row) => {
+    if (!picked.has(row.ref) || seen.has(row.ref)) return false
+    seen.add(row.ref)
+    return true
+  })
+}
+
+/**
  * Both formats in one write; `writeText(plain)` when `ClipboardItem` is missing
  * or the write is refused (a frame without `clipboard-write` refuses both, and
  * then this says so by returning false).

@@ -266,7 +266,7 @@ describe('the layout', () => {
     const ul = container.querySelector('ul') as HTMLElement
     expect(ul.style.getPropertyValue('--faces-assigned')).toBe('20px')
     expect(ul.style.getPropertyValue('--faces-review')).toBe('20px')
-    const marks = [...container.querySelectorAll('li[data-ref="gh#40"] [data-marker]')] as HTMLElement[]
+    const marks = [...container.querySelectorAll('li[data-ref="gh#40"] [data-marker="assigned"], li[data-ref="gh#40"] [data-marker^="review"]')] as HTMLElement[]
     expect(marks[0]!.className).toContain('@sm/frame:w-[var(--faces-assigned,56px)]')
     expect(marks[1]!.className).toContain('@sm/frame:w-[var(--faces-review,56px)]')
     for (const m of marks) {

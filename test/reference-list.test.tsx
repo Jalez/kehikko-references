@@ -71,7 +71,9 @@ describe('what a row shows when the reading is thin', () => {
   test('an unreadable state is drawn as unseen, never as open', () => {
     const rows = collect([{ ref: '#1', state: 'something-else', title: 'x' }])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    expect(container.textContent).toContain('unseen')
+    const state = container.querySelector('[data-marker^="state-"]')!
+    expect(state.getAttribute('data-marker')).toBe('state-unseen')
+    expect(state.getAttribute('aria-label')).toBe('Issue · state not read')
     expect(container.textContent).not.toContain('open')
   })
 
@@ -96,10 +98,12 @@ describe('what a row shows when the reading is thin', () => {
     const { container } = render(
       <ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />,
     )
-    const marked = [...container.querySelectorAll('li[data-ref]')]
-      .filter((li) => li.querySelector('[data-kind="change"]'))
-      .map((li) => li.getAttribute('data-ref'))
-    expect(marked).toEqual(['gh#105'])
+    /* The state glyph says which: a pull request's open is not an issue's. */
+    const state = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-marker^="state-"]`)!
+    expect(state('gh#105').getAttribute('data-marker')).toBe('state-change-open')
+    expect(state('gh#105').getAttribute('aria-label')).toBe('Pull request · open')
+    expect(state('gh#131').getAttribute('data-marker')).toBe('state-issue-open')
+    expect(state('gh#131').getAttribute('aria-label')).toBe('Issue · open')
     /* And it is named in the words the tracker uses rather than in the filter's
        word: nobody has ever gone looking for "a change". */
     expect(container.querySelector('li[data-ref="gh#105"]')?.getAttribute('title')).toContain('pull request')

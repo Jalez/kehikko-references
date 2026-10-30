@@ -1,11 +1,26 @@
 import { useState, type ReactNode } from 'react'
-import { BellDot, CircleCheck, CircleDashed, CircleMinus, CircleSlash, CircleX, Layers, LoaderCircle } from 'lucide-react'
+import {
+  CircleCheck,
+  CircleDashed,
+  CircleDot,
+  CircleMinus,
+  CircleQuestionMark,
+  CircleSlash,
+  CircleX,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  Layers,
+  LoaderCircle,
+} from 'lucide-react'
 import type { AddressOpenResult, PipelineState } from 'kehikot-module-protocol'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
+import { assignedSaid, reviewOf, stackSaid } from '@/live/markers.ts'
+import { stateLook, stateSaid, type StateLook } from '@/live/state.ts'
 import type { Reference } from '@/live/reference.ts'
 import { handLink, handsLink } from '@/live/links.ts'
 import { pipelineSaid, type Pipeline } from '@/live/pipeline.ts'
@@ -132,7 +147,7 @@ function StackMark({ row, onPick }: { row: Reference; onPick: (ref: string) => v
  * ago it moved.
  *
  * With a link in the reading the mark is a link: a press hands the address to
- * the canvas, the way the row's own way out does, and a new tab is the
+ * the canvas (a module that shows pages takes it), and a new tab is the
  * fallback. Without one it only explains itself. No pipeline, no mark.
  */
 const PIPELINE_LOOK: Record<PipelineState, { icon: ReactNode; tone: string }> = {
@@ -190,6 +205,36 @@ export function PipelineMark({
 }
 
 /**
+ * The row's state as a small coloured glyph beside the pipeline mark, the same
+ * size and box, so the two read as a pair: where the work stands, and where its
+ * pipeline does. Every state has its own glyph and the colour only says it again
+ * (never colour alone); the words — "Merge request · open", "Issue · closed by
+ * !4019" — are its tooltip, on hover and on focus, and its `aria-label`. A state
+ * the reading did not carry is a dashed question, never drawn as open.
+ */
+const STATE_LOOK: Record<StateLook, { icon: ReactNode; tone: string }> = {
+  'change-open': { icon: <GitPullRequest className="size-3.5" aria-hidden="true" />, tone: 'text-emerald-700 dark:text-emerald-400' },
+  'change-draft': { icon: <GitPullRequestDraft className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+  'change-merged': { icon: <GitMerge className="size-3.5" aria-hidden="true" />, tone: 'text-violet-700 dark:text-violet-400' },
+  'change-closed': { icon: <GitPullRequestClosed className="size-3.5" aria-hidden="true" />, tone: 'text-red-700 dark:text-red-400' },
+  'issue-open': { icon: <CircleDot className="size-3.5" aria-hidden="true" />, tone: 'text-emerald-700 dark:text-emerald-400' },
+  'issue-done': { icon: <CircleCheck className="size-3.5" aria-hidden="true" />, tone: 'text-violet-700 dark:text-violet-400' },
+  'issue-closed': { icon: <CircleCheck className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+  'issue-not-planned': { icon: <CircleSlash className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+  unseen: { icon: <CircleQuestionMark className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+}
+
+export function StateMark({ row }: { row: Reference }) {
+  const look = stateLook(row)
+  const said = stateSaid(row)
+  return (
+    <Mark name={`state-${look}`} said={said} label={said} className={cn('w-6', STATE_LOOK[look].tone)}>
+      {STATE_LOOK[look].icon}
+    </Mark>
+  )
+}
+
+/**
  * The cluster, and an empty slot where a marker is not. From 24rem of the frame
  * every row's cluster is one width, so the pressable box beside it is too, and
  * the date, role and people columns inside it line up down the list. Below
@@ -202,17 +247,7 @@ const SLOT = {
   assigned: <span aria-hidden="true" data-slot="assigned" className="hidden h-6 w-[var(--faces-assigned,56px)] @sm/frame:block" />,
   review: <span aria-hidden="true" data-slot="review" className="hidden h-6 w-[var(--faces-review,56px)] @sm/frame:block" />,
   pipeline: <span aria-hidden="true" data-slot="pipeline" className="hidden size-6 @sm/frame:block" />,
-  mark: <span aria-hidden="true" className="hidden size-6 @sm/frame:block" />,
 }
-const SLOTS = (
-  <>
-    {SLOT.stack}
-    {SLOT.assigned}
-    {SLOT.review}
-    {SLOT.pipeline}
-    {SLOT.mark}
-  </>
-)
 
 export function Markers({
   row,
@@ -228,9 +263,7 @@ export function Markers({
 }) {
   const assigned = assignedSaid(row)
   const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
-  const last = unaddressed(row, now)
   const pipeline = row.kind === 'change' ? row.pipeline : undefined
-  if (!row.stack && !assigned && !review && !pipeline && !last) return <span data-markers className={cn(CLUSTER, 'hidden @sm/frame:flex')}>{SLOTS}</span>
   return (
     <span data-markers title="" className={CLUSTER}>
       {row.stack ? <StackMark row={row} onPick={onPick} /> : SLOT.stack}
@@ -244,12 +277,8 @@ export function Markers({
           <Faces faces={row.reviewerFaces ?? []} />
         </Mark>
       ) : SLOT.review}
+      <StateMark row={row} />
       {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} /> : SLOT.pipeline}
-      {last ? (
-        <Mark name="unaddressed" said={last} label={`Unaddressed activity. ${last}`} className="w-6 text-foreground">
-          <BellDot className="size-3.5" aria-hidden="true" />
-        </Mark>
-      ) : SLOT.mark}
     </span>
   )
 }

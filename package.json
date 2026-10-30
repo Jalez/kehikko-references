@@ -1,6 +1,6 @@
 {
   "name": "kehikot-references",
-  "version": "3.12.1",
+  "version": "3.13.0",
   "private": true,
   "type": "module",
   "description": "Every issue and pull request in a project, read from the project's own GitHub with the login gh already holds, as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A host may frame it, and then it knows which project to read.",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.11",
+    "@radix-ui/react-dropdown-menu": "^2.2.1",
     "@radix-ui/react-popover": "^1.1.23",
     "@radix-ui/react-slot": "^1.3.3",
     "@radix-ui/react-tooltip": "^1.2.8",

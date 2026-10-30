@@ -116,7 +116,7 @@ describe('who holds it (issue #25)', () => {
       row('gh#3', {}),
     ])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const marks = (ref: string) => [...container.querySelectorAll(`li[data-ref="${ref}"] [data-marker]`)] as HTMLElement[]
+    const marks = (ref: string) => [...container.querySelectorAll(`li[data-ref="${ref}"] [data-marker]:not([data-marker^="state-"])`)] as HTMLElement[]
     expect(marks('gh#1').map((m) => m.dataset.marker)).toEqual(['assigned', 'review-approved'])
     expect(marks('gh#1')[0]!.getAttribute('aria-label')).toBe('Assigned to Ada')
     expect(marks('gh#1')[1]!.getAttribute('aria-label')).toBe('Approved: mona (approved)')
@@ -124,9 +124,9 @@ describe('who holds it (issue #25)', () => {
     expect(marks('gh#2').map((m) => m.dataset.marker)).toEqual(['review-asked'])
     /* Not colour alone: the two review words are two different icons. */
     expect(marks('gh#1')[1]!.innerHTML).not.toBe(marks('gh#2')[0]!.innerHTML)
-    /* Nothing to say: no marker, only the empty slots that keep the wide columns aligned, which are not drawn narrow. */
-    expect(container.querySelector('li[data-ref="gh#3"] [data-marker]')).toBeNull()
-    expect(container.querySelector('li[data-ref="gh#3"] [data-markers]')!.className).toContain('hidden @sm/frame:flex')
+    /* Nothing to say: no marker but the state's glyph, and the empty slots that keep the wide columns aligned. */
+    expect(marks('gh#3')).toEqual([])
+    expect([...container.querySelectorAll('li[data-ref="gh#3"] [data-marker]')].map((m) => (m as HTMLElement).dataset.marker)).toEqual(['state-issue-open'])
   })
 
   test('the row’s tooltip says them too', () => {
@@ -162,16 +162,23 @@ describe('unaddressed activity (issue #25)', () => {
     expect(agoSaid('2026-10-18T12:00:00Z', NOW)).toBe('3 d ago')
   })
 
-  test('drawn only for somebody else, labelled as unaddressed activity', () => {
+  test('only for somebody else: a dot on the row’s "⋯", and the sentence as its description', () => {
     const rows = collect([
       row('#1', { lastActivity: { login: 'mona', at, kind: 'comment', mine: false } }),
       row('#2', { lastActivity: { login: 'jalez', at, kind: 'comment', mine: true } }),
       row('#3', { lastActivity: { login: 'mona', at, kind: 'comment' } }),
     ])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const mark = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-marker="unaddressed"]`)
-    expect(mark('#1')!.getAttribute('aria-label')).toStartWith('Unaddressed activity. Last activity: mona, a comment, ')
-    expect(mark('#2')).toBeNull()
-    expect(mark('#3')).toBeNull()
+    const menu = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-row-menu]`) as HTMLElement
+    const described = menu('#1').getAttribute('aria-describedby')!
+    expect(document.getElementById(described)!.textContent).toStartWith('Unaddressed activity. Last activity: mona, a comment, ')
+    expect(menu('#1').querySelector('[data-activity-dot]')).not.toBeNull()
+    expect(menu('#1').getAttribute('aria-label')).toBe('More for #1')
+    for (const ref of ['#2', '#3']) {
+      expect(menu(ref).querySelector('[data-activity-dot]')).toBeNull()
+      expect(menu(ref).hasAttribute('aria-describedby')).toBe(false)
+    }
+    /* The bell is not a loose marker any more. */
+    expect(container.querySelector('[data-marker="unaddressed"]')).toBeNull()
   })
 })

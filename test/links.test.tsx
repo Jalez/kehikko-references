@@ -1,17 +1,14 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup } from '@testing-library/react'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 
 import { MANIFEST } from '../manifest.ts'
-import { collect } from '@/live/collect.ts'
-import { handLink, handsLink, stillFollow } from '@/live/links.ts'
-import { ReferenceList } from '@/view/reference-list.tsx'
-import { row } from './fixtures.ts'
+import { handLink, handsLink, openOutside, stillFollow } from '@/live/links.ts'
 
 /**
- * A row's way out to the tracker, handed to the canvas (`address.open`,
- * protocol 2.16.0) when the host answers it: a Browser there opens it, or the
- * person is asked. With an older host the link opens a new tab as before.
+ * Links handed to the canvas (`address.open`, protocol 2.16.0) — a pipeline's
+ * link still is — and the row's own way out, which never is: it opens the
+ * person's own browser.
  */
 
 afterEach(cleanup)
@@ -54,35 +51,13 @@ describe('after handing it over', () => {
   })
 })
 
-describe('the row’s link', () => {
-  const rows = collect([row('gh#7')])
-
-  test('with a host that answers, a press hands the address over and the default is prevented', () => {
-    const asked: string[] = []
-    const { container } = render(
-      <ReferenceList
-        rows={rows}
-        landedOn={null}
-        selection={[]}
-        onPick={() => {}}
-        onToggle={() => {}}
-        onOpenLink={(url) => {
-          asked.push(url)
-          return Promise.resolve({ outcome: 'shown', why: '' })
-        }}
-      />,
-    )
-    const link = container.querySelector('a[href]') as HTMLAnchorElement
-    expect(link.getAttribute('href')).toBe('https://github.com/example/repo/issues/7')
-    const followed = fireEvent.click(link)
-    expect(followed).toBe(false)
-    expect(asked).toEqual(['https://github.com/example/repo/issues/7'])
-  })
-
-  test('without one, the link is an ordinary new-tab link', () => {
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const link = container.querySelector('a[href]') as HTMLAnchorElement
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(fireEvent.click(link)).toBe(true)
+describe('openOutside', () => {
+  test('opens a web address and nothing else', () => {
+    const opened: string[] = []
+    expect(openOutside('https://github.com/example/repo/issues/7', (url) => opened.push(url))).toBe(true)
+    for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'https://u:p@github.com/x', '', null, undefined]) {
+      expect(openOutside(url, (to) => opened.push(to))).toBe(false)
+    }
+    expect(opened).toEqual(['https://github.com/example/repo/issues/7'])
   })
 })

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { TrackerMissing } from 'kehikot-module-protocol'
 
 import { projectName } from './absence.tsx'
@@ -109,6 +110,7 @@ export function Heading({
   at,
   unread = [],
   now,
+  action = null,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
   project: string
@@ -122,6 +124,8 @@ export function Heading({
   unread?: readonly TrackerMissing[]
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
+  /** Drawn at the line's end: what can be done with the selected rows (`CopyMany`), when there is anything. */
+  action?: ReactNode
 }) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
   const brief = showing === total ? `${total}` : `${showing}/${total}`
@@ -158,6 +162,7 @@ export function Heading({
         {age && <span className="hidden @md:inline"> · {age}</span>}
         {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
       </span>
+      {action}
     </div>
   )
 }

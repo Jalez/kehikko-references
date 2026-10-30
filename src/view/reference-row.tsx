@@ -1,16 +1,13 @@
-import { ExternalLink, GitPullRequest } from 'lucide-react'
-
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
-import { handLink, handsLink } from '@/live/links.ts'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
 import { tieSaid } from '@/live/ties.ts'
 import { Markers } from './markers.tsx'
-import { StateWord } from './state-word.tsx'
+import { RowMenu } from './row-menu.tsx'
 import { CopyButton } from './copy-button.tsx'
 
 /**
@@ -83,7 +80,7 @@ import { CopyButton } from './copy-button.tsx'
  * written on the pressable box — the gap, the fixed columns — are measured
  * against the frame, while the thresholds written on its children — the labels,
  * the date, the people — are measured against the box itself, which is narrower
- * by the checkbox, the markers and the tracker link.
+ * by the checkbox, the markers, the copy button and the "⋯" menu.
  *
  * That split is correct rather than accidental: "is there room for the people
  * column" is a question about what is left after the row's controls have taken
@@ -129,9 +126,12 @@ import { CopyButton } from './copy-button.tsx'
  * the state is what they came to check; the markers say whether somebody
  * already holds it, which is what a narrow list beside a journey is for (#25).
  *
- * Nor is the checkbox ever dropped, and nor is the tracker link. They are the
- * row's two verbs, and a row you cannot act on at 220 pixels is a row somebody
- * has to widen a container to use.
+ * Nor is the checkbox ever dropped, and nor is the "⋯" menu (`row-menu.tsx`),
+ * which holds opening in the browser and the copy once the copy button has gone
+ * under 24rem. They are the row's verbs, and a row you cannot act on at 220
+ * pixels is a row somebody has to widen a container to use. The state is a
+ * glyph beside the pipeline mark (`StateMark` in `markers.tsx`), its words in
+ * its tooltip and label.
  *
  * ## One line at every width
  *
@@ -163,9 +163,6 @@ function day(at: string): string {
   return at.slice(0, 10)
 }
 
-/** What the tracker is called, for the sentence on the link. Read off the bag, never parsed. */
-const TRACKER: Record<Reference['origin'], string> = { github: 'GitHub', gitlab: 'GitLab' }
-
 /**
  * What one row IS, in the words the tracker that filed it uses.
  *
@@ -182,50 +179,6 @@ function whatItIs(row: Reference): string {
 }
 
 /**
- * The mark that says this row is a change, and the discoverability failure it
- * exists to fix.
- *
- * GitLab spells the difference into the identifier — `#41` is an issue and `!41`
- * is a merge request, and a reader who knows the convention needs nothing else.
- * GitHub numbers issues and pull requests in ONE sequence and spells them both
- * `gh#`, so on this list `gh#131` and `gh#105` were typographically identical
- * rows. The only thing that separated them was the state badge, and only by
- * accident: `merged` cannot be an issue, so a merged pull request was
- * distinguishable and an OPEN one was not distinguishable from anything.
- *
- * Measured against a real reading of `modes-are-modules`: twenty-two GitHub
- * issues and two GitHub pull requests, and nothing whatsoever on either of those
- * two rows saying they were pull requests. A person who believed this list did
- * not show their changes was reading it correctly — the changes were there and
- * the list never said so.
- *
- * So changes carry a mark and issues do not, and the asymmetry is the design
- * rather than an oversight. A glyph on every row is a column of noise that says
- * nothing at a glance; a glyph on two rows out of twenty-four is the two rows
- * standing out, which is exactly what somebody looking for their pull requests
- * needs. It costs about fourteen pixels on the rows that have it and nothing on
- * the rest.
- *
- * It is not the only answer to that problem and it is the one that works without
- * anybody pressing anything: the `Changes` filter and the `Kind` order both
- * bring them together, and both require knowing to look.
- */
-function KindMark({ row }: { row: Reference }) {
-  if (row.kind !== 'change') return null
-  return (
-    <span
-      data-kind="change"
-      title={`This is a ${whatItIs(row)}, not an issue.`}
-      aria-label={whatItIs(row)}
-      role="img"
-      className="shrink-0 text-muted-foreground"
-    >
-      <GitPullRequest className="size-3" />
-    </span>
-  )
-}
-
-/**
  * The whole row as one sentence, hung on the row as its `title`.
  *
  * The drop order above is defensible only while what it drops stays reachable,
@@ -235,10 +188,8 @@ function KindMark({ row }: { row: Reference }) {
  * width has taken away. It is deliberately built from the same fields in the
  * same order as the wide layout, so the tooltip and the row never disagree.
  *
- * The state badge keeps its own `title` where it has one, and so does the
- * tracker link, and that is not an oversight: `unseen` and `draft` need
- * explaining rather than repeating, and a more specific tooltip on a smaller
- * target is the browser's own rule.
+ * The state glyph and every marker carry their own tooltip, and the cluster's
+ * empty `title` keeps this one from opening over theirs.
  */
 export function overview(row: Reference, now: number = Date.now()): string {
   /* The kind is second, right after the identifier, because it is the thing the
@@ -265,50 +216,6 @@ export function overview(row: Reference, now: number = Date.now()): string {
   return parts.join(' · ')
 }
 
-/**
- * The way out to the tracker, drawn whether or not there is one.
- *
- * `url` is what the tracker itself said and is never built here, so a row with
- * no link is a row that opens nothing rather than one that opens the wrong
- * repository's issue 41. The inert twin is `aria-hidden` because a screen reader
- * announcing a link that is not a link is worse than silence, and it keeps its
- * `title` because a sighted reader hovering the one dim icon in a column of live
- * ones deserves the sentence.
- */
-function Tracker({ row, onOpenLink }: { row: Reference; onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null }) {
-  const shared = 'flex shrink-0 items-center self-stretch px-2'
-  if (!row.url) {
-    return (
-      <span
-        aria-hidden="true"
-        title={`The reading for ${row.ref} carried no link, so there is nothing to open.`}
-        className={cn(shared, 'text-muted-foreground/30')}
-      >
-        <ExternalLink className="size-3.5" />
-      </span>
-    )
-  }
-  return (
-    <a
-      href={row.url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => {
-        /* Handed to the canvas (`address.open`) when the host answers it: the Browser
-           there opens it, or the person is asked. Otherwise the link is followed. */
-        if (!onOpenLink || !handsLink(row.url, true)) return
-        event.preventDefault()
-        void handLink(row.url, onOpenLink)
-      }}
-      title={`Open ${row.ref} on ${TRACKER[row.origin]}`}
-      aria-label={`Open ${row.ref} on ${TRACKER[row.origin]}`}
-      className={cn(shared, 'text-muted-foreground hover:text-foreground focus-visible:text-foreground')}
-    >
-      <ExternalLink className="size-3.5" />
-    </a>
-  )
-}
-
 export function ReferenceRow({
   row,
   landed,
@@ -320,7 +227,7 @@ export function ReferenceRow({
 }: {
   row: Reference
   landed: boolean
-  /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
+  /** Hand a marker's link to the canvas (`address.open`), or null to follow it in a new tab. Not the open icon's: that opens the person's browser. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
   /** The clock the activity marker says "3 h ago" against. Tests pass one; the page reads it at drawing. */
   now?: number
@@ -403,12 +310,7 @@ export function ReferenceRow({
             would have been fourteen pixels of mostly-empty space on every row
             to serve two of them. */}
         <span className="flex shrink-0 items-center justify-end gap-1 @md:w-[5.5rem]">
-          <KindMark row={row} />
           <span className="truncate text-right font-mono text-xs tabular-nums text-muted-foreground">{row.ref}</span>
-        </span>
-
-        <span className="shrink-0 @md:w-[4.5rem]">
-          <StateWord row={row} />
         </span>
 
         {/* Under 24rem of the frame the title is not drawn (issue #24) and
@@ -478,9 +380,13 @@ export function ReferenceRow({
 
       <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} />
 
-      <CopyButton row={row} />
+      {/* From 24rem of the frame the copy button stays beside "⋯"; below that only
+          "⋯" is left, and the menu holds the copy too. */}
+      <span className="hidden self-stretch @sm/frame:flex">
+        <CopyButton row={row} />
+      </span>
 
-      <Tracker row={row} onOpenLink={onOpenLink ?? null} />
+      <RowMenu row={row} now={at} />
     </li>
   )
 }

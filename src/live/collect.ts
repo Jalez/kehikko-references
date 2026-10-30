@@ -64,6 +64,12 @@ function pipelineOf(row: TrackerRow): Pipeline {
   return { state: row.pipeline!, ...(url ? { url } : {}), ...(row.pipelineAt ? { at: row.pipelineAt } : {}) }
 }
 
+/** The merged changes a closed issue's `closed-by` links name, in the reading's order, each once. */
+function closersOf(row: TrackerRow, merged: ReadonlySet<string>): { closedBy?: string[] } {
+  const refs = [...new Set(row.links.filter((one) => one.relation === 'closed-by' && merged.has(one.ref)).map((one) => one.ref))]
+  return refs.length ? { closedBy: refs } : {}
+}
+
 /** One row of the reading, as this app draws one. */
 function fromRow(
   row: TrackerRow,
@@ -93,6 +99,7 @@ function fromRow(
       (row.closedByMerge === true ||
         (row.closedByMerge === undefined &&
           row.links.some((one) => one.relation === 'closed-by' && merged.has(one.ref)))),
+    ...(row.kind === 'issue' && row.state === 'closed' ? closersOf(row, merged) : {}),
     draft: row.draft === true,
     title: row.title,
     /* When it last moved, preferring the thing that ended it — merged, then

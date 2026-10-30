@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
-import { copyPayload, payloadOf, payloadOfAll } from '@/live/copy.ts'
+import { copyPayload, idsOfAll, payloadOf, payloadOfAll, selectedInOrder } from '@/live/copy.ts'
+import { CopyMany, payloadFor, takesCopyKey, type CopyKey } from '@/view/copy-many.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { row } from './fixtures.ts'
 
@@ -120,5 +121,85 @@ describe('the button', () => {
     expect(texts[0]).toContain('feat: x')
     expect(picked).toEqual([])
     await waitFor(() => expect(button.querySelector('svg.lucide-check')).not.toBeNull())
+  })
+})
+
+describe('several references', () => {
+  const third = { ref: '#3911', title: 'Fix <b> & "quotes"', url: 'https://github.com/example/repo/issues/3911' }
+
+  test('one line each, in both formats, escaped for html only', () => {
+    expect(payloadOfAll([mr, issue, third])).toEqual({
+      html:
+        `<div><a href="${mr.url}">!4013</a> ${mr.title}</div>`
+        + `<div><a href="${issue.url}">#187</a> Crash on start</div>`
+        + `<div><a href="${third.url}">#3911</a> Fix &lt;b&gt; &amp; &quot;quotes&quot;</div>`,
+      plain: `[!4013](${mr.url}) ${mr.title}\n[#187](${issue.url}) Crash on start\n[#3911](${third.url}) Fix <b> & "quotes"`,
+    })
+  })
+
+  test('ids only: space-separated, the same in both formats', () => {
+    expect(idsOfAll([mr, issue, third])).toEqual({ html: '!4013 #187 #3911', plain: '!4013 #187 #3911' })
+    expect(idsOfAll([{ ref: 'a<b', title: '', url: null }]).html).toBe('a&lt;b')
+    expect(payloadFor('ids', [mr, issue])).toEqual(idsOfAll([mr, issue]))
+    expect(payloadFor('linked', [mr, issue])).toEqual(payloadOfAll([mr, issue]))
+  })
+
+  test('as listed on screen, each once, and only what is listed', () => {
+    const shown = [mr, issue, third, { ...issue }]
+    expect(selectedInOrder(shown, ['#3911', '!4013', '#187', '#404']).map((row) => row.ref)).toEqual(['!4013', '#187', '#3911'])
+    expect(selectedInOrder(shown, [])).toEqual([])
+  })
+})
+
+describe('Cmd+C', () => {
+  const list = document.createElement('ul')
+  const item = document.createElement('button')
+  list.appendChild(item)
+  const field = document.createElement('input')
+  const elsewhere = document.createElement('button')
+  document.body.append(list, field, elsewhere)
+  const key = (more: Partial<CopyKey> = {}): CopyKey => ({
+    key: 'c',
+    metaKey: true,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    defaultPrevented: false,
+    target: document.body,
+    ...more,
+  })
+
+  test('is taken on the body or in the list, with Cmd or Ctrl', () => {
+    expect(takesCopyKey(key(), list, false)).toBe(true)
+    expect(takesCopyKey(key({ target: item }), list, false)).toBe(true)
+    expect(takesCopyKey(key({ key: 'C', metaKey: false, ctrlKey: true }), list, false)).toBe(true)
+  })
+
+  test('is left alone for a text selection, a field, elsewhere, other chords and other keys', () => {
+    expect(takesCopyKey(key(), list, true)).toBe(false)
+    expect(takesCopyKey(key({ target: field }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ target: elsewhere }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ shiftKey: true }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ altKey: true }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ metaKey: false }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ key: 'v' }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ defaultPrevented: true }), list, false)).toBe(false)
+    expect(takesCopyKey(key({ target: null }), list, false)).toBe(false)
+  })
+})
+
+describe('the bar', () => {
+  test('says the count, copies, offers ids in its menu, and says "Copied N"', async () => {
+    const asked: string[] = []
+    const { getByLabelText, findByText, getByText, rerender } = render(
+      <CopyMany count={3} copied={null} onCopy={(kind) => asked.push(kind)} />,
+    )
+    expect(getByText(/Copy 3/)).toBeTruthy()
+    fireEvent.click(getByLabelText('Copy 3 references with their links and titles'))
+    fireEvent.click(getByLabelText('More ways to copy the selected references'))
+    fireEvent.click(await findByText('Copy ids'))
+    expect(asked).toEqual(['linked', 'ids'])
+    rerender(<CopyMany count={3} copied={3} onCopy={() => {}} />)
+    expect(getByText('Copied 3')).toBeTruthy()
   })
 })
