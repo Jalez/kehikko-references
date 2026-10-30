@@ -24,6 +24,7 @@ import type { MyRole, TrackerActivity, TrackerReviewer } from 'kehikot-module-pr
 
 import type { Face, ReviewerFace } from './faces.ts'
 import type { StackPlace } from './markers.ts'
+import type { Pipeline } from './pipeline.ts'
 
 /** Which tracker it lives on, as the host's reading says — the row's `tracker`, never parsed out of the ref. */
 export type Origin = 'gitlab' | 'github'
@@ -126,6 +127,12 @@ export interface Reference {
   partOf?: string[]
   /** On an issue: the changes that are part of it, the other end of `partOf`. Never makes it closed or done. */
   contributions?: string[]
+  /**
+   * On a change: its head pipeline, where the reading says where it is and when it moved (protocol
+   * `pipeline`, and 2.34.0 `pipelineUrl`/`pipelineAt`). Absent when none ran or none was read. See
+   * `pipeline.ts`.
+   */
+  pipeline?: Pipeline
   /**
    * The row filed under this reference was not a row the protocol describes —
    * it named a ref, and little else this app could read.

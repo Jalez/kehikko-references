@@ -115,7 +115,7 @@ export function Heading({
   showing: number
   total: number
   /** What the scope is narrowing to, or `null` when it is not narrowing. */
-  scope?: 'epic' | 'containers' | 'review' | 'mine' | null
+  scope?: 'epic' | 'containers' | 'review' | 'mine' | 'failing' | null
   /** When the shared reading last changed, as the reading says. `undefined` draws no age at all. */
   at?: string | null
   /** The refs the reading names and holds no row for, and why. */
@@ -134,7 +134,9 @@ export function Heading({
           ? 'asked to review'
           : scope === 'mine'
             ? 'mine'
-            : null
+            : scope === 'failing'
+              ? 'pipeline failing'
+              : null
   const age = at === undefined ? null : ageOf(at, now)
   const gaps = unread.length ? `${unread.length} unread` : null
   const why = unread.map((gap) => `${gap.ref}: ${MISSING[gap.reason]}`)

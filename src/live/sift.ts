@@ -140,7 +140,7 @@ import type { RoleRefs } from './roles.ts'
  * umbrella. See `scopeOf`.
  */
 export interface Scope {
-  from: 'epic' | 'containers' | 'review' | 'mine'
+  from: 'epic' | 'containers' | 'review' | 'mine' | 'failing'
   refs: readonly string[]
 }
 
@@ -259,6 +259,14 @@ export const ALL = 'all'
 export const REVIEW = 'review'
 export const MINE = 'mine'
 
+/**
+ * The Scope group's "Pipeline failing" option (issue #38): open changes whose
+ * pipeline failed, across the project, for the same reason the My role options
+ * are here. Offered only while some row in the reading has a pipeline; see
+ * `failingRefs`.
+ */
+export const FAILING = 'failing'
+
 /** The option of the `kehikko` group that narrows to the canvas selection. */
 export const PICKED = 'picked'
 
@@ -338,6 +346,8 @@ export interface Canvas {
   parts?: readonly EpicPart[]
   /** The refs the My role options narrow to, from the reading; `null` when it does not say who the person is. */
   roles?: RoleRefs | null
+  /** The refs "Pipeline failing" narrows to, from the reading; `null` when no row has a pipeline. */
+  failing?: readonly string[] | null
   /**
    * The host is on "All epics" (`context.scope: 'project'`, protocol 2.9.0). See `wholeProject`.
    */
@@ -386,7 +396,7 @@ export function offer(
 ): FilterGroup[] | null {
   if (!read) return null
   if (rows.length === 0) return []
-  const { selection = [], epicRefs = null, aimed = null, marks = [], roles = null } = canvas
+  const { selection = [], epicRefs = null, aimed = null, marks = [], roles = null, failing = null } = canvas
   const whole = restsOnEverything(canvas)
   const reach = (refs: readonly string[]) => {
     const here = new Set(refs)
@@ -427,6 +437,7 @@ export function offer(
             { id: MINE, label: `Mine, any role ${roles.mine.length}` },
           ]
         : []),
+      ...(failing ? [{ id: FAILING, label: `Pipeline failing ${failing.length}` }] : []),
     ],
     fallback: whole ? ALL : IN_SCOPE,
   }
@@ -489,7 +500,7 @@ export function offer(
  * working the first time somebody pastes something long into it.
  */
 export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
-  const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [], roles = null } = canvas
+  const { selection = [], epicRefs = null, aimed = null, marks = [], parts = [], roles = null, failing = null } = canvas
   const query = chosen[SEARCH]
   const scope = chosen[SCOPE]
   /* "All epics": Everything unless a person asked for picked containers or a role. See `restsOnEverything`. */
@@ -501,8 +512,12 @@ export function siftingOf(chosen: FilterChoice, canvas: Canvas = {}): Sifting {
     /* A My role option narrows to the rows the reading says; with no word on
        who the person is it narrows nothing, as an epic not read does. */
     scope:
-      scope === ALL || (whole && scope !== REVIEW && scope !== MINE && !(scope === IN_SCOPE && aimed))
+      scope === ALL || (whole && scope !== REVIEW && scope !== MINE && scope !== FAILING && !(scope === IN_SCOPE && aimed))
         ? null
+        : scope === FAILING
+          ? failing
+            ? { from: FAILING, refs: [...failing] }
+            : null
         : scope === REVIEW || scope === MINE
           ? roles
             ? { from: scope, refs: [...roles[scope]] }

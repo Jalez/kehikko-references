@@ -2,6 +2,7 @@ import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
 import { assignedFaces, faceOf, reviewerFaces } from './faces.ts'
 import { stackPlaces, type StackPlace } from './markers.ts'
+import type { Pipeline } from './pipeline.ts'
 import type { Reference } from './reference.ts'
 import { tiesOf, type Ties } from './ties.ts'
 
@@ -55,6 +56,12 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const link = (v: unknown): string | null => {
   const url = str(v)
   return /^https?:\/\//i.test(url) ? url : null
+}
+
+/** A change's pipeline: the word, and the link and time only where the reading gave them. */
+function pipelineOf(row: TrackerRow): Pipeline {
+  const url = link(row.pipelineUrl)
+  return { state: row.pipeline!, ...(url ? { url } : {}), ...(row.pipelineAt ? { at: row.pipelineAt } : {}) }
 }
 
 /** One row of the reading, as this app draws one. */
@@ -115,6 +122,7 @@ function fromRow(
     /* Absent rather than `[]` when there is no tie, so an older host's rows are the rows they were. */
     ...(ties?.partOf.length ? { partOf: ties.partOf } : {}),
     ...(ties?.contributions.length ? { contributions: ties.contributions } : {}),
+    ...(row.kind === 'change' && row.pipeline ? { pipeline: pipelineOf(row) } : {}),
     unreadable: false,
   }
 }

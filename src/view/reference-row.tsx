@@ -6,6 +6,7 @@ import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
 import { handLink, handsLink } from '@/live/links.ts'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
+import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
 import { tieSaid } from '@/live/ties.ts'
 import { Markers } from './markers.tsx'
@@ -258,6 +259,7 @@ export function overview(row: Reference, now: number = Date.now()): string {
   if (assigned) parts.push(assigned)
   const review = reviewOf(row.reviewers)
   if (review) parts.push(review.said)
+  if (row.kind === 'change' && row.pipeline) parts.push(pipelineSaid(row.pipeline, now))
   const last = unaddressed(row, now)
   if (last) parts.push(last)
   return parts.join(' · ')
@@ -474,7 +476,7 @@ export function ReferenceRow({
         </span>
       </button>
 
-      <Markers row={row} now={at} onPick={onPick} />
+      <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} />
 
       <CopyButton row={row} />
 
