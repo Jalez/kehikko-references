@@ -127,6 +127,8 @@ export interface Reference {
   partOf?: string[]
   /** On an issue: the changes that are part of it, the other end of `partOf`. Never makes it closed or done. */
   contributions?: string[]
+  /** On a change: the issues it closes. Only widens what "This epic" reaches; the closing itself stays in `closedByMerge`. */
+  closes?: string[]
   /**
    * On a change: its head pipeline, where the reading says where it is and when it moved (protocol
    * `pipeline`, and 2.34.0 `pipelineUrl`/`pipelineAt`). Absent when none ran or none was read. See

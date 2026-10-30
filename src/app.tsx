@@ -197,13 +197,14 @@ export function App() {
   /* The refs the Scope group's My role options narrow to, read off the rows. */
   const roles = useMemo(() => roleRefs(rows), [rows])
   const failing = useMemo(() => failingRefs(rows), [rows])
-  /* What "This epic" reaches: the refs it names, and the changes on the list that are part of one of
-     them ("Part of #3912", protocol 2.26.0), so a partial merge request is shown with its issue. The
+  /* What "This epic" reaches: the refs it names, and the changes on the list that are part of or close one of
+     them ("Part of #3912", protocol 2.26.0; "Closes #3913"), so a partial merge request is shown with its issue. The
      same list from a host that does not say. See `withContributions` in `ties.ts`. */
   const inEpic = useMemo(() => (epicRefs ? withContributions(epicRefs, rows) : null), [epicRefs, rows])
+  const inAimed = useMemo(() => (aimed ? withContributions(aimed, rows) : null), [aimed, rows])
   const canvas = useMemo(
-    () => ({ selection, epicRefs: inEpic, aimed, marks, parts, roles, failing, wholeProject }),
-    [selection, inEpic, aimed, marks, parts, roles, failing, wholeProject],
+    () => ({ selection, epicRefs: inEpic, aimed: inAimed, marks, parts, roles, failing, wholeProject }),
+    [selection, inEpic, inAimed, marks, parts, roles, failing, wholeProject],
   )
   const sifting = useMemo(() => siftingOf(chosen, canvas), [chosen, canvas])
 

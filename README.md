@@ -72,10 +72,14 @@ a **Scope** group, on by default:
   asked of the host with `steps.list` and `epic.get`, and to the changes in the
   reading that are part of one of those issues ("Part of #3912": protocol
   2.26.0 `contributes` / `contributedBy`, `src/live/ties.ts`). Such a change's
-  row says `part of #3912`, and the issue's `has contributions from !3907`.
+  row says `part of #3912`, and the issue's `has contributions from !3907`. A
+  change that closes one of those issues ("Closes #3913") is reached too, and
+  keeps its `closes` tie; one way only, so an epic that names a change does not
+  take in the issue it closes.
 - **While containers are picked out** on the kehikko, the same option narrows to
   the union of what they say they are showing (`context.containers`,
-  `showing.refs`) instead, and its label says `Picked containers`. This
+  `showing.refs`) instead, with the same part-of and closing changes added, and
+  its label says `Picked containers`. This
   container's own row is left out.
 - **Everything** is the other option, one press away, and every "show all" on
   this page — the empty-list panels, `goto` — asks for it explicitly, because

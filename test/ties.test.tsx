@@ -118,16 +118,16 @@ describe('"This epic" reaches the work that is part of its issues', () => {
   test('an epic naming #3912 shows !3907 with it; one naming the change does not take in the issue', () => {
     expect(withContributions(['#3912'], rows)).toEqual(['#3912', '!3907'])
     expect(withContributions(['!3907'], rows)).toEqual(['!3907'])
-    /* A closing change was never added by the scope, and still is not. */
-    expect(withContributions(['#2638'], rows)).toEqual(['#2638'])
+    /* A change that closes a named issue is added too (see the closing describe below). */
+    expect(withContributions(['#2638'], rows)).toEqual(['#2638', '!3251'])
   })
 
   test('through the scope, the list and the count in the label', () => {
     const canvas = { epicRefs: withContributions(['#3912', '#2638'], rows) }
     const shown = sift(rows, siftingOf({ [SCOPE]: IN_SCOPE }, canvas)).map((one) => one.ref)
-    expect(shown.sort()).toEqual(['!3907', '#2638', '#3912'])
+    expect(shown.sort()).toEqual(['!3251', '!3907', '#2638', '#3912'])
     const scope = offer(rows, true, canvas)![0]!
-    expect(scope.options[0]?.label).toBe('This epic 3')
+    expect(scope.options[0]?.label).toBe('This epic 4')
   })
 
   test('a picked part that lists #3912 shows !3907 too', () => {
@@ -169,5 +169,51 @@ describe('the tie on the row', () => {
     const { container } = render(<ReferenceRow row={odd} landed={false} selected={false} onPick={() => {}} onToggle={() => {}} />)
     expect(container.querySelector('[data-tie]')?.textContent).toBe('part of <b>#1</b>')
     expect(container.querySelector('[data-tie] b')).toBeNull()
+  })
+})
+
+describe('"This epic" reaches the changes that close its issues', () => {
+  const issues = ['#3911', '#3912', '#3913', '#3914']
+  const rows = collect([
+    row('!3907', { kind: 'change', state: 'merged', title: 'Part', contributes: ['#3912'], links: [] }),
+    ...issues.map((ref) => row(ref, { state: 'open' })),
+    row('!4019', { state: 'open', title: 'Closes thirteen', links: [{ ref: '#3913', relation: 'closes' }] }),
+    row('!4039', { state: 'open', links: [{ ref: '#3911', relation: 'closes' }] }),
+    /* The issue alone says it: the other end of the tie. */
+    row('!4068', { state: 'open' }),
+    ...OTHER,
+  ].map((one) => (one.ref === '#3914' ? { ...one, links: [{ ref: '!4068', relation: 'closed-by' }] } : one)))
+  const byrow = byRef(rows)
+
+  test('all four merge requests are rows under This epic, with their own state kept', () => {
+    const canvas = { epicRefs: withContributions(issues, rows) }
+    const shown = sift(rows, siftingOf({ [SCOPE]: IN_SCOPE }, canvas)).map((one) => one.ref)
+    for (const mr of ['!3907', '!4019', '!4039', '!4068']) expect(shown).toContain(mr)
+    expect(shown).not.toContain('!2')
+    expect(offer(rows, true, canvas)![0]!.options[0]?.label).toBe('This epic 8')
+    /* The closing tie itself is untouched. */
+    expect(byrow.get('!4019')?.state).toBe('open')
+    expect(byrow.get('!4019')?.closes).toEqual(['#3913'])
+    expect(byrow.get('!4019')?.partOf).toBeUndefined()
+    expect(byrow.get('#3913')?.closedByMerge).toBe(false)
+    expect(byrow.get('!4068')?.closes).toEqual(['#3914'])
+  })
+
+  test('one way only: an epic naming a closing change does not pull in its issue', () => {
+    expect(withContributions(['!4019'], rows)).toEqual(['!4019'])
+    const shown = sift(rows, siftingOf({ [SCOPE]: IN_SCOPE }, { epicRefs: withContributions(['!4019'], rows) })).map((one) => one.ref)
+    expect(shown).toEqual(['!4019'])
+  })
+
+  test('picked containers reach them the same way', () => {
+    expect(withContributions(['#3913'], rows)).toEqual(['#3913', '!4019'])
+    const aimed = withContributions(['#3913'], rows)
+    const scope = offer(rows, true, { aimed })![0]!
+    expect(scope.options[0]?.label).toBe('Picked containers 2')
+  })
+
+  test('a picked part that lists #3913 shows the closing change', () => {
+    const parts = [{ id: 'p', heading: 'P', refs: ['#3913'], picked: true }]
+    expect(sift(rows, { ...EVERYTHING, parts }).map((one) => one.ref).sort()).toEqual(['!4019', '#3913'])
   })
 })
