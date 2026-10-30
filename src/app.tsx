@@ -9,6 +9,7 @@ import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
+import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
@@ -146,6 +147,8 @@ export function App() {
     parts,
     wholeProject,
     openAddress,
+    readEpics,
+    goToEpic,
   } = useKehikot(ID, onGoto, ({ item, value }) => {
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
@@ -570,6 +573,23 @@ export function App() {
    */
   const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
   const { copied, copy } = useCopyMany(selected)
+
+  /* "In epics": read from the host each time the menu opens, and worked out over the selection as it stands. */
+  const [epicsRead, setEpicsRead] = useState<{ reading: EpicsReading } | { why: string } | null>(null)
+  const epicsAsked = useRef(0)
+  const readEpicsNow = useCallback(() => {
+    const mine = (epicsAsked.current += 1)
+    setEpicsRead(null)
+    void readEpics().then((answer) => {
+      if (epicsAsked.current !== mine) return
+      setEpicsRead(answer.ok ? { reading: answer.reading } : { why: answer.why })
+    })
+  }, [readEpics])
+  const inEpicsState = useMemo<EpicsState>(() => {
+    if (!epicsRead) return { state: 'reading' }
+    if ('why' in epicsRead) return { state: 'failed', why: epicsRead.why }
+    return { state: 'read', links: epicsFor(selected.map((one) => one.ref), epicsRead.reading, rows) }
+  }, [epicsRead, selected, rows])
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -782,6 +802,9 @@ export function App() {
               copied={copied}
               onCopy={(kind) => void copy(kind)}
               onClear={() => select([])}
+              epics={where === 'hosted' ? inEpicsState : null}
+              onOpen={readEpicsNow}
+              onGo={(slug) => void goToEpic(slug)}
             />
           ) : null
         }
