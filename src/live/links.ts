@@ -35,3 +35,23 @@ export function handLink(
     if (stillFollow(answer)) fallback(url)
   })
 }
+
+/**
+ * Open `url` in the person's own browser, never in a module that shows pages.
+ *
+ * This is a request for a new window and nothing more, and that is the whole
+ * mechanism: in a browser tab it is a new tab, and in the desktop app the shell
+ * answers every new-window request from a framed page by handing a web address to
+ * the operating system's opener, the default browser (kehikko-desktop
+ * `src-tauri/src/links.rs`). No hand-over to the canvas (`address.open`) is made,
+ * so no Browser on the kehikko takes it. Only an `https:` address, or `http:` to
+ * this machine (`isWebAddress`), is opened; anything else returns false.
+ */
+export function openOutside(
+  url: string | null | undefined,
+  open: (url: string) => unknown = (to) => window.open(to, '_blank', 'noopener,noreferrer'),
+): boolean {
+  if (!isWebAddress(url)) return false
+  open(url)
+  return true
+}

@@ -4,6 +4,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
+import { selectedInOrder } from '@/live/copy.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { failingRefs } from '@/live/pipeline.ts'
@@ -33,6 +34,7 @@ import {
   NothingPicked,
   Troubled,
 } from '@/view/absence.tsx'
+import { CopyMany, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { SourceTrouble } from '@/view/sources.tsx'
@@ -561,6 +563,26 @@ export function App() {
   const focus = useMemo(() => focusOf(rows, sifting), [rows, sifting])
 
   /**
+   * The selected rows as listed, for copying several at once: the bar in the
+   * heading when two or more are selected, and Cmd+C in the list (`takesCopyKey`
+   * says when the key is this page's rather than a text copy's).
+   */
+  const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
+  const { copied, copy } = useCopyMany(selected)
+  const list = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (selected.length === 0) return
+      const textSelected = (document.getSelection()?.toString() ?? '') !== ''
+      if (!takesCopyKey(event, list.current, textSelected)) return
+      event.preventDefault()
+      void copy('linked')
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [selected, copy])
+
+  /**
    * Scrolling to the row a `goto` landed on, once it is actually drawn.
    *
    * This used to be a `requestAnimationFrame` inside the handler, which was
@@ -664,6 +686,11 @@ export function App() {
         scope={sifting.scope?.from ?? null}
         at={held.at}
         unread={held.missing}
+        action={
+          selected.length >= 2 || copied !== null ? (
+            <CopyMany count={selected.length} copied={copied} onCopy={(kind) => void copy(kind)} />
+          ) : null
+        }
       />
       {/*
         A source that could not be read, over the rows it gave before.
@@ -717,7 +744,7 @@ export function App() {
           changed, and the rows are still exactly what the last reading found.
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={list} className="min-h-0 flex-1 overflow-y-auto">
         {rows.length === 0 ? (
           <NothingFound project={sight.project} reading={held} />
         ) : shown.length === 0 && nothingPicked(rows, sifting) ? (

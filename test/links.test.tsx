@@ -1,17 +1,17 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 
 import { MANIFEST } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
-import { handLink, handsLink, stillFollow } from '@/live/links.ts'
+import { handLink, handsLink, openOutside, stillFollow } from '@/live/links.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { row } from './fixtures.ts'
 
 /**
- * A row's way out to the tracker, handed to the canvas (`address.open`,
- * protocol 2.16.0) when the host answers it: a Browser there opens it, or the
- * person is asked. With an older host the link opens a new tab as before.
+ * Links handed to the canvas (`address.open`, protocol 2.16.0) — a pipeline's
+ * link still is — and the row's own way out, which never is: it opens the
+ * person's own browser.
  */
 
 afterEach(cleanup)
@@ -54,17 +54,40 @@ describe('after handing it over', () => {
   })
 })
 
-describe('the row’s link', () => {
-  const rows = collect([row('gh#7')])
+describe('openOutside', () => {
+  test('opens a web address and nothing else', () => {
+    const opened: string[] = []
+    expect(openOutside('https://github.com/example/repo/issues/7', (url) => opened.push(url))).toBe(true)
+    for (const url of ['javascript:alert(1)', 'file:///etc/passwd', 'https://u:p@github.com/x', '', null, undefined]) {
+      expect(openOutside(url, (to) => opened.push(to))).toBe(false)
+    }
+    expect(opened).toEqual(['https://github.com/example/repo/issues/7'])
+  })
+})
 
-  test('with a host that answers, a press hands the address over and the default is prevented', () => {
+describe('the row’s link opens the person’s own browser', () => {
+  const rows = collect([row('gh#7')])
+  const g = globalThis as unknown as { window: { open: unknown } }
+  let had: unknown
+  let opened: unknown[][]
+  beforeEach(() => {
+    had = g.window.open
+    opened = []
+    g.window.open = (...args: unknown[]) => void opened.push(args)
+  })
+  afterEach(() => {
+    g.window.open = had
+  })
+
+  test('a press opens a new window at the address, and never hands it to the canvas', () => {
     const asked: string[] = []
+    const picked: string[] = []
     const { container } = render(
       <ReferenceList
         rows={rows}
         landedOn={null}
         selection={[]}
-        onPick={() => {}}
+        onPick={(ref) => picked.push(ref)}
         onToggle={() => {}}
         onOpenLink={(url) => {
           asked.push(url)
@@ -72,17 +95,25 @@ describe('the row’s link', () => {
         }}
       />,
     )
-    const link = container.querySelector('a[href]') as HTMLAnchorElement
+    const link = container.querySelector('a[data-open-outside]') as HTMLAnchorElement
     expect(link.getAttribute('href')).toBe('https://github.com/example/repo/issues/7')
-    const followed = fireEvent.click(link)
-    expect(followed).toBe(false)
-    expect(asked).toEqual(['https://github.com/example/repo/issues/7'])
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('aria-label')).toBe('Open gh#7 in your browser')
+    expect(fireEvent.click(link)).toBe(false)
+    expect(opened).toEqual([['https://github.com/example/repo/issues/7', '_blank', 'noopener,noreferrer']])
+    expect(asked).toEqual([])
+    expect(picked).toEqual([])
   })
 
-  test('without one, the link is an ordinary new-tab link', () => {
+  test('the same without a host that answers address.open', () => {
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const link = container.querySelector('a[href]') as HTMLAnchorElement
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(fireEvent.click(link)).toBe(true)
+    fireEvent.click(container.querySelector('a[data-open-outside]') as HTMLAnchorElement)
+    expect(opened).toHaveLength(1)
+  })
+
+  test('says "Open in your browser" on hover', async () => {
+    const { container, findAllByText } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    fireEvent.focus(container.querySelector('a[data-open-outside]') as HTMLAnchorElement)
+    expect((await findAllByText('Open in your browser')).length).toBeGreaterThan(0)
   })
 })

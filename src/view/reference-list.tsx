@@ -48,7 +48,7 @@ export function ReferenceList({
   selection: readonly string[]
   onPick: (ref: string) => void
   onToggle: (ref: string) => void
-  /** Hand a row's tracker link to the canvas (`address.open`), or null to follow it in a new tab. */
+  /** Hand a marker's link (a pipeline) to the canvas (`address.open`), or null to follow it in a new tab. The row's own open icon never uses it. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
 }) {
   const picked = new Set(selection)

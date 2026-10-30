@@ -4,7 +4,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
-import { handLink, handsLink } from '@/live/links.ts'
+import { openOutside } from '@/live/links.ts'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
@@ -163,9 +164,6 @@ function day(at: string): string {
   return at.slice(0, 10)
 }
 
-/** What the tracker is called, for the sentence on the link. Read off the bag, never parsed. */
-const TRACKER: Record<Reference['origin'], string> = { github: 'GitHub', gitlab: 'GitLab' }
-
 /**
  * What one row IS, in the words the tracker that filed it uses.
  *
@@ -266,7 +264,12 @@ export function overview(row: Reference, now: number = Date.now()): string {
 }
 
 /**
- * The way out to the tracker, drawn whether or not there is one.
+ * The way out to the person's own browser, drawn whether or not there is a link.
+ *
+ * Clicking the row already shows the reference in a module that shows pages, so
+ * this one goes the other way: it opens the tracker's page in the person's real
+ * browser (`openOutside`), and never hands the address to the canvas. The `href`
+ * stays, so a middle click or "Copy link" on it still works as on any link.
  *
  * `url` is what the tracker itself said and is never built here, so a row with
  * no link is a row that opens nothing rather than one that opens the wrong
@@ -275,7 +278,7 @@ export function overview(row: Reference, now: number = Date.now()): string {
  * `title` because a sighted reader hovering the one dim icon in a column of live
  * ones deserves the sentence.
  */
-function Tracker({ row, onOpenLink }: { row: Reference; onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null }) {
+function Tracker({ row }: { row: Reference }) {
   const shared = 'flex shrink-0 items-center self-stretch px-2'
   if (!row.url) {
     return (
@@ -288,24 +291,27 @@ function Tracker({ row, onOpenLink }: { row: Reference; onOpenLink?: ((url: stri
       </span>
     )
   }
+  const url = row.url
   return (
-    <a
-      href={row.url}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(event) => {
-        /* Handed to the canvas (`address.open`) when the host answers it: the Browser
-           there opens it, or the person is asked. Otherwise the link is followed. */
-        if (!onOpenLink || !handsLink(row.url, true)) return
-        event.preventDefault()
-        void handLink(row.url, onOpenLink)
-      }}
-      title={`Open ${row.ref} on ${TRACKER[row.origin]}`}
-      aria-label={`Open ${row.ref} on ${TRACKER[row.origin]}`}
-      className={cn(shared, 'text-muted-foreground hover:text-foreground focus-visible:text-foreground')}
-    >
-      <ExternalLink className="size-3.5" />
-    </a>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-open-outside
+          onClick={(event) => {
+            event.stopPropagation()
+            if (openOutside(url)) event.preventDefault()
+          }}
+          aria-label={`Open ${row.ref} in your browser`}
+          className={cn(shared, 'text-muted-foreground hover:text-foreground focus-visible:text-foreground')}
+        >
+          <ExternalLink className="size-3.5" />
+        </a>
+      </TooltipTrigger>
+      <TooltipContent>Open in your browser</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -320,7 +326,7 @@ export function ReferenceRow({
 }: {
   row: Reference
   landed: boolean
-  /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
+  /** Hand a marker's link to the canvas (`address.open`), or null to follow it in a new tab. Not the open icon's: that opens the person's browser. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
   /** The clock the activity marker says "3 h ago" against. Tests pass one; the page reads it at drawing. */
   now?: number
@@ -480,7 +486,7 @@ export function ReferenceRow({
 
       <CopyButton row={row} />
 
-      <Tracker row={row} onOpenLink={onOpenLink ?? null} />
+      <Tracker row={row} />
     </li>
   )
 }

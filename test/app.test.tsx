@@ -682,7 +682,7 @@ describe('picking references out', () => {
     expect(links[0]?.getAttribute('href')).toContain('github.com')
     /* And it says where it goes, because an icon that opens a new tab has to be
        readable before it is pressed. */
-    expect(links[0]?.getAttribute('aria-label')).toContain('GitHub')
+    expect(links[0]?.getAttribute('aria-label')).toBe('Open gh#1 in your browser')
   })
 })
 
@@ -1691,5 +1691,100 @@ describe('work that is part of an issue the epic names', () => {
     expect(document.querySelector('li[data-ref="#3912"] [data-tie]')?.textContent).toBe('has contributions from !3907')
     const scope = (host.offered() as { options: { label: string }[] }[])[0]!
     expect(scope.options.map((option) => option.label)).toEqual(['This epic 2', 'Everything 4'])
+  })
+})
+
+describe('copying the selected references', () => {
+  const listed = async (count: number) => {
+    const door = stubDoor({ [PROJECT]: answered(count) })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    return host
+  }
+  let texts: string[] = []
+  const clipboard = () => {
+    texts = []
+    ;(globalThis as Record<string, unknown>).ClipboardItem = undefined
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (t: string) => void texts.push(t) },
+    })
+  }
+  const onScreen = (refs: string[]) =>
+    [...document.querySelectorAll<HTMLElement>('li[data-ref]')].map((li) => li.dataset.ref!).filter((ref) => refs.includes(ref))
+  const bar = () => document.querySelector('[data-copy-many]')
+  const cmdC = (target: Element, more: Record<string, unknown> = {}) =>
+    act(() => {
+      fireEvent.keyDown(target, { key: 'c', metaKey: true, ...more })
+    })
+  const settled = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+  test('one selected row draws no bar; two draw "Copy 2"', async () => {
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#3']))
+    await settle()
+    expect(bar()).toBeNull()
+    act(() => host.context(PROJECT, ['gh#3', 'gh#1']))
+    await settle()
+    expect(bar()?.textContent).toContain('Copy 2')
+  })
+
+  test('the bar copies them as listed, not as picked, and says "Copied 2"', async () => {
+    clipboard()
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#4', 'gh#2', 'gh#99']))
+    await settle()
+    const order = onScreen(['gh#4', 'gh#2'])
+    expect(order).toEqual(['gh#2', 'gh#4'])
+    const button = screen.getByLabelText('Copy 2 references with their links and titles')
+    act(() => button.click())
+    await settled()
+    expect(texts).toHaveLength(1)
+    expect(texts[0]!.split('\n').map((line) => line.match(/^\[([^\]]+)\]/)?.[1])).toEqual(order)
+    expect(bar()?.textContent).toContain('Copied 2')
+  })
+
+  test('Cmd+C with focus on the page or in the list copies the selected rows', async () => {
+    clipboard()
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#1', 'gh#5']))
+    await settle()
+    cmdC(document.body)
+    await settled()
+    expect(texts).toHaveLength(1)
+    expect(texts[0]!.split('\n')).toHaveLength(2)
+    const inList = document.querySelector('li[data-ref="gh#1"] > button')!
+    cmdC(inList)
+    await settled()
+    expect(texts).toHaveLength(2)
+  })
+
+  test('Cmd+C leaves a text copy, a field and an empty selection alone', async () => {
+    clipboard()
+    const host = await listed(5)
+    cmdC(document.body)
+    await settled()
+    expect(texts).toEqual([])
+
+    act(() => host.context(PROJECT, ['gh#1', 'gh#5']))
+    await settle()
+    const field = document.createElement('input')
+    document.body.appendChild(field)
+    cmdC(field)
+    field.remove()
+    cmdC(document.body, { shiftKey: true })
+    await settled()
+    expect(texts).toEqual([])
+
+    const title = document.querySelector('[data-heading="count"]')!
+    const range = document.createRange()
+    range.selectNodeContents(title)
+    document.getSelection()!.addRange(range)
+    cmdC(document.body)
+    await settled()
+    document.getSelection()!.removeAllRanges()
+    expect(texts).toEqual([])
   })
 })

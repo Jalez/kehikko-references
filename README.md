@@ -151,6 +151,24 @@ narrowest frames a row whose identifier, state and markers do not fit on one
 line puts the markers and the tracker link on a second line rather than over
 the state.
 
+### Copying, and opening outside
+
+Each row's copy button puts its reference, linked, and its title on the
+clipboard (`live/copy.ts`): `text/html` with the reference as a link, and
+`text/plain` as Markdown, `[!4013](url) title`. With two or more rows selected,
+the heading ends in "Copy N references" (`view/copy-many.tsx`): one line per
+selected row, in the order the list shows them, in the same two formats; its
+small menu also copies just the ids, space-separated (`!4019 !4039 #3911`).
+Cmd+C (Ctrl+C) does the linked copy while rows are selected, unless text is
+selected or focus is in a field (`takesCopyKey`). The copy is written in this
+page, never from a header item: a clipboard write needs the press in this frame.
+
+Clicking a row selects it, and a module that shows pages shows it. The row's
+`external-link` icon ("Open in your browser") goes the other way: it opens the
+tracker's page in the person's own browser (`openOutside` in `live/links.ts`), a
+new-window request that the desktop shell hands to the operating system's opener,
+and never hands the address to the canvas.
+
 ### Faces
 
 The assignee and reviewer markers draw people as tiny round avatars (16px),
