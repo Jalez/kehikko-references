@@ -312,6 +312,17 @@ export function NothingInScope({
   const containers = scope.from === 'containers'
   /* A My role option, which somebody chose: their own sentence, since the
      remedy is neither an epic nor a container. */
+  if (scope.from === 'failing') {
+    return (
+      <Panel title="No pipeline is failing here.">
+        <p>This list is narrowed to the open changes whose pipeline failed, and none in this project’s tracker has one failing now.</p>
+        <p>Nothing has gone missing: the project has {total} {total === 1 ? 'reference' : 'references'}.</p>
+        <Button variant="outline" size="sm" onClick={everything}>
+          Show everything
+        </Button>
+      </Panel>
+    )
+  }
   if (scope.from === 'review' || scope.from === 'mine') {
     const review = scope.from === 'review'
     return (

@@ -1,11 +1,14 @@
 import { useState, type ReactNode } from 'react'
-import { BellDot, Layers } from 'lucide-react'
+import { BellDot, CircleCheck, CircleDashed, CircleMinus, CircleSlash, CircleX, Layers, LoaderCircle } from 'lucide-react'
+import type { AddressOpenResult, PipelineState } from 'kehikot-module-protocol'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
+import { handLink, handsLink } from '@/live/links.ts'
+import { pipelineSaid, type Pipeline } from '@/live/pipeline.ts'
 import { Faces } from './faces.tsx'
 
 /**
@@ -121,6 +124,72 @@ function StackMark({ row, onPick }: { row: Reference; onPick: (ref: string) => v
 }
 
 /**
+ * A change's pipeline (issue #38): a small round mark beside the faces, its
+ * shape saying the state and its colour saying it again — never colour alone.
+ * Running is a partial ring that turns, passed a tick, failed a cross, pending
+ * a hollow dashed ring, canceled a slash, skipped and manual a dash. The
+ * tooltip and the label say the word and, where the reading gave one, how long
+ * ago it moved.
+ *
+ * With a link in the reading the mark is a link: a press hands the address to
+ * the canvas, the way the row's own way out does, and a new tab is the
+ * fallback. Without one it only explains itself. No pipeline, no mark.
+ */
+const PIPELINE_LOOK: Record<PipelineState, { icon: ReactNode; tone: string }> = {
+  running: { icon: <LoaderCircle className="size-3.5 motion-safe:animate-spin" aria-hidden="true" />, tone: 'text-sky-700 dark:text-sky-400' },
+  success: { icon: <CircleCheck className="size-3.5" aria-hidden="true" />, tone: 'text-emerald-700 dark:text-emerald-400' },
+  failed: { icon: <CircleX className="size-3.5" aria-hidden="true" />, tone: 'text-red-700 dark:text-red-400' },
+  pending: { icon: <CircleDashed className="size-3.5" aria-hidden="true" />, tone: 'text-amber-700 dark:text-amber-400' },
+  canceled: { icon: <CircleSlash className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+  skipped: { icon: <CircleMinus className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+  manual: { icon: <CircleMinus className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
+}
+
+export function PipelineMark({
+  pipeline,
+  now,
+  onOpenLink,
+}: {
+  pipeline: Pipeline
+  now: number
+  onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
+}) {
+  const said = pipelineSaid(pipeline, now)
+  const look = PIPELINE_LOOK[pipeline.state]
+  const url = pipeline.url
+  if (!url) {
+    return (
+      <Mark name={`pipeline-${pipeline.state}`} said={said} label={said} className={cn('w-6', look.tone)}>
+        {look.icon}
+      </Mark>
+    )
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          data-marker={`pipeline-${pipeline.state}`}
+          aria-label={`${said}. Open the pipeline`}
+          onClick={(event) => {
+            /* Handed to the canvas (`address.open`) when the host answers it; otherwise followed. */
+            if (!onOpenLink || !handsLink(url, true)) return
+            event.preventDefault()
+            void handLink(url, onOpenLink)
+          }}
+          className={cn(MARK, 'w-6', look.tone)}
+        >
+          {look.icon}
+        </a>
+      </TooltipTrigger>
+      <TooltipContent>{said}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
  * The cluster, and an empty slot where a marker is not. From 24rem of the frame
  * every row's cluster is one width, so the pressable box beside it is too, and
  * the date, role and people columns inside it line up down the list. Below
@@ -132,6 +201,7 @@ const SLOT = {
   stack: <span aria-hidden="true" className="hidden w-11 @sm/frame:block" />,
   assigned: <span aria-hidden="true" data-slot="assigned" className="hidden h-6 w-[var(--faces-assigned,56px)] @sm/frame:block" />,
   review: <span aria-hidden="true" data-slot="review" className="hidden h-6 w-[var(--faces-review,56px)] @sm/frame:block" />,
+  pipeline: <span aria-hidden="true" data-slot="pipeline" className="hidden size-6 @sm/frame:block" />,
   mark: <span aria-hidden="true" className="hidden size-6 @sm/frame:block" />,
 }
 const SLOTS = (
@@ -139,15 +209,28 @@ const SLOTS = (
     {SLOT.stack}
     {SLOT.assigned}
     {SLOT.review}
+    {SLOT.pipeline}
     {SLOT.mark}
   </>
 )
 
-export function Markers({ row, now, onPick }: { row: Reference; now: number; onPick: (ref: string) => void }) {
+export function Markers({
+  row,
+  now,
+  onPick,
+  onOpenLink,
+}: {
+  row: Reference
+  now: number
+  onPick: (ref: string) => void
+  /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
+  onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
+}) {
   const assigned = assignedSaid(row)
   const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
   const last = unaddressed(row, now)
-  if (!row.stack && !assigned && !review && !last) return <span data-markers className={cn(CLUSTER, 'hidden @sm/frame:flex')}>{SLOTS}</span>
+  const pipeline = row.kind === 'change' ? row.pipeline : undefined
+  if (!row.stack && !assigned && !review && !pipeline && !last) return <span data-markers className={cn(CLUSTER, 'hidden @sm/frame:flex')}>{SLOTS}</span>
   return (
     <span data-markers title="" className={CLUSTER}>
       {row.stack ? <StackMark row={row} onPick={onPick} /> : SLOT.stack}
@@ -161,6 +244,7 @@ export function Markers({ row, now, onPick }: { row: Reference; now: number; onP
           <Faces faces={row.reviewerFaces ?? []} />
         </Mark>
       ) : SLOT.review}
+      {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} /> : SLOT.pipeline}
       {last ? (
         <Mark name="unaddressed" said={last} label={`Unaddressed activity. ${last}`} className="w-6 text-foreground">
           <BellDot className="size-3.5" aria-hidden="true" />
