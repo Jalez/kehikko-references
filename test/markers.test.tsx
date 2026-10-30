@@ -162,23 +162,50 @@ describe('unaddressed activity (issue #25)', () => {
     expect(agoSaid('2026-10-18T12:00:00Z', NOW)).toBe('3 d ago')
   })
 
-  test('only for somebody else: a dot on the row’s "⋯", and the sentence as its description', () => {
+  test('only for somebody else: a bell on the row with the sentence, that opens the page in your browser', () => {
     const rows = collect([
       row('#1', { lastActivity: { login: 'mona', at, kind: 'comment', mine: false } }),
       row('#2', { lastActivity: { login: 'jalez', at, kind: 'comment', mine: true } }),
       row('#3', { lastActivity: { login: 'mona', at, kind: 'comment' } }),
     ])
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const menu = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-row-menu]`) as HTMLElement
-    const described = menu('#1').getAttribute('aria-describedby')!
-    expect(document.getElementById(described)!.textContent).toStartWith('Unaddressed activity. Last activity: mona, a comment, ')
-    expect(menu('#1').querySelector('[data-activity-dot]')).not.toBeNull()
-    expect(menu('#1').getAttribute('aria-label')).toBe('More for #1')
-    for (const ref of ['#2', '#3']) {
-      expect(menu(ref).querySelector('[data-activity-dot]')).toBeNull()
-      expect(menu(ref).hasAttribute('aria-describedby')).toBe(false)
+    const mark = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-marker="unaddressed"]`) as HTMLElement | null
+    expect(mark('#1')!.tagName).toBe('BUTTON')
+    expect(mark('#1')!.getAttribute('aria-label')).toStartWith('Unaddressed activity. Last activity: mona, a comment, ')
+    expect(mark('#1')!.querySelector('svg.lucide-bell-dot')).not.toBeNull()
+    expect(mark('#2')).toBeNull()
+    expect(mark('#3')).toBeNull()
+    expect(container.querySelector('[data-row-menu]')).toBeNull()
+  })
+
+  test('pressing the bell opens the reference outside, never through the canvas, and does not pick the row', () => {
+    const opened: unknown[][] = []
+    const g = globalThis as unknown as { window: { open: unknown } }
+    const had = g.window.open
+    g.window.open = (...args: unknown[]) => void opened.push(args)
+    const asked: string[] = []
+    const picked: string[] = []
+    try {
+      const rows = collect([row('gh#7', { lastActivity: { login: 'mona', at, kind: 'review', mine: false } })])
+      const { container } = render(
+        <ReferenceList
+          rows={rows}
+          landedOn={null}
+          selection={[]}
+          onPick={(ref) => picked.push(ref)}
+          onToggle={() => {}}
+          onOpenLink={(url) => {
+            asked.push(url)
+            return Promise.resolve({ outcome: 'shown', why: '' })
+          }}
+        />,
+      )
+      fireEvent.click(container.querySelector('[data-marker="unaddressed"]')!)
+      expect(opened).toEqual([['https://github.com/example/repo/issues/7', '_blank', 'noopener,noreferrer']])
+      expect(asked).toEqual([])
+      expect(picked).toEqual([])
+    } finally {
+      g.window.open = had
     }
-    /* The bell is not a loose marker any more. */
-    expect(container.querySelector('[data-marker="unaddressed"]')).toBeNull()
   })
 })

@@ -140,10 +140,9 @@ from a name.
   Tooltip and `aria-label` say it in words: `Merge request · open`,
   `Issue · closed by !4019`.
 - **Unaddressed activity** — on an OPEN reference whose last activity
-  (protocol 2.8.0 `lastActivity`) was somebody else's, a dot on the row's "⋯"
-  and the sentence — `Last activity: mona, a review, 3 h ago` — as its
-  description and as an item in its menu, with the bell, that opens the page in
-  your browser. Only when the host says whose it was against who you are
+  (protocol 2.8.0 `lastActivity`) was somebody else's, a bell on the row with
+  the sentence — `Last activity: mona, a review, 3 h ago` — as its tooltip and
+  label; pressing it opens the page in your browser (`openOutside`). Only when the host says whose it was against who you are
   (`lastActivity.mine`); when it does not know who you are there is nothing,
   never a guess from a name. Closed and merged references have nothing left to
   address.
@@ -165,23 +164,29 @@ the state.
 
 ### Copying, and opening outside
 
-Each row's copy button puts its reference, linked, and its title on the
-clipboard (`live/copy.ts`): `text/html` with the reference as a link, and
-`text/plain` as Markdown, `[!4013](url) title`. With two or more rows selected,
-the heading ends in "Copy N references" (`view/copy-many.tsx`): one line per
-selected row, in the order the list shows them, in the same two formats; its
-small menu also copies just the ids, space-separated (`!4019 !4039 #3911`).
-Cmd+C (Ctrl+C) does the linked copy while rows are selected, unless text is
-selected or focus is in a field (`takesCopyKey`). The copy is written in this
-page, never from a header item: a clipboard write needs the press in this frame.
+Each row's copy button (from 24rem of the frame; narrower, the selection menu
+copies) puts its reference, linked, and its title on the clipboard
+(`live/copy.ts`): `text/html` with the reference as a link, and `text/plain` as
+Markdown, `[!4013](url) title`.
 
-Clicking a row selects it, and a module that shows pages shows it. Each row
-ends in a "⋯" menu (`view/row-menu.tsx`, a shadcn dropdown): "Open in your
-browser" opens the tracker's page in the person's own browser (`openOutside` in
-`live/links.ts`), a new-window request that the desktop shell hands to the
-operating system's opener, never handed to the canvas; "Copy reference"; and the
-last activity when it was somebody else's. From 24rem of the frame the copy button
-sits beside "⋯"; below that only "⋯" is left.
+Clicking a row selects it, and a module that shows pages shows it. There is no
+per-row menu. With one or more rows selected the bar shows a menu labelled
+"N selected" (`view/selection-menu.tsx`, a shadcn dropdown): "Open in your
+browser" opens each selected reference in the person's own browser
+(`openOutside` in `live/links.ts`; a new-window request the desktop shell hands
+to the operating system's opener, never handed to the canvas), asking first
+past five ("Open 8 pages in your browser?"); "Copy with links and titles" (one
+line per selected row, in the order the list shows them, in the same two
+formats); "Copy ids" (space-separated, `!4019 !4039 #3911`); and "Clear
+selection" (`selection.set` with no refs). Cmd+C (Ctrl+C) does the linked copy
+while rows are selected, unless text is selected or focus is in a field
+(`takesCopyKey`). The copy is written in this page, never from a header item: a
+clipboard write needs the press in this frame.
+
+The bar (`view/heading.tsx`: count, scope, age, and the selection menu) is the
+module's footer: last in the page, sticky at the bottom, the list scrolling
+above it, so the host's frame header, which overlaps the top of a folded or
+collapsed container, never covers it. It wraps rather than overflows.
 
 ### Faces
 

@@ -4,6 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { collect } from '@/live/collect.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { Heading, ageOf } from '@/view/heading.tsx'
+import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { row } from './fixtures.ts'
 
 const PROJECT = '/Users/somebody/Projects/kehikko'
@@ -124,24 +125,19 @@ describe('what a row may never stop showing, and the title it now may (issue #24
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const cluster = container.querySelector('[data-markers]') as HTMLElement
     const marks = [...cluster.querySelectorAll('[data-marker]')] as HTMLElement[]
-    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'state-change-open'])
+    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'state-change-open', 'unaddressed'])
     for (const m of [cluster, ...marks]) expect(m.className).not.toMatch(/(^|\s|:)hidden(\s|$)/)
   })
 
-  test('under 24rem of the frame only "⋯" is left at the row’s end; from it the copy button is beside it', () => {
+  test('the row has no "⋯"; the copy button is dropped under 24rem and drawn from it', () => {
     const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const li = rowBox(container)
-    const menu = li.querySelector('[data-row-menu]') as HTMLElement
-    expect(menu.getAttribute('aria-label')).toBe('More for gh#131')
-    for (let node: HTMLElement | null = menu; node && node !== li; node = node.parentElement) {
-      expect(node.className).not.toMatch(/(^|\s|:)(hidden|sr-only)(\s|$)/)
-    }
+    expect(li.querySelector('[data-row-menu]')).toBeNull()
     const copy = li.querySelector('[data-copy]')!.parentElement as HTMLElement
     expect(copy.className.split(/\s+/)).toContain('hidden')
     expect(copy.className.split(/\s+/)).toContain('@sm/frame:flex')
-    /* Nothing else at the row's end: no loose open link, no bell. */
+    /* No loose open link. */
     expect(li.querySelector('a[target="_blank"]')).toBeNull()
-    expect(li.querySelector('[data-marker="unaddressed"]')).toBeNull()
   })
 
   test('the row is one line at every width: no stacked layout left to fall back to', () => {
@@ -297,5 +293,28 @@ describe('the parts focus, in the heading', () => {
     expect(container.querySelector('[data-heading="focus"]')).toBeNull()
     expect(container.textContent).not.toContain('outside')
     expect(container.textContent).not.toContain('picked part')
+  })
+})
+
+describe('the bar at the page’s end', () => {
+  test('wraps, keeps its place at the bottom, and keeps the selection menu in it', () => {
+    const { container } = render(
+      <Heading
+        project={PROJECT}
+        showing={7}
+        total={24}
+        action={<SelectionMenu count={3} urls={[]} copied={null} onCopy={() => {}} onClear={() => {}} />}
+      />,
+    )
+    const bar = container.querySelector('[data-heading]') as HTMLElement
+    const classes = bar.className.split(/\s+/)
+    for (const name of ['sticky', 'bottom-0', 'flex-wrap', 'border-t']) expect(classes).toContain(name)
+    expect(classes).not.toContain('border-b')
+    const menu = bar.querySelector('[data-selection-menu]') as HTMLElement
+    expect(menu.className.split(/\s+/)).toContain('shrink-0')
+    for (let node: HTMLElement | null = menu; node && node !== bar; node = node.parentElement) {
+      expect(node.className).not.toMatch(/(^|\s|:)(hidden|sr-only)(\s|$)/)
+    }
+    expect(menu.textContent).toContain('3 selected')
   })
 })

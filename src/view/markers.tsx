@@ -13,18 +13,20 @@ import {
   GitPullRequestDraft,
   Layers,
   LoaderCircle,
+  BellDot,
 } from 'lucide-react'
 import type { AddressOpenResult, PipelineState } from 'kehikot-module-protocol'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { assignedSaid, reviewOf, stackSaid } from '@/live/markers.ts'
+import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
 import { stateLook, stateSaid, type StateLook } from '@/live/state.ts'
 import type { Reference } from '@/live/reference.ts'
 import { handLink, handsLink } from '@/live/links.ts'
 import { pipelineSaid, type Pipeline } from '@/live/pipeline.ts'
 import { Faces } from './faces.tsx'
+import { openOutside } from '@/live/links.ts'
 
 /**
  * A row's markers, drawn at every width beside the pressable box (issues #23
@@ -235,6 +237,35 @@ export function StateMark({ row }: { row: Reference }) {
 }
 
 /**
+ * The last activity, when it was somebody else's (`unaddressed`): the bell, its
+ * sentence as tooltip and label, and a press opens the reference in the
+ * person's own browser (`openOutside`), where that activity is. Never handed to
+ * the canvas.
+ */
+export function ActivityMark({ last, url }: { last: string; url: string | null }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-marker="unaddressed"
+          aria-label={`Unaddressed activity. ${last}. See it in your browser`}
+          disabled={!url}
+          onClick={(event) => {
+            event.stopPropagation()
+            openOutside(url)
+          }}
+          className={cn(MARK, 'w-6 text-foreground')}
+        >
+          <BellDot className="size-3.5" aria-hidden="true" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{last}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
  * The cluster, and an empty slot where a marker is not. From 24rem of the frame
  * every row's cluster is one width, so the pressable box beside it is too, and
  * the date, role and people columns inside it line up down the list. Below
@@ -247,6 +278,7 @@ const SLOT = {
   assigned: <span aria-hidden="true" data-slot="assigned" className="hidden h-6 w-[var(--faces-assigned,56px)] @sm/frame:block" />,
   review: <span aria-hidden="true" data-slot="review" className="hidden h-6 w-[var(--faces-review,56px)] @sm/frame:block" />,
   pipeline: <span aria-hidden="true" data-slot="pipeline" className="hidden size-6 @sm/frame:block" />,
+  mark: <span aria-hidden="true" data-slot="activity" className="hidden size-6 @sm/frame:block" />,
 }
 
 export function Markers({
@@ -264,6 +296,7 @@ export function Markers({
   const assigned = assignedSaid(row)
   const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
   const pipeline = row.kind === 'change' ? row.pipeline : undefined
+  const last = unaddressed(row, now)
   return (
     <span data-markers title="" className={CLUSTER}>
       {row.stack ? <StackMark row={row} onPick={onPick} /> : SLOT.stack}
@@ -279,6 +312,7 @@ export function Markers({
       ) : SLOT.review}
       <StateMark row={row} />
       {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} /> : SLOT.pipeline}
+      {last ? <ActivityMark last={last} url={row.url ?? null} /> : SLOT.mark}
     </span>
   )
 }
