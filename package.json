@@ -1,6 +1,6 @@
 {
   "name": "kehikot-references",
-  "version": "3.12.0",
+  "version": "3.12.1",
   "private": true,
   "type": "module",
   "description": "Every issue and pull request in a project, read from the project's own GitHub with the login gh already holds, as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A host may frame it, and then it knows which project to read.",

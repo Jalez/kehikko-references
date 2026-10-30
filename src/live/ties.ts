@@ -31,6 +31,8 @@ import type { TrackerRow } from 'kehikot-module-protocol'
 export interface Ties {
   partOf: string[]
   contributions: string[]
+  /** On a change: the issues it closes, read from its `closes` links and the issues' `closed-by` links. */
+  closes: string[]
 }
 
 /** Every row's ties, by ref, worked out over the whole reading. Rows with none are not in the map. */
@@ -51,30 +53,48 @@ export function tiesOf(rows: readonly TrackerRow[]): Map<string, Ties> {
     if (row.kind === 'change') for (const issue of row.contributes ?? []) tie(row.ref, issue)
     if (row.kind === 'issue') for (const change of row.contributedBy ?? []) tie(change, row.ref)
   }
+  /* What a change closes, from either end, so a reading with only one end still says it. */
+  const closing = new Map<string, Set<string>>()
+  const closeTie = (change: string, issue: string) => {
+    if (!change || !issue || change === issue) return
+    if (!closing.has(change)) closing.set(change, new Set())
+    closing.get(change)!.add(issue)
+  }
+  const kinds = new Map(rows.map((row) => [row.ref, row.kind]))
+  for (const row of rows) {
+    for (const one of row.links) {
+      if (row.kind === 'change' && one.relation === 'closes' && kinds.get(one.ref) !== 'change') closeTie(row.ref, one.ref)
+      if (row.kind === 'issue' && one.relation === 'closed-by' && kinds.get(one.ref) === 'change') closeTie(one.ref, row.ref)
+    }
+  }
   const out = new Map<string, Ties>()
   for (const row of rows) {
     const up = row.kind === 'change' ? [...(partOf.get(row.ref) ?? [])] : []
     const down = row.kind === 'issue' ? [...(contributions.get(row.ref) ?? [])] : []
-    if (up.length || down.length) out.set(row.ref, { partOf: up, contributions: down })
+    const shut = row.kind === 'change' ? [...(closing.get(row.ref) ?? [])] : []
+    if (up.length || down.length || shut.length) out.set(row.ref, { partOf: up, contributions: down, closes: shut })
   }
   return out
 }
 
 /**
- * What "This epic" reaches: the refs the epic names, and every change on the
- * list that is part of one of them — so `!3907`, "Part of #3912", is shown
- * with `#3912` rather than looking missing. Only that way round: an epic that
- * names a change does not take in the issue the change is part of.
+ * What "This epic" (and picked containers) reach: the refs named, and every
+ * change on the list that is part of one of them ("Part of #3912") or closes
+ * one of them ("Closes #3913") — so `!3907` and `!4019` are shown with their
+ * issues rather than looking missing. Only that way round: an epic that names
+ * a change does not take in the issue the change is part of or closes.
  *
  * The same array back when nothing is added, so a reading with no ties (an
  * older host) leaves the scope exactly as it was.
  */
 export function withContributions(
   named: readonly string[],
-  rows: readonly { ref: string; partOf?: readonly string[] }[],
+  rows: readonly { ref: string; partOf?: readonly string[]; closes?: readonly string[] }[],
 ): readonly string[] {
   const here = new Set(named)
-  const added = rows.filter((row) => !here.has(row.ref) && row.partOf?.some((issue) => here.has(issue)))
+  const added = rows.filter(
+    (row) => !here.has(row.ref) && (row.partOf?.some((issue) => here.has(issue)) || row.closes?.some((issue) => here.has(issue))),
+  )
   if (!added.length) return named
   return [...named, ...new Set(added.map((row) => row.ref))]
 }

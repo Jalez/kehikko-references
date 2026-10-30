@@ -122,6 +122,7 @@ function fromRow(
     /* Absent rather than `[]` when there is no tie, so an older host's rows are the rows they were. */
     ...(ties?.partOf.length ? { partOf: ties.partOf } : {}),
     ...(ties?.contributions.length ? { contributions: ties.contributions } : {}),
+    ...(ties?.closes.length ? { closes: ties.closes } : {}),
     ...(row.kind === 'change' && row.pipeline ? { pipeline: pipelineOf(row) } : {}),
     unreadable: false,
   }
