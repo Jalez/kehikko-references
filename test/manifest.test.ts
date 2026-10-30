@@ -70,6 +70,10 @@ describe('the manifest a host reads', () => {
     expect(MANIFEST.declares.uses).toContain('epics:read')
   })
 
+  test('says it goes to an epic a person picks in the selection menu', () => {
+    expect(MANIFEST.declares.uses).toContain('view:navigate')
+  })
+
   /**
    * And asks both again when the epic's material changes while it is open
    * (issue #7), which is what `reacts: ['content']` says. This app only reads,

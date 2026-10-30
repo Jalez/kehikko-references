@@ -415,9 +415,14 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * Not `passage`. Nothing here reads one.
    */
   reacts: ['selection', 'containers', 'dispositions', 'tracker', 'content', 'parts'],
+  /*
+   * `view:navigate`: the selection menu's "In epics" section goes to the epic a person
+   * picks (`view.goto { epic }`), on their press and for nothing else. `epics:read` and
+   * `steps:read` also answer which epics name the selected references.
+   */
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,
-    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh', 'address:open'],
+    uses: ['selection:set', 'filters:set', 'state:keep', 'epics:read', 'steps:read', 'trackers:read', 'trackers:refresh', 'address:open', 'view:navigate'],
     storage: true,
     /*
      * For a host before the `project` mode above (protocol 2.29.0). "All epics" (protocol 2.9.0):

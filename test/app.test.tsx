@@ -72,7 +72,9 @@ type Answer = { ok: true; data: unknown } | { ok: false; reason?: 'failed' | 'un
  */
 function stubDoor(answers: Record<string, Answer | 'hold'>, refresh: Answer | 'hold' = REFRESHED) {
   const seen: { project: string | null }[] = []
-  return { seen, reads: () => seen.length, answers, refresh }
+  /* Other questions a case wants answered at once, by method; every other one waits for `host.answer`. */
+  const also: Record<string, (params: Record<string, unknown>) => Answer> = {}
+  return { seen, reads: () => seen.length, answers, refresh, also }
 }
 type Door = ReturnType<typeof stubDoor>
 
@@ -112,6 +114,11 @@ function stubHost(door: Door = stubDoor({})) {
         door.seen.push({ project: standing })
         const outcome = (standing && door.answers[standing]) || { ok: true, data: readingOf([], { sources: [] }) }
         if (outcome !== 'hold') queueMicrotask(() => respond(id, outcome))
+      }
+      const extra = door.also[message.method as string]
+      if (extra) {
+        const outcome = extra((message.params ?? {}) as Record<string, unknown>)
+        queueMicrotask(() => respond(id, outcome))
       }
       if (message.method === 'tracker.refresh' && door.refresh !== 'hold') {
         const outcome = door.refresh
@@ -1687,6 +1694,118 @@ describe('work that is part of an issue the epic names', () => {
     expect(document.querySelector('li[data-ref="#3912"] [data-tie]')?.textContent).toBe('has contributions from !3907')
     const scope = (host.offered() as { options: { label: string }[] }[])[0]!
     expect(scope.options.map((option) => option.label)).toEqual(['This epic 2', 'Everything 4'])
+  })
+})
+
+describe('the epics a selected reference is in', () => {
+  const READ = {
+    ok: true as const,
+    data: readingOf([
+      row('!3907', { links: [{ ref: '#3912', relation: 'closes' }] }),
+      row('#3912', { state: 'closed' }),
+      row('!4019', { contributes: ['#3920'] }),
+      row('#3920'),
+      row('!1'),
+    ]),
+  }
+  const EPICS: Record<string, unknown> = {
+    'epics.list': { epics: [
+      { slug: 'an-epic', title: 'The open one', parts: [{ id: 'p1', heading: 'Wiring', refs: ['#3912'] }] },
+      { slug: 'other', title: 'Another epic' },
+      { slug: 'empty', title: 'Nothing here' },
+    ] },
+    'steps.list an-epic': { steps: [{ refs: ['#3912'] }] },
+    'steps.list other': { steps: [{ refs: ['#3920', '!3907'] }] },
+    'steps.list empty': { steps: [] },
+  }
+  const answeredBy = (params: Record<string, unknown>, method: string): Answer => {
+    const said = EPICS[`${method}${params.epic ? ` ${params.epic}` : ''}`]
+    return said === undefined ? { ok: false, error: 'no' } : { ok: true, data: said }
+  }
+  const mounted = async (selection: string[]) => {
+    const door = stubDoor({ [PROJECT]: READ })
+    for (const method of ['epics.list', 'steps.list', 'epic.get']) door.also[method] = (params) => answeredBy(params, method)
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    act(() => host.context(PROJECT, selection, 'an-epic', { scope: 'all' }))
+    await settle()
+    return host
+  }
+  const open = async () => {
+    const trigger = document.querySelector('[data-selection-menu] button') as HTMLElement
+    trigger.focus()
+    act(() => {
+      fireEvent.keyDown(trigger, { key: 'Enter' })
+    })
+    await waitFor(() => expect(document.querySelector('[role="menu"]')).not.toBeNull())
+    await settle()
+  }
+  const section = () => document.querySelector('[data-epics]')
+  const rowsOf = () => [...document.querySelectorAll<HTMLElement>('[data-epic]')].map((one) => [one.dataset.epic, one.textContent])
+
+  test('nothing is asked until the menu opens, then epics.list once', async () => {
+    const host = await mounted(['!3907'])
+    expect(host.calls('epics.list')).toHaveLength(0)
+    await open()
+    expect(host.calls('epics.list')).toHaveLength(1)
+  })
+
+  test('a change named directly, and one through the issue it closes (closed), each with its epic and part', async () => {
+    await mounted(['!3907'])
+    await open()
+    expect(section()?.getAttribute('data-epics')).toBe('read')
+    expect(rowsOf()).toEqual([
+      ['other', 'Another epic'],
+      ['an-epic', 'The open one' + 'part: Wiring' + 'open now'],
+    ])
+    expect(document.querySelector('[data-epic="an-epic"] [data-open-now]')).not.toBeNull()
+    expect(document.querySelector('[data-epic="other"] [data-open-now]')).toBeNull()
+  })
+
+  test('a change that is part of an issue the epic names', async () => {
+    await mounted(['!4019'])
+    await open()
+    expect(rowsOf().map(([slug]) => slug)).toEqual(['other'])
+  })
+
+  test('several selected: the union with a count per epic', async () => {
+    await mounted(['!3907', '!4019', '!1'])
+    await open()
+    expect(rowsOf()).toEqual([
+      ['other', 'Another epic' + '2 of 3'],
+      ['an-epic', 'The open one' + '1 of 3 · part: Wiring' + 'open now'],
+    ])
+  })
+
+  test('in no epic: the sentence, and no epic row', async () => {
+    await mounted(['!1'])
+    await open()
+    expect(section()?.textContent).toContain('Not in any epic of this project.')
+    expect(rowsOf()).toEqual([])
+  })
+
+  test('a host that will not list the epics says so rather than "not in any epic"', async () => {
+    await mounted(['!1'])
+    const had = EPICS['epics.list']
+    EPICS['epics.list'] = undefined
+    try {
+      await open()
+      expect(section()?.getAttribute('data-epics')).toBe('failed')
+      expect(section()?.textContent).not.toContain('Not in any epic')
+    } finally {
+      EPICS['epics.list'] = had
+    }
+  })
+
+  test('picking an epic asks the host to go there, with view.goto, and only then', async () => {
+    const host = await mounted(['!3907'])
+    await open()
+    expect(host.calls('view.goto')).toEqual([])
+    const pick = document.querySelector('[data-epic="other"]') as HTMLElement
+    act(() => pick.click())
+    expect(host.calls('view.goto')).toEqual([{ epic: 'other' }])
   })
 })
 

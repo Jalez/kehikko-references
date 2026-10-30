@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, ExternalLink, ListChecks, X } from 'lucide-react'
+import { Check, ChevronDown, Copy, ExternalLink, Layers, ListChecks, X } from 'lucide-react'
 import { useState } from 'react'
 
 import {
@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { linkSaid, NOT_IN_ANY_EPIC, type EpicsState } from '@/live/epics.ts'
 import { openOutside } from '@/live/links.ts'
 import type { CopyKind } from './copy-many.tsx'
 
@@ -17,6 +18,11 @@ import type { CopyKind } from './copy-many.tsx'
  * own browser (confirmed first past `OPEN_MANY`), copy them linked with their
  * titles or as ids, and clear the selection (`selection.set` with an empty list,
  * which the protocol makes a real call).
+ *
+ * Under the actions, "In epics": every epic of the project the selected
+ * references belong to (`epicsFor` in `live/epics.ts`), each a row that goes
+ * there on the person's press (`view.goto { epic }`), the one open now marked.
+ * Read when the menu opens (`onOpen`), never before.
  *
  * Drawn in the page, never as a header item: a clipboard write and a new window
  * both need the person's own press in this frame. A Radix menu, so the trigger
@@ -38,6 +44,9 @@ export function SelectionMenu({
   copied,
   onCopy,
   onClear,
+  epics = null,
+  onOpen,
+  onGo,
 }: {
   count: number
   /** The addresses of the selected rows, in the order the list shows them. */
@@ -46,6 +55,12 @@ export function SelectionMenu({
   copied: number | null
   onCopy: (kind: CopyKind) => void
   onClear: () => void
+  /** The "In epics" section, or null where no host answers (nothing is drawn). */
+  epics?: EpicsState | null
+  /** The menu opened: the moment to read the epics. */
+  onOpen?: () => void
+  /** An epic was picked: go there. */
+  onGo?: (slug: string) => void
 }) {
   const [asking, setAsking] = useState(false)
   const openable = urls.filter((url): url is string => Boolean(url))
@@ -80,7 +95,7 @@ export function SelectionMenu({
 
   return (
     <span data-selection-menu className="ml-2 flex shrink-0 items-center">
-      <DropdownMenu>
+      <DropdownMenu onOpenChange={(opened) => opened && onOpen?.()}>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
@@ -114,6 +129,36 @@ export function SelectionMenu({
             <X aria-hidden="true" />
             Clear selection
           </DropdownMenuItem>
+          {epics && (
+            <>
+              <DropdownMenuSeparator />
+              <div data-epics={epics.state} className="px-2 py-1 text-[11px] leading-snug">
+                <div className="mb-0.5 flex items-center gap-1 font-medium text-muted-foreground">
+                  <Layers className="size-3" aria-hidden="true" />
+                  In epics
+                </div>
+                {epics.state === 'reading' && <div className="text-muted-foreground">Reading the epics…</div>}
+                {epics.state === 'failed' && <div className="text-muted-foreground">{epics.why}</div>}
+                {epics.state === 'read' && epics.links.length === 0 && (
+                  <div className="text-muted-foreground">{NOT_IN_ANY_EPIC}</div>
+                )}
+              </div>
+              {epics.state === 'read' &&
+                epics.links.map((link) => (
+                  <DropdownMenuItem key={link.slug} data-epic={link.slug} onSelect={() => onGo?.(link.slug)}>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">{link.title}</span>
+                      {linkSaid(link) && <span className="truncate text-[10px] text-muted-foreground">{linkSaid(link)}</span>}
+                    </span>
+                    {link.open && (
+                      <span data-open-now className="ml-auto shrink-0 pl-2 text-[10px] text-muted-foreground">
+                        open now
+                      </span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </span>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { askReading, askRefresh } from '@/live/ask.ts'
+import { askEpics, type EpicsReading } from '@/live/epics.ts'
 import type { Sight } from '@/live/sight.ts'
 import {
   contentStamp,
@@ -80,6 +81,13 @@ export type Settled = { ok: true; filters: FilterChoice } | { ok: false; why: st
 
 export interface Kehikot {
   sight: Sight
+  /**
+   * Read every epic of the project and the refs each names (`epics.list`, then `steps.list` and
+   * `epic.get` per epic), asked when the selection menu opens. A sentence when nothing is framing the page.
+   */
+  readEpics: () => Promise<{ ok: true; reading: EpicsReading } | { ok: false; why: string }>
+  /** Ask the host to go to an epic (`view.goto { epic }`), on the person's press. Resolves whether it moved. */
+  goToEpic: (slug: string) => Promise<boolean>
   /**
    * Hand a web address to the canvas (`address.open`, protocol 2.16.0), or
    * `null` when the host does not answer it — an older host, or nothing
@@ -806,9 +814,27 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
 
   const busy = asked || refreshing || hostReading
 
+  const readEpics = useCallback(() => {
+    const current = live.current()
+    if (!current) return Promise.resolve({ ok: false as const, why: 'Nothing is framing this page.' })
+    return askEpics((method, params, options) => current.request(method, params, options), epicOn.current ?? null, namedBy)
+  }, [])
+  const goToEpic = useCallback(async (slug: string) => {
+    const current = live.current()
+    if (!current) return false
+    try {
+      const answer = await current.request('view.goto', { epic: slug })
+      return (answer as { outcome?: unknown } | null)?.outcome !== 'declined'
+    } catch {
+      return false
+    }
+  }, [])
+
   return useMemo(
     () => ({
       sight,
+      readEpics,
+      goToEpic,
       openAddress,
       where,
       projectPath,
@@ -835,6 +861,8 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
     }),
     [
       sight,
+      readEpics,
+      goToEpic,
       openAddress,
       where,
       projectPath,

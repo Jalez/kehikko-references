@@ -183,6 +183,18 @@ while rows are selected, unless text is selected or focus is in a field
 (`takesCopyKey`). The copy is written in this page, never from a header item: a
 clipboard write needs the press in this frame.
 
+Under those, the menu has an "In epics" section: every epic of the project the
+selected references belong to. A reference belongs to an epic when the epic
+names it, or, for a change, names an issue it closes or is part of (the ties of
+`live/ties.ts`); an issue only when the epic names it. Each row is the epic's
+title, the part that names it where there is one, and for several selected
+"2 of 3"; the epic open now is marked "open now", and with none the section
+says "Not in any epic of this project." It is read when the menu opens, with
+`epics.list` and then `steps.list` and `epic.get` for each epic (`askEpics` in
+`live/epics.ts`), and never in between. Pressing an epic asks the host to go
+there with `view.goto { epic }` (the `view:navigate` capability), on that press
+and nothing else.
+
 The bar (`view/heading.tsx`: count, scope, age, and the selection menu) is the
 module's footer: last in the page, sticky at the bottom, the list scrolling
 above it, so the host's frame header, which overlaps the top of a folded or
@@ -288,10 +300,10 @@ counted on its own line rather than folded into `37 of 412 shown`.
 click asks; the host answers by sending a context; the tick appears when that
 comes back.
 
-## Seven capabilities
+## Capabilities
 
 `selection:set`, `filters:set`, `state:keep`, `epics:read`, `steps:read`,
-`trackers:read` and `trackers:refresh`.
+`trackers:read`, `trackers:refresh` and `view:navigate`.
 
 `filters:set` is there because two promises on this page need to ask for the
 choice BACK: `view.goto`, which answers "go to `gh#105`" by clearing whatever is
