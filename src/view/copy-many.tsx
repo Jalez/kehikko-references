@@ -1,12 +1,11 @@
-import { Check, ChevronDown, Copy } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { copyPayload, idsOfAll, payloadOfAll, type Copyable } from '@/live/copy.ts'
 
 /**
  * Copying the selected references at once: one line each, linked, with their
  * titles (the single row's copy, repeated), or just their ids space-separated.
+ * The selection menu (`selection-menu.tsx`) and Cmd+C both use what is here.
  *
  * Drawn in the page, never as a header item: a header press reaches this page as
  * a message, and a clipboard write needs the person's own press in this frame.
@@ -72,78 +71,4 @@ export function useCopyMany(rows: Copyable[]) {
     [rows],
   )
   return { copied, copy }
-}
-
-/**
- * "Copy 3 references", and beside it a small menu with the same copy and the
- * ids-only one. Says "Copied 3" for a moment once the clipboard took it.
- */
-export function CopyMany({
-  count,
-  copied,
-  onCopy,
-}: {
-  count: number
-  copied: number | null
-  onCopy: (kind: CopyKind) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const done = copied !== null
-  const item =
-    'flex w-full items-center rounded-sm px-2 py-1 text-left text-xs outline-none hover:bg-accent focus-visible:bg-accent'
-  return (
-    <span data-copy-many className="ml-2 flex shrink-0 items-center rounded-sm border border-border bg-background text-[11px] leading-none">
-      <button
-        type="button"
-        onClick={() => onCopy('linked')}
-        aria-label={`Copy ${count} references with their links and titles`}
-        className="flex h-5 items-center gap-1 px-1.5 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {done ? <Check className="size-3" /> : <Copy className="size-3" />}
-        <span aria-live="polite">
-          {done ? (
-            `Copied ${copied}`
-          ) : (
-            <>
-              Copy {count}
-              <span className="hidden @sm:inline"> references</span>
-            </>
-          )}
-        </span>
-      </button>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="More ways to copy the selected references"
-            className="flex h-5 items-center border-l border-border px-0.5 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ChevronDown className="size-3" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-auto p-1">
-          <button
-            type="button"
-            className={item}
-            onClick={() => {
-              setOpen(false)
-              onCopy('linked')
-            }}
-          >
-            Copy with links and titles
-          </button>
-          <button
-            type="button"
-            className={item}
-            onClick={() => {
-              setOpen(false)
-              onCopy('ids')
-            }}
-          >
-            Copy ids
-          </button>
-        </PopoverContent>
-      </Popover>
-    </span>
-  )
 }

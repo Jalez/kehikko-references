@@ -7,7 +7,6 @@ import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
 import { tieSaid } from '@/live/ties.ts'
 import { Markers } from './markers.tsx'
-import { RowMenu } from './row-menu.tsx'
 import { CopyButton } from './copy-button.tsx'
 
 /**
@@ -126,10 +125,9 @@ import { CopyButton } from './copy-button.tsx'
  * the state is what they came to check; the markers say whether somebody
  * already holds it, which is what a narrow list beside a journey is for (#25).
  *
- * Nor is the checkbox ever dropped, and nor is the "⋯" menu (`row-menu.tsx`),
- * which holds opening in the browser and the copy once the copy button has gone
- * under 24rem. They are the row's verbs, and a row you cannot act on at 220
- * pixels is a row somebody has to widen a container to use. The state is a
+ * Nor is the checkbox ever dropped: selecting is the row's verb, and the
+ * selection menu in the bar (`selection-menu.tsx`) holds the rest — open, copy
+ * — so a row you cannot act on at 220 pixels is not left behind. The state is a
  * glyph beside the pipeline mark (`StateMark` in `markers.tsx`), its words in
  * its tooltip and label.
  *
@@ -380,13 +378,13 @@ export function ReferenceRow({
 
       <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} />
 
-      {/* From 24rem of the frame the copy button stays beside "⋯"; below that only
-          "⋯" is left, and the menu holds the copy too. */}
+      {/* From 24rem of the frame the copy button ends the row; below that it is
+          dropped, because there is no room for it beside the markers and the
+          selection menu in the bar copies the selected rows (one or more). */}
       <span className="hidden self-stretch @sm/frame:flex">
         <CopyButton row={row} />
       </span>
 
-      <RowMenu row={row} now={at} />
     </li>
   )
 }

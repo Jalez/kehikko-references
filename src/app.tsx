@@ -34,8 +34,9 @@ import {
   NothingPicked,
   Troubled,
 } from '@/view/absence.tsx'
-import { CopyMany, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
+import { takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
+import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { SourceTrouble } from '@/view/sources.tsx'
 
@@ -666,33 +667,6 @@ export function App() {
        can ask it directly, past the row's own container (`reference-row.tsx`). */
     <div ref={frame} className="@container/frame flex h-full flex-col">
       {/*
-        The table's heading, which is the only chrome left.
-
-        Two rows stood here: a header with the project name, the freshness line
-        and a Refresh button, and a toolbar with the query, the seven filter
-        buttons, the order trigger, the count and Clear. At 220 pixels they came
-        to about a hundred pixels over a list that had three hundred to divide.
-        Every one of those things is somewhere better now — the filters and the
-        query in the container's own header as `kehikot.filters`, the refresh
-        and the freshness line as `kehikot.refreshable`, the order in the
-        View menu — except the count, which could not go, because the
-        host cannot count rows it does not render. `view/heading.tsx` has the
-        whole argument.
-      */}
-      <Heading
-        project={sight.project}
-        showing={shown.length}
-        total={rows.length}
-        scope={sifting.scope?.from ?? null}
-        at={held.at}
-        unread={held.missing}
-        action={
-          selected.length >= 2 || copied !== null ? (
-            <CopyMany count={selected.length} copied={copied} onCopy={(kind) => void copy(kind)} />
-          ) : null
-        }
-      />
-      {/*
         A source that could not be read, over the rows it gave before.
 
         This is the state the shared reading keeps exactly as the old cache did,
@@ -775,6 +749,43 @@ export function App() {
           <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} />
         )}
       </div>
+      {/*
+        The table's heading, which is the only chrome left, and the module's footer:
+        it ends the page, after the list, because the host's frame header
+        overlaps the top of a page whose container is folded or collapsed and
+        would sit over it there. Sticky at the bottom, with the list scrolling
+        above it.
+
+        Two rows stood here: a header with the project name, the freshness line
+        and a Refresh button, and a toolbar with the query, the seven filter
+        buttons, the order trigger, the count and Clear. At 220 pixels they came
+        to about a hundred pixels over a list that had three hundred to divide.
+        Every one of those things is somewhere better now — the filters and the
+        query in the container's own header as `kehikot.filters`, the refresh
+        and the freshness line as `kehikot.refreshable`, the order in the
+        View menu — except the count, which could not go, because the
+        host cannot count rows it does not render. `view/heading.tsx` has the
+        whole argument.
+      */}
+      <Heading
+        project={sight.project}
+        showing={shown.length}
+        total={rows.length}
+        scope={sifting.scope?.from ?? null}
+        at={held.at}
+        unread={held.missing}
+        action={
+          selected.length >= 1 ? (
+            <SelectionMenu
+              count={selected.length}
+              urls={selected.map((row) => row.url)}
+              copied={copied}
+              onCopy={(kind) => void copy(kind)}
+              onClear={() => select([])}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }

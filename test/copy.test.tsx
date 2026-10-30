@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { copyPayload, idsOfAll, payloadOf, payloadOfAll, selectedInOrder } from '@/live/copy.ts'
-import { CopyMany, payloadFor, takesCopyKey, type CopyKey } from '@/view/copy-many.tsx'
+import { payloadFor, takesCopyKey, type CopyKey } from '@/view/copy-many.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { row } from './fixtures.ts'
 
@@ -185,21 +185,5 @@ describe('Cmd+C', () => {
     expect(takesCopyKey(key({ key: 'v' }), list, false)).toBe(false)
     expect(takesCopyKey(key({ defaultPrevented: true }), list, false)).toBe(false)
     expect(takesCopyKey(key({ target: null }), list, false)).toBe(false)
-  })
-})
-
-describe('the bar', () => {
-  test('says the count, copies, offers ids in its menu, and says "Copied N"', async () => {
-    const asked: string[] = []
-    const { getByLabelText, findByText, getByText, rerender } = render(
-      <CopyMany count={3} copied={null} onCopy={(kind) => asked.push(kind)} />,
-    )
-    expect(getByText(/Copy 3/)).toBeTruthy()
-    fireEvent.click(getByLabelText('Copy 3 references with their links and titles'))
-    fireEvent.click(getByLabelText('More ways to copy the selected references'))
-    fireEvent.click(await findByText('Copy ids'))
-    expect(asked).toEqual(['linked', 'ids'])
-    rerender(<CopyMany count={3} copied={3} onCopy={() => {}} />)
-    expect(getByText('Copied 3')).toBeTruthy()
   })
 })

@@ -124,7 +124,7 @@ export function Heading({
   unread?: readonly TrackerMissing[]
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
-  /** Drawn at the line's end: what can be done with the selected rows (`CopyMany`), when there is anything. */
+  /** Drawn at the line's end: what can be done with the selected rows (`SelectionMenu`), when there is anything. */
   action?: ReactNode
 }) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
@@ -149,7 +149,7 @@ export function Heading({
     <div
       data-heading="columns"
       title={[[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')}
-      className="@container flex items-center border-b border-border bg-muted/30 px-3 py-0.5"
+      className="@container sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-x-1 border-t border-border bg-muted px-3 py-0.5"
     >
       {/* The count, and nothing else. `tabular-nums` so the numbers do not
           shuffle sideways while somebody types in the filter and the left

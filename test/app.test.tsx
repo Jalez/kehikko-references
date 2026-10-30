@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MESSAGE, PROTOCOL } from 'kehikot-module-protocol'
 import { mailbox, probeServer, resetServerStanding, serverStanding } from 'kehikot-module-protocol/client'
 import { COVER_WORDS } from 'kehikot-module-protocol/client/react'
@@ -675,11 +675,10 @@ describe('picking references out', () => {
     expect(ticked()).toEqual([])
   })
 
-  test('every row has its own "⋯" menu, named for the row', async () => {
+  test('no row has a "⋯" menu', async () => {
     await listed(4)
-    const menus = [...document.querySelectorAll('li[data-ref] [data-row-menu]')]
-    expect(menus).toHaveLength(4)
-    expect(menus[0]?.getAttribute('aria-label')).toBe('More for gh#1')
+    expect(document.querySelectorAll('[data-row-menu]')).toHaveLength(0)
+    expect(document.querySelectorAll('li[data-ref]')).toHaveLength(4)
   })
 })
 
@@ -1711,36 +1710,144 @@ describe('copying the selected references', () => {
   }
   const onScreen = (refs: string[]) =>
     [...document.querySelectorAll<HTMLElement>('li[data-ref]')].map((li) => li.dataset.ref!).filter((ref) => refs.includes(ref))
-  const bar = () => document.querySelector('[data-copy-many]')
+  const bar = () => document.querySelector('[data-selection-menu]')
   const cmdC = (target: Element, more: Record<string, unknown> = {}) =>
     act(() => {
       fireEvent.keyDown(target, { key: 'c', metaKey: true, ...more })
     })
   const settled = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
-  test('one selected row draws no bar; two draw "Copy 2"', async () => {
+  const g = globalThis as unknown as { window: { open: unknown } }
+  const menuItems = async () => {
+    const trigger = bar()!.querySelector('button') as HTMLElement
+    trigger.focus()
+    act(() => {
+      fireEvent.keyDown(trigger, { key: 'Enter' })
+    })
+    await waitFor(() => expect(document.querySelector('[role="menu"]')).not.toBeNull())
+    return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+  }
+  const opening = () => {
+    const opened: string[] = []
+    const had = g.window.open
+    g.window.open = (url: string) => void opened.push(url)
+    return { opened, restore: () => void (g.window.open = had) }
+  }
+
+  test('no selection draws no menu; one draws "1 selected"; three draw "3 selected"', async () => {
+    const host = await listed(5)
+    expect(bar()).toBeNull()
+    act(() => host.context(PROJECT, ['gh#3']))
+    await settle()
+    expect(bar()?.textContent).toContain('1 selected')
+    act(() => host.context(PROJECT, ['gh#3', 'gh#1', 'gh#2']))
+    await settle()
+    expect(bar()?.textContent).toContain('3 selected')
+  })
+
+  test('the bar is the last thing on the page, after the list, and sticks to the bottom', async () => {
+    await listed(5)
+    const heading = document.querySelector('[data-heading="columns"]') as HTMLElement
+    const list = document.querySelector('li[data-ref]')!.closest('.overflow-y-auto') as HTMLElement
+    expect(heading.parentElement).toBe(list.parentElement)
+    expect(list.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(heading.parentElement!.lastElementChild).toBe(heading)
+    expect(heading.className.split(/\s+/)).toContain('sticky')
+    expect(heading.className.split(/\s+/)).toContain('bottom-0')
+  })
+
+  test('the menu holds open, both copies and clear, and is reached from the keyboard', async () => {
     const host = await listed(5)
     act(() => host.context(PROJECT, ['gh#3']))
     await settle()
-    expect(bar()).toBeNull()
-    act(() => host.context(PROJECT, ['gh#3', 'gh#1']))
-    await settle()
-    expect(bar()?.textContent).toContain('Copy 2')
+    const items = await menuItems()
+    expect(items.map((item) => item.textContent)).toEqual(['Open in your browser', 'Copy with links and titles', 'Copy ids', 'Clear selection'])
   })
 
-  test('the bar copies them as listed, not as picked, and says "Copied 2"', async () => {
+  test('with one selected, "Open in your browser" opens that page outside', async () => {
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#3']))
+    await settle()
+    const { opened, restore } = opening()
+    try {
+      const items = await menuItems()
+      act(() => items[0]!.click())
+      expect(opened).toHaveLength(1)
+      expect(opened[0]).toContain('3')
+    } finally {
+      restore()
+    }
+  })
+
+  test('with three selected, it opens each, in the order the list shows them, without asking', async () => {
+    const host = await listed(8)
+    act(() => host.context(PROJECT, ['gh#3', 'gh#1', 'gh#2']))
+    await settle()
+    const { opened, restore } = opening()
+    try {
+      const items = await menuItems()
+      act(() => items[0]!.click())
+      expect(opened.map((url) => url.split('/').pop())).toEqual(['1', '2', '3'])
+      expect(document.querySelector('[data-selection-ask]')).toBeNull()
+    } finally {
+      restore()
+    }
+  })
+
+  test('with more than five selected it asks first, and opens none until the person says so', async () => {
+    const host = await listed(8)
+    act(() => host.context(PROJECT, ['gh#1', 'gh#2', 'gh#3', 'gh#4', 'gh#5', 'gh#6', 'gh#7', 'gh#8']))
+    await settle()
+    const { opened, restore } = opening()
+    try {
+      const items = await menuItems()
+      act(() => items[0]!.click())
+      await waitFor(() => expect(document.querySelector('[data-selection-ask]')).not.toBeNull())
+      expect(document.querySelector('[data-selection-ask]')!.textContent).toContain('Open 8 pages in your browser?')
+      expect(opened).toEqual([])
+      const cancel = [...document.querySelectorAll('[data-selection-ask] button')].find((b) => b.textContent === 'Cancel') as HTMLElement
+      act(() => cancel.click())
+      expect(opened).toEqual([])
+      expect(bar()).not.toBeNull()
+
+      const again = await menuItems()
+      act(() => again[0]!.click())
+      await waitFor(() => expect(document.querySelector('[data-selection-ask]')).not.toBeNull())
+      const open = [...document.querySelectorAll('[data-selection-ask] button')].find((b) => b.textContent === 'Open') as HTMLElement
+      act(() => open.click())
+      expect(opened).toHaveLength(8)
+    } finally {
+      restore()
+    }
+  })
+
+  test('"Copy with links and titles" and "Copy ids" copy them as listed, and the menu says "Copied 3"', async () => {
     clipboard()
     const host = await listed(5)
-    act(() => host.context(PROJECT, ['gh#4', 'gh#2', 'gh#99']))
+    act(() => host.context(PROJECT, ['gh#4', 'gh#2', 'gh#99', 'gh#1']))
     await settle()
-    const order = onScreen(['gh#4', 'gh#2'])
-    expect(order).toEqual(['gh#2', 'gh#4'])
-    const button = screen.getByLabelText('Copy 2 references with their links and titles')
-    act(() => button.click())
+    const order = onScreen(['gh#4', 'gh#2', 'gh#1'])
+    expect(order).toEqual(['gh#1', 'gh#2', 'gh#4'])
+    let items = await menuItems()
+    act(() => items[1]!.click())
     await settled()
     expect(texts).toHaveLength(1)
     expect(texts[0]!.split('\n').map((line) => line.match(/^\[([^\]]+)\]/)?.[1])).toEqual(order)
-    expect(bar()?.textContent).toContain('Copied 2')
+    expect(bar()?.textContent).toContain('Copied 3')
+    await waitFor(() => expect(bar()?.textContent).toContain('3 selected'), { timeout: 3000 })
+    items = await menuItems()
+    act(() => items[2]!.click())
+    await settled()
+    expect(texts[1]).toBe(order.join(' '))
+  })
+
+  test('"Clear selection" asks the host for an empty selection', async () => {
+    const host = await listed(5)
+    act(() => host.context(PROJECT, ['gh#3', 'gh#1']))
+    await settle()
+    const items = await menuItems()
+    act(() => items[3]!.click())
+    expect(host.calls('selection.set')).toEqual([{ refs: [] }])
   })
 
   test('Cmd+C with focus on the page or in the list copies the selected rows', async () => {
