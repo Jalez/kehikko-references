@@ -203,26 +203,31 @@ collapsed container, never covers it. It wraps rather than overflows.
 ### The footer the host draws
 
 A host that says in its greeting that it draws a module's footer
-(`hello.footer`, protocol 2.38.0) gets the same facts as `kehikot.footer` items
-instead (`live/footer.ts`), and the page draws no bar of its own. With any other
-host (`drawsFooter` false or unknown) the page draws its bar exactly as above
-and declares nothing. The items, from the heading's own words (`headingSaid`):
+(`hello.footer`, protocol 2.38.0) AND carries out a copy and an open itself
+(`hello.carries`, protocol 2.40.0) gets the same facts as `kehikot.footer` items
+instead (`live/footer.ts`, `declaresFooter`), and the page draws no bar of its
+own. With any other host the page draws its bar and selection menu exactly as
+above, where the person's click is in this page, and declares nothing. The items, from the heading's own words (`headingSaid`):
 
 - `count` (text): `412 references` or `37 of 412 shown`; its tooltip is the
   bar's, the project folder and every fact. The one text a narrow row keeps.
 - `scope`, `age`, `unread` (texts, `optional`): `this epic`, `read 6 d ago`,
   `3 unread` (the reasons in the tooltip), each only when the bar would say it.
 - While rows are selected, at the row's end: `selected` (`3 selected`, or
-  `Copied 3` a moment after a copy), `open` (run, `external` icon, confirmed by
-  the host past five pages, disabled with a sentence when none has an address),
-  `copy` and `copy-ids` (runs), `epics` (a `go` jump to each epic the selection
+  `Copied 3` a moment after a copy), `open` (run, `external` icon, carrying
+  `open: <address>` when exactly one selected row has an https address, else
+  flat with a sentence), `copy` and `copy-ids` (runs carrying `copy: { plain,
+  html }`, the html dropped and then the run flat when over the protocol's caps), `epics` (a `go` jump to each epic the selection
   is in, read when something becomes selected rather than when a menu opens),
   and `clear` (run, `x` icon). All but the count of the selection and Clear are
   `optional`, so a narrow row keeps them in its "⋯".
 
-A press on the footer arrives relayed, with no press in this frame, so the
-clipboard may refuse a copy: the press is then answered "not taken" with a
-sentence pointing at Cmd+C in the list, which always works. `[]` is declared
+A press on the footer arrives relayed, with no press in this frame, so this page
+could never reach the clipboard or open a window from it. The HOST does the copy
+or the open in the person's click and then sends the press with `carried`; the
+page only says "Copied 3". A press that arrives without `carried` (the clipboard
+refused the host) is answered "not taken" with a sentence pointing at Cmd+C in
+the list, which always works. `[]` is declared
 while no list is on screen.
 
 ### Faces

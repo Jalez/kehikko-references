@@ -2028,12 +2028,14 @@ describe('the footer: the host draws it when it says so, the page draws its own 
   type Said = { kind: string; id: string; text?: string; label?: string; options?: { id: string }[] }
   const footers = (host: ReturnType<typeof stubHost>) => host.said.filter((m) => m.type === MESSAGE.FOOTER) as unknown as { items: Said[] }[]
   const lastFooter = (host: ReturnType<typeof stubHost>) => footers(host).at(-1)?.items
-  const pressFooter = (host: ReturnType<typeof stubHost>, item: string, value?: string) =>
+  const pressFooter = (host: ReturnType<typeof stubHost>, item: string, value?: string, carried?: 'copy' | 'open') =>
     act(() =>
-      host.post({ type: MESSAGE.PRESS, protocol: PROTOCOL, id: `f-${item}`, item, place: 'footer', ...(value === undefined ? {} : { value }) }),
+      host.post({ type: MESSAGE.PRESS, protocol: PROTOCOL, id: `f-${item}`, item, place: 'footer', ...(value === undefined ? {} : { value }), ...(carried ? { carried } : {}) }),
     )
   const pressedLast = (host: ReturnType<typeof stubHost>) => host.said.findLast((m) => m.type === MESSAGE.PRESSED)
   const bar = () => document.querySelector('[data-heading="columns"]')
+  /* A host that draws the footer and carries out the selection's copy and open itself (protocol 2.40.0). */
+  const CARRYING = { footer: true, carries: ['copy', 'open'] }
 
   test('a host that does not say it draws the footer: the bar is drawn and nothing is declared', async () => {
     const host = await listed({})
@@ -2048,7 +2050,7 @@ describe('the footer: the host draws it when it says so, the page draws its own 
   })
 
   test('a host that draws it: no bar, and the count declared as the footer, which parses', async () => {
-    const host = await listed({ footer: true })
+    const host = await listed(CARRYING)
     expect(bar()).toBeNull()
     const items = lastFooter(host)!
     expect(footerItemsSchema.safeParse(items).success).toBe(true)
@@ -2057,7 +2059,7 @@ describe('the footer: the host draws it when it says so, the page draws its own 
   })
 
   test('a selection adds the selection acts, declared again; clearing it takes them away', async () => {
-    const host = await listed({ footer: true })
+    const host = await listed(CARRYING)
     act(() => host.context(PROJECT, ['gh#3', 'gh#1']))
     await settle()
     const items = lastFooter(host)!
@@ -2068,7 +2070,7 @@ describe('the footer: the host draws it when it says so, the page draws its own 
   })
 
   test('pressing Clear selection in the footer asks for an empty selection and is taken', async () => {
-    const host = await listed({ footer: true })
+    const host = await listed(CARRYING)
     act(() => host.context(PROJECT, ['gh#3']))
     await settle()
     pressFooter(host, 'clear')
@@ -2077,22 +2079,37 @@ describe('the footer: the host draws it when it says so, the page draws its own 
     expect(pressedLast(host)).toMatchObject({ id: 'f-clear', ok: true })
   })
 
-  test('pressing Copy in the footer copies the selected rows; a clipboard that refuses is said', async () => {
-    const texts: string[] = []
-    ;(globalThis as Record<string, unknown>).ClipboardItem = undefined
-    Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void texts.push(t) } })
+  test('a host that draws the footer but carries out no copy or open (protocol 2.38): the page keeps its own bar and selection menu', async () => {
     const host = await listed({ footer: true })
+    expect(bar()).not.toBeNull()
+    expect(footers(host)).toHaveLength(0)
     act(() => host.context(PROJECT, ['gh#3']))
     await settle()
-    pressFooter(host, 'copy-ids')
-    await settle()
-    expect(texts).toEqual(['gh#3'])
-    expect(pressedLast(host)).toMatchObject({ ok: true })
+    expect(document.querySelector('[data-selection-menu]')).not.toBeNull()
+    expect(footers(host)).toHaveLength(0)
+  })
 
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: async () => { throw new Error('not allowed') } },
-    })
+  test('Copy and Open hand the host their payloads; a press the host carried is taken and said, this page writes nothing', async () => {
+    const texts: string[] = []
+    Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void texts.push(t) } })
+    const host = await listed(CARRYING)
+    act(() => host.context(PROJECT, ['gh#3']))
+    await settle()
+    const items = lastFooter(host)! as (Said & { copy?: { plain: string }; open?: string })[]
+    expect(footerItemsSchema.safeParse(items).success).toBe(true)
+    expect(items.find((item) => item.id === 'copy-ids')?.copy?.plain).toBe('gh#3')
+    expect(items.find((item) => item.id === 'copy')?.copy?.plain).toContain('gh#3')
+    pressFooter(host, 'copy-ids', undefined, 'copy')
+    await settle()
+    expect(pressedLast(host)).toMatchObject({ ok: true })
+    expect(texts).toEqual([])
+    await waitFor(() => expect(lastFooter(host)!.find((item) => item.id === 'selected')?.text).toBe('Copied 1'))
+  })
+
+  test('a copy the host did not carry is not taken, and says how to copy instead', async () => {
+    const host = await listed(CARRYING)
+    act(() => host.context(PROJECT, ['gh#3']))
+    await settle()
     pressFooter(host, 'copy')
     await settle()
     expect(pressedLast(host)).toMatchObject({ ok: false })
@@ -2107,7 +2124,7 @@ describe('the footer: the host draws it when it says so, the page draws its own 
     door.also['view.goto'] = () => ({ ok: true, data: { outcome: 'shown' } })
     const host = stubHost(door)
     render(<App />)
-    act(() => host.greet(PROJECT, null, [], {}, {}, { footer: true }))
+    act(() => host.greet(PROJECT, null, [], {}, {}, { footer: true, carries: ['copy', 'open'] }))
     await settle()
     act(() => host.context(PROJECT, ['gh#3'], 'an-epic', { scope: 'all' }))
     await settle()
@@ -2120,14 +2137,14 @@ describe('the footer: the host draws it when it says so, the page draws its own 
   })
 
   test('a press on a text item is refused by the client, in the protocol’s words', async () => {
-    const host = await listed({ footer: true })
+    const host = await listed(CARRYING)
     pressFooter(host, 'count')
     await settle()
     expect(pressedLast(host)).toMatchObject({ ok: false })
   })
 
   test('a header press still sorts while the footer is declared', async () => {
-    const host = await listed({ footer: true })
+    const host = await listed(CARRYING)
     press(host, 'ref')
     await settle()
     expect(sortedBy(host)?.value).toBe('ref')

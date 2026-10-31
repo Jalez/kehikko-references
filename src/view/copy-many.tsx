@@ -70,5 +70,12 @@ export function useCopyMany(rows: Copyable[]) {
     },
     [rows],
   )
-  return { copied, copy }
+  /* The host wrote the clipboard itself, in the person's click (protocol 2.40.0): say it was copied, as a copy here would. */
+  const noteCopied = useCallback(() => {
+    if (rows.length === 0) return
+    setCopied(rows.length)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setCopied(null), 1500)
+  }, [rows])
+  return { copied, copy, noteCopied }
 }

@@ -1,7 +1,6 @@
-import { LIMITS, type FooterItemInput } from 'kehikot-module-protocol'
+import { LIMITS, runOpenRefusal, type FooterItemInput, type RunCopy } from 'kehikot-module-protocol'
 
 import { headingSaid, type HeadingFacts } from '@/view/heading.tsx'
-import { OPEN_MANY } from '@/view/selection-menu.tsx'
 import { linkSaid, NOT_IN_ANY_EPIC, type EpicsState } from './epics.ts'
 
 /**
@@ -14,10 +13,20 @@ import { linkSaid, NOT_IN_ANY_EPIC, type EpicsState } from './epics.ts'
  * the selection menu's acts follow at the row's end: open, copy, copy ids, the
  * epics the selection is in, and clear.
  *
- * Declared only when the greeting said the host draws it (`drawsFooter`); with
- * any other host the page draws its own bar and declares nothing. When there is
- * no list on screen (a cover, a wait, an absence) the page declares `[]`.
+ * Declared only when the greeting said the host draws it (`drawsFooter`) AND
+ * carries out a copy and an open itself (`hostCarries`, protocol 2.40.0): a press
+ * the host relays reaches this page with no user activation, so the clipboard and
+ * new windows refuse this page. The copy runs hand the host their text (`copy`)
+ * and Open hands it the address (`open`), and the host does the act in the
+ * person's click. With any other host the page draws its own bar and selection
+ * menu, where the person's click is in this page, and declares nothing
+ * (`declaresFooter`). When there is no list on screen the page declares `[]`.
  */
+
+/** Whether this page declares its footer: the host draws it and carries out both acts the selection needs. */
+export function declaresFooter(drawsFooter: boolean | null | undefined, carries: readonly string[] | null | undefined): boolean {
+  return drawsFooter === true && !!carries && carries.includes('copy') && carries.includes('open')
+}
 
 /** What is selected, as the footer needs it, or nothing selected. */
 export interface FooterSelection {
@@ -28,7 +37,24 @@ export interface FooterSelection {
   copied: number | null
   /** The "In epics" reading, or null where no host answers it. */
   epics: EpicsState | null
+  /** What Copy and Copy ids put on the clipboard (protocol 2.40.0: the host writes it). */
+  linked?: RunCopy
+  ids?: RunCopy
+  /** The selected rows' addresses that can be opened, in order. */
+  urls?: readonly string[]
 }
+
+/** A copy the host may carry: within the protocol's caps, the html dropped before the plain text is given up. */
+export function carriedCopy(copy: RunCopy | undefined): RunCopy | null {
+  if (!copy || copy.plain.length === 0 || copy.plain.length > LIMITS.RUN_COPY_PLAIN) return null
+  if (copy.html !== undefined && (copy.html.length === 0 || copy.html.length > LIMITS.RUN_COPY_HTML)) return { plain: copy.plain }
+  return copy
+}
+
+/** Why the footer cannot copy this much, said where the run is drawn. */
+export const COPY_TOO_MUCH = 'That is more than the footer can copy at once. Press ⌘C in the list to copy the selected references.'
+/** Why Open is flat with several selected: one press is one window. */
+export const OPEN_ONE = 'The footer opens one reference at a time: select just one, or open each from its row.'
 
 /** The footer's ids, which a press names. */
 export const FOOTER = {
@@ -68,6 +94,9 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     align: 'end',
     ...(none ? { tooltip: NOT_IN_ANY_EPIC } : epics?.state === 'failed' ? { tooltip: tip(epics.why) } : {}),
   })
+  /* Protocol 2.40.0: Open hands the host one https address, which it opens in the person's click. */
+  const openable = (selection.urls ?? []).filter((url) => runOpenRefusal(url) === null)
+  const one = openable.length === 1 ? openable[0] : undefined
   items.push({
     kind: 'run',
     id: FOOTER.open,
@@ -75,10 +104,13 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     icon: 'external',
     align: 'end',
     optional: true,
-    confirm: selection.openable > OPEN_MANY,
-    disabled: selection.openable === 0 ? 'None of the selected references has an address to open.' : null,
-    tooltip: 'Open the selected references in your own browser.',
+    disabled: selection.openable === 0 ? 'None of the selected references has an address to open.' : one === undefined ? OPEN_ONE : null,
+    tooltip: 'Open the selected reference in your own browser.',
+    ...(one !== undefined ? { open: one } : {}),
   })
+  /* And the copies hand the host their text, which it writes in the person's click. */
+  const linked = carriedCopy(selection.linked)
+  const ids = carriedCopy(selection.ids)
   items.push({
     kind: 'run',
     id: FOOTER.copy,
@@ -86,8 +118,17 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     align: 'end',
     optional: true,
     tooltip: 'Copy the selected references with links and titles.',
+    ...(linked ? { copy: linked } : { disabled: COPY_TOO_MUCH }),
   })
-  items.push({ kind: 'run', id: FOOTER.copyIds, label: 'Copy ids', align: 'end', optional: true, tooltip: 'Copy the ids of the selected references.' })
+  items.push({
+    kind: 'run',
+    id: FOOTER.copyIds,
+    label: 'Copy ids',
+    align: 'end',
+    optional: true,
+    tooltip: 'Copy the ids of the selected references.',
+    ...(ids ? { copy: ids } : { disabled: COPY_TOO_MUCH }),
+  })
   if (epics?.state === 'read') {
     const options = epics.links
       .filter((link) => link.slug.length <= LIMITS.HEADER_ID)
@@ -113,23 +154,27 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
 
 /** What a footer press can do, handed in by the page. */
 export interface FooterActs {
-  open: () => void
-  copy: (kind: 'linked' | 'ids') => Promise<boolean>
+  /** The host copied the selection (protocol 2.40.0): say so ("Copied 3"); nothing is written here. */
+  copied: () => void
   clear: () => void
   goToEpic: (slug: string) => Promise<boolean>
 }
 
-/** Why a copy from the footer may not land: a press relayed by the host is not a press in this page. */
-export const COPY_REFUSED = 'This page could not reach the clipboard from a press outside it. Press ⌘C in the list to copy the selected references.'
+/** Why a copy from the footer did not land: the host could not write the clipboard. */
+export const COPY_REFUSED = 'The clipboard did not take that copy. Press ⌘C in the list to copy the selected references.'
+/** Why an open from the footer did not happen: the host did not open it. */
+export const OPEN_REFUSED = 'Kehikot did not open that page. Open it from its row in the list.'
 
 /**
  * A press on one of the footer's items: nothing for "taken", a sentence for
  * "not taken, and why". The page declares the footer again from its new state.
  */
-export async function footerPressed(item: string, value: unknown, acts: FooterActs): Promise<string | void> {
-  if (item === FOOTER.open) return void acts.open()
+export async function footerPressed(item: string, value: unknown, acts: FooterActs, carried?: 'copy' | 'open'): Promise<string | void> {
+  /* The host did the act in the person's click (protocol 2.40.0); this page only says what came of it. */
+  if (item === FOOTER.open) return carried === 'open' ? undefined : OPEN_REFUSED
   if (item === FOOTER.copy || item === FOOTER.copyIds) {
-    return (await acts.copy(item === FOOTER.copy ? 'linked' : 'ids')) ? undefined : COPY_REFUSED
+    if (carried !== 'copy') return COPY_REFUSED
+    return void acts.copied()
   }
   if (item === FOOTER.clear) return void acts.clear()
   if (item === FOOTER.epics) {

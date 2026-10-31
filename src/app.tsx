@@ -11,8 +11,7 @@ import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
-import { footerItems, footerPressed } from '@/live/footer.ts'
-import { openOutside } from '@/live/links.ts'
+import { declaresFooter, footerItems, footerPressed } from '@/live/footer.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
@@ -37,7 +36,7 @@ import {
   NothingPicked,
   Troubled,
 } from '@/view/absence.tsx'
-import { takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
+import { payloadFor, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -126,7 +125,7 @@ export function App() {
   const onGoto = useCallback<GotoHandler>((message, answer) => walk.current(message, answer), [])
   /* A press on the footer the host draws, reached through a ref for the same reason as `walk`:
      what it acts on (the selection, the copy) is defined below the bridge. */
-  const footerPress = useRef<(item: string, value: unknown) => Promise<string | void> | string>(
+  const footerPress = useRef<(item: string, value: unknown, carried?: 'copy' | 'open') => Promise<string | void> | string>(
     () => 'This app has nothing in its footer yet.',
   )
 
@@ -146,6 +145,7 @@ export function App() {
     header,
     footer,
     drawsFooter,
+    hostCarries,
     refreshable,
     setFilters,
     kept,
@@ -158,8 +158,8 @@ export function App() {
     openAddress,
     readEpics,
     goToEpic,
-  } = useKehikot(ID, onGoto, ({ item, value, place }) => {
-    if (place === 'footer') return footerPress.current(item, value)
+  } = useKehikot(ID, onGoto, ({ item, value, place, carried }) => {
+    if (place === 'footer') return footerPress.current(item, value, carried)
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
     setOrdering(asked)
@@ -582,7 +582,10 @@ export function App() {
    * says when the key is this page's rather than a text copy's).
    */
   const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
-  const { copied, copy } = useCopyMany(selected)
+  const { copied, copy, noteCopied } = useCopyMany(selected)
+  /* Protocol 2.40.0: the footer the host draws is declared only where the host also carries out the
+     selection's copy and open in the person's click; anywhere else the page keeps its own bar. */
+  const footing = declaresFooter(drawsFooter, hostCarries)
 
   /* "In epics": read from the host each time the menu opens, and worked out over the selection as it stands. */
   const [epicsRead, setEpicsRead] = useState<{ reading: EpicsReading } | { why: string } | null>(null)
@@ -604,18 +607,20 @@ export function App() {
      read when something becomes selected, for its "In epics" jump. */
   const anySelected = selected.length > 0
   useEffect(() => {
-    if (drawsFooter === true && where === 'hosted' && anySelected) readEpicsNow()
-  }, [drawsFooter, where, anySelected, readEpicsNow])
+    if (footing && where === 'hosted' && anySelected) readEpicsNow()
+  }, [footing, where, anySelected, readEpicsNow])
 
-  footerPress.current = (item, value) =>
-    footerPressed(item, value, {
-      open: () => {
-        for (const row of selected) openOutside(row.url)
+  footerPress.current = (item, value, carried) =>
+    footerPressed(
+      item,
+      value,
+      {
+        copied: noteCopied,
+        clear: () => select([]),
+        goToEpic,
       },
-      copy,
-      clear: () => select([]),
-      goToEpic,
-    })
+      carried,
+    )
 
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -692,13 +697,16 @@ export function App() {
             openable: selected.filter((row) => Boolean(row.url)).length,
             copied,
             epics: where === 'hosted' ? inEpicsState : null,
+            linked: payloadFor('linked', selected),
+            ids: payloadFor('ids', selected),
+            urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
           }
         : null,
     )
   }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState])
   useEffect(() => {
-    if (drawsFooter === true) footer(footerNow)
-  }, [drawsFooter, footerNow, footer])
+    if (footing) footer(footerNow)
+  }, [footing, footerNow, footer])
 
   /* Try again, on the cover for a server that did not answer: ask whether it is
      there now, and if it is, ask the host for the reading as it holds it. */
@@ -847,7 +855,7 @@ export function App() {
         host cannot count rows it does not render. `view/heading.tsx` has the
         whole argument.
       */}
-      {drawsFooter !== true && (
+      {!footing && (
         <Heading
           project={sight.project}
           showing={shown.length}

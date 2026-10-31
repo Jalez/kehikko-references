@@ -213,6 +213,11 @@ export interface Kehikot {
    * no greeting yet) means the page draws its own bar and declares nothing.
    */
   drawsFooter: boolean | null
+  /**
+   * The acts the host carries out itself for a run in the person's click (`hello.carries`,
+   * protocol 2.40.0: `copy`, `open`), or `null` from an older host, which carries out none.
+   */
+  hostCarries: readonly string[] | null
   /** Declare this page's footer items, whole (`kehikot.footer`); `[]` takes the row away. Only when `drawsFooter` is true. */
   footer: (items: FooterItemInput[]) => void
   /**
@@ -739,6 +744,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   const header = host.header
   const footer = host.footer
   const drawsFooter = host.where === 'hosted' ? host.drawsFooter : null
+  const hostCarries = host.where === 'hosted' ? host.hostCarries : null
   /* Only when the greeting said the host answers it: an older host keeps the plain link. */
   const handsAddresses = host.where === 'hosted' && host.answers?.includes('address.open') === true
   const hostOpenAddress = host.openAddress
@@ -862,6 +868,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       header,
       footer,
       drawsFooter,
+      hostCarries,
       refreshable,
       setFilters,
       kept,
@@ -892,6 +899,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       header,
       footer,
       drawsFooter,
+      hostCarries,
       refreshable,
       setFilters,
       kept,

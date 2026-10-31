@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { footerItemsSchema } from 'kehikot-module-protocol'
+import { LIMITS, footerItemsSchema } from 'kehikot-module-protocol'
 
-import { COPY_REFUSED, FOOTER, footerItems, footerPressed, type FooterActs } from '@/live/footer.ts'
+import { COPY_REFUSED, COPY_TOO_MUCH, FOOTER, OPEN_ONE, OPEN_REFUSED, carriedCopy, declaresFooter, footerItems, footerPressed, type FooterActs } from '@/live/footer.ts'
 
 /** The footer the page declares to a host that draws it, and what a press on it does. */
 
@@ -40,14 +40,15 @@ describe('footerItems', () => {
     expect(items.slice(1).map((item) => item.id)).toEqual(['selected', 'open', 'copy', 'copy-ids', 'clear'])
     expect(items.slice(1).every((item) => item.align === 'end')).toBe(true)
     expect(items.find((item) => item.id === 'selected')).toMatchObject({ text: '3 selected' })
-    expect(items.find((item) => item.id === 'open')).toMatchObject({ kind: 'run', icon: 'external', confirm: false, disabled: null })
+    expect(items.find((item) => item.id === 'open')).toMatchObject({ kind: 'run', icon: 'external', disabled: OPEN_ONE })
     expect(items.find((item) => item.id === 'clear')).toMatchObject({ kind: 'run', icon: 'x' })
   })
 
-  test('many to open are confirmed; none to open is disabled with a sentence; a copy is said', () => {
-    const many = footerItems(facts, { count: 9, openable: 9, copied: 9, epics: null })
+  test('several to open: flat, saying one at a time; none to open is disabled with a sentence; a copy is said', () => {
+    const many = footerItems(facts, { count: 9, openable: 9, copied: 9, epics: null, urls: Array.from({ length: 9 }, (_, n) => `https://x.test/${n}`) })
     parses(many)
-    expect(many.find((item) => item.id === 'open')).toMatchObject({ confirm: true })
+    expect(many.find((item) => item.id === 'open')).toMatchObject({ disabled: OPEN_ONE })
+    expect(many.find((item) => item.id === 'open')).not.toHaveProperty('open')
     expect(many.find((item) => item.id === 'selected')).toMatchObject({ text: 'Copied 9' })
     const none = footerItems(facts, { count: 1, openable: 0, copied: null, epics: null })
     parses(none)
@@ -90,26 +91,63 @@ describe('footerItems', () => {
   })
 })
 
+describe('the host carries out copy and open (protocol 2.40.0)', () => {
+  const payload = { plain: '[#1](https://x.test/1) One', html: '<div><a href="https://x.test/1">#1</a> One</div>' }
+
+  test('the footer is declared only where the host draws it and carries both acts; anywhere else the page keeps its own bar', () => {
+    expect(declaresFooter(true, ['copy', 'open'])).toBe(true)
+    expect(declaresFooter(true, ['copy'])).toBe(false)
+    expect(declaresFooter(true, null)).toBe(false)
+    expect(declaresFooter(false, ['copy', 'open'])).toBe(false)
+    expect(declaresFooter(null, ['copy', 'open'])).toBe(false)
+  })
+
+  test('Copy and Copy ids hand the host their text; Open hands it the one https address', () => {
+    const items = footerItems(facts, { count: 1, openable: 1, copied: null, epics: null, linked: payload, ids: { plain: '#1', html: '#1' }, urls: ['https://x.test/1'] })
+    parses(items)
+    expect(items.find((item) => item.id === 'copy')).toMatchObject({ copy: payload })
+    expect(items.find((item) => item.id === 'copy-ids')).toMatchObject({ copy: { plain: '#1', html: '#1' } })
+    expect(items.find((item) => item.id === 'open')).toMatchObject({ open: 'https://x.test/1', disabled: null })
+  })
+
+  test('an http or a local address is not handed to the host to open', () => {
+    const items = footerItems(facts, { count: 1, openable: 1, copied: null, epics: null, urls: ['http://localhost:3000/x'] })
+    parses(items)
+    expect(items.find((item) => item.id === 'open')).not.toHaveProperty('open')
+  })
+
+  test('the payload caps: html dropped first, then the copy is flat with a sentence', () => {
+    expect(carriedCopy({ plain: 'a', html: 'h'.repeat(LIMITS.RUN_COPY_HTML + 1) })).toEqual({ plain: 'a' })
+    expect(carriedCopy({ plain: 'p'.repeat(LIMITS.RUN_COPY_PLAIN + 1) })).toBeNull()
+    const huge = footerItems(facts, { count: 2, openable: 0, copied: null, epics: null, linked: { plain: 'p'.repeat(LIMITS.RUN_COPY_PLAIN + 1) } })
+    parses(huge)
+    expect(huge.find((item) => item.id === 'copy')).toMatchObject({ disabled: COPY_TOO_MUCH })
+  })
+})
+
 describe('footerPressed', () => {
-  const acts = (copies = true) => {
+  const acts = () => {
     const did: string[] = []
     const all: FooterActs = {
-      open: () => void did.push('open'),
-      copy: async (kind) => (did.push(`copy ${kind}`), copies),
+      copied: () => void did.push('copied'),
       clear: () => void did.push('clear'),
       goToEpic: async (slug) => (did.push(`go ${slug}`), slug !== 'nope'),
     }
     return { did, all }
   }
 
-  test('each run does its act and is taken', async () => {
+  test('a copy the host carried is said here, and nothing is written by this page', async () => {
     const { did, all } = acts()
-    for (const item of ['open', 'copy', 'copy-ids', 'clear']) expect(await footerPressed(item, undefined, all)).toBeUndefined()
-    expect(did).toEqual(['open', 'copy linked', 'copy ids', 'clear'])
+    expect(await footerPressed('copy', undefined, all, 'copy')).toBeUndefined()
+    expect(await footerPressed('copy-ids', undefined, all, 'copy')).toBeUndefined()
+    expect(await footerPressed('open', undefined, all, 'open')).toBeUndefined()
+    expect(await footerPressed('clear', undefined, all)).toBeUndefined()
+    expect(did).toEqual(['copied', 'copied', 'clear'])
   })
 
-  test('a copy the clipboard refuses is not taken, and says how to copy instead', async () => {
-    expect(await footerPressed('copy', undefined, acts(false).all)).toBe(COPY_REFUSED)
+  test('a copy or an open the host did not carry is not taken, and says what to do instead', async () => {
+    expect(await footerPressed('copy', undefined, acts().all)).toBe(COPY_REFUSED)
+    expect(await footerPressed('open', undefined, acts().all)).toBe(OPEN_REFUSED)
   })
 
   test('the epic jump goes to the option picked; a host that declines is said', async () => {
