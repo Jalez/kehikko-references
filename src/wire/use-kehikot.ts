@@ -13,6 +13,7 @@ import {
   type EpicPart,
   type FilterChoice,
   type FilterGroup,
+  type FooterItemInput,
   type HeaderItemInput,
   type ModuleContext,
 } from 'kehikot-module-protocol'
@@ -206,6 +207,14 @@ export interface Kehikot {
    * again after every change.
    */
   header: (items: HeaderItemInput[]) => void
+  /**
+   * Whether the host draws this page's declared footer (`hello.footer`, 2.38.0):
+   * `true` only when the greeting said so; `false` or `null` (an older host, or
+   * no greeting yet) means the page draws its own bar and declares nothing.
+   */
+  drawsFooter: boolean | null
+  /** Declare this page's footer items, whole (`kehikot.footer`); `[]` takes the row away. Only when `drawsFooter` is true. */
+  footer: (items: FooterItemInput[]) => void
   /**
    * Say that this page can read its tracker again, and when it last did.
    *
@@ -728,6 +737,8 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   /* Sent whether or not anybody is listening. See `offerFilters` on `Kehikot`. */
   const offerFilters = host.filters
   const header = host.header
+  const footer = host.footer
+  const drawsFooter = host.where === 'hosted' ? host.drawsFooter : null
   /* Only when the greeting said the host answers it: an older host keeps the plain link. */
   const handsAddresses = host.where === 'hosted' && host.answers?.includes('address.open') === true
   const hostOpenAddress = host.openAddress
@@ -849,6 +860,8 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       chosen,
       offerFilters,
       header,
+      footer,
+      drawsFooter,
       refreshable,
       setFilters,
       kept,
@@ -877,6 +890,8 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       chosen,
       offerFilters,
       header,
+      footer,
+      drawsFooter,
       refreshable,
       setFilters,
       kept,

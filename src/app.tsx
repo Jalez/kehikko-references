@@ -11,6 +11,8 @@ import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
+import { footerItems, footerPressed } from '@/live/footer.ts'
+import { openOutside } from '@/live/links.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
@@ -122,6 +124,11 @@ export function App() {
    */
   const walk = useRef<GotoHandler>(() => {})
   const onGoto = useCallback<GotoHandler>((message, answer) => walk.current(message, answer), [])
+  /* A press on the footer the host draws, reached through a ref for the same reason as `walk`:
+     what it acts on (the selection, the copy) is defined below the bridge. */
+  const footerPress = useRef<(item: string, value: unknown) => Promise<string | void> | string>(
+    () => 'This app has nothing in its footer yet.',
+  )
 
   const {
     sight,
@@ -137,6 +144,8 @@ export function App() {
     chosen,
     offerFilters,
     header,
+    footer,
+    drawsFooter,
     refreshable,
     setFilters,
     kept,
@@ -149,7 +158,8 @@ export function App() {
     openAddress,
     readEpics,
     goToEpic,
-  } = useKehikot(ID, onGoto, ({ item, value }) => {
+  } = useKehikot(ID, onGoto, ({ item, value, place }) => {
+    if (place === 'footer') return footerPress.current(item, value)
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
     setOrdering(asked)
@@ -590,6 +600,23 @@ export function App() {
     if ('why' in epicsRead) return { state: 'failed', why: epicsRead.why }
     return { state: 'read', links: epicsFor(selected.map((one) => one.ref), epicsRead.reading, rows) }
   }, [epicsRead, selected, rows])
+  /* With the footer the host draws there is no menu opening here to read the epics on, so they are
+     read when something becomes selected, for its "In epics" jump. */
+  const anySelected = selected.length > 0
+  useEffect(() => {
+    if (drawsFooter === true && where === 'hosted' && anySelected) readEpicsNow()
+  }, [drawsFooter, where, anySelected, readEpicsNow])
+
+  footerPress.current = (item, value) =>
+    footerPressed(item, value, {
+      open: () => {
+        for (const row of selected) openOutside(row.url)
+      },
+      copy,
+      clear: () => select([]),
+      goToEpic,
+    })
+
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -639,6 +666,40 @@ export function App() {
 
   const again = useCallback(() => read(), [read])
 
+  const cover = coverFor({ where, projectPath, server })
+
+  /**
+   * The footer the host draws, when it says it draws one (`drawsFooter`, protocol 2.38.0): the
+   * heading's facts and the selection menu's acts as `kehikot.footer` items (`live/footer.ts`),
+   * declared again whenever they change, and `[]` while no list is on screen. With any other host
+   * nothing is declared and the page draws `Heading` itself, below.
+   */
+  const listed = !cover && sight.at === 'read' && (rows.length > 0 || Boolean(sight.trouble))
+  const footerNow = useMemo(() => {
+    if (!listed || sight.at !== 'read') return []
+    return footerItems(
+      {
+        project: sight.project,
+        showing: shown.length,
+        total: rows.length,
+        scope: sifting.scope?.from ?? null,
+        at: sight.reading.at,
+        unread: sight.reading.missing,
+      },
+      selected.length
+        ? {
+            count: selected.length,
+            openable: selected.filter((row) => Boolean(row.url)).length,
+            copied,
+            epics: where === 'hosted' ? inEpicsState : null,
+          }
+        : null,
+    )
+  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState])
+  useEffect(() => {
+    if (drawsFooter === true) footer(footerNow)
+  }, [drawsFooter, footerNow, footer])
+
   /* Try again, on the cover for a server that did not answer: ask whether it is
      there now, and if it is, ask the host for the reading as it holds it. */
   const knock = useCallback(() => {
@@ -658,7 +719,6 @@ export function App() {
    * the three states `Sight` starts in are the ones the cover has just
    * answered for.
    */
-  const cover = coverFor({ where, projectPath, server })
   if (cover || sight.at === 'listening' || sight.at === 'unhosted' || sight.at === 'no-project') {
     return <Cover state={cover ?? 'waiting'} name="References" onRetry={knock} />
   }
@@ -787,28 +847,30 @@ export function App() {
         host cannot count rows it does not render. `view/heading.tsx` has the
         whole argument.
       */}
-      <Heading
-        project={sight.project}
-        showing={shown.length}
-        total={rows.length}
-        scope={sifting.scope?.from ?? null}
-        at={held.at}
-        unread={held.missing}
-        action={
-          selected.length >= 1 ? (
-            <SelectionMenu
-              count={selected.length}
-              urls={selected.map((row) => row.url)}
-              copied={copied}
-              onCopy={(kind) => void copy(kind)}
-              onClear={() => select([])}
-              epics={where === 'hosted' ? inEpicsState : null}
-              onOpen={readEpicsNow}
-              onGo={(slug) => void goToEpic(slug)}
-            />
-          ) : null
-        }
-      />
+      {drawsFooter !== true && (
+        <Heading
+          project={sight.project}
+          showing={shown.length}
+          total={rows.length}
+          scope={sifting.scope?.from ?? null}
+          at={held.at}
+          unread={held.missing}
+          action={
+            selected.length >= 1 ? (
+              <SelectionMenu
+                count={selected.length}
+                urls={selected.map((row) => row.url)}
+                copied={copied}
+                onCopy={(kind) => void copy(kind)}
+                onClear={() => select([])}
+                epics={where === 'hosted' ? inEpicsState : null}
+                onOpen={readEpicsNow}
+                onGo={(slug) => void goToEpic(slug)}
+              />
+            ) : null
+          }
+        />
+      )}
     </div>
   )
 }
