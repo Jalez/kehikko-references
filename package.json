@@ -1,6 +1,6 @@
 {
   "name": "kehikot-references",
-  "version": "3.15.0",
+  "version": "3.16.0",
   "private": true,
   "type": "module",
   "description": "Every issue and pull request in a project, read from the project's own GitHub with the login gh already holds, as one dense list nobody has to scroll twice. An app: its own server, its own page, its own port. A host may frame it, and then it knows which project to read.",
@@ -19,7 +19,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "kehikot-module-protocol": "git+https://github.com/Jalez/kehikko-protocol.git#v2.34.0",
+    "kehikot-module-protocol": "git+https://github.com/Jalez/kehikko-protocol.git#v2.40.0",
     "lucide-react": "^1.33.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -127,6 +127,47 @@ export function Heading({
   /** Drawn at the line's end: what can be done with the selected rows (`SelectionMenu`), when there is anything. */
   action?: ReactNode
 }) {
+  const { count, brief, within, age, gaps, title } = headingSaid({ project, showing, total, scope, at, unread, now })
+
+  return (
+    <div
+      data-heading="columns"
+      title={title}
+      className="@container sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-x-1 border-t border-border bg-muted px-3 py-0.5"
+    >
+      {/* The count, and nothing else. `tabular-nums` so the numbers do not
+          shuffle sideways while somebody types in the filter and the left
+          figure changes on every keystroke. */}
+      <span data-heading="count" className="min-w-0 flex-1 break-words font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
+        <span className="hidden @sm:inline">{projectName(project)} · </span>
+        <span className="@sm:hidden">{brief}</span>
+        <span className="hidden @sm:inline">{count}</span>
+        {within && <span className="hidden @sm:inline"> · {within}</span>}
+        {age && <span className="hidden @md:inline"> · {age}</span>}
+        {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
+      </span>
+      {action}
+    </div>
+  )
+}
+
+/** What the heading is about: the facts it draws, in the order it draws them. */
+export interface HeadingFacts {
+  project: string
+  showing: number
+  total: number
+  scope?: 'epic' | 'containers' | 'review' | 'mine' | 'failing' | null
+  at?: string | null
+  unread?: readonly TrackerMissing[]
+  now?: number
+}
+
+/**
+ * The heading's words, once, for the two places that say them: the module's own
+ * bar (`Heading`) and the footer it declares to a host that draws one
+ * (`footerItems` in `live/footer.ts`). Each is `null` when it is not said.
+ */
+export function headingSaid({ project, showing, total, scope = null, at, unread = [], now }: HeadingFacts) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
   const brief = showing === total ? `${total}` : `${showing}/${total}`
   const within =
@@ -144,27 +185,8 @@ export function Heading({
   const age = at === undefined ? null : ageOf(at, now)
   const gaps = unread.length ? `${unread.length} unread` : null
   const why = unread.map((gap) => `${gap.ref}: ${MISSING[gap.reason]}`)
-
-  return (
-    <div
-      data-heading="columns"
-      title={[[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')}
-      className="@container sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-x-1 border-t border-border bg-muted px-3 py-0.5"
-    >
-      {/* The count, and nothing else. `tabular-nums` so the numbers do not
-          shuffle sideways while somebody types in the filter and the left
-          figure changes on every keystroke. */}
-      <span data-heading="count" className="min-w-0 flex-1 break-words font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
-        <span className="hidden @sm:inline">{projectName(project)} · </span>
-        <span className="@sm:hidden">{brief}</span>
-        <span className="hidden @sm:inline">{count}</span>
-        {within && <span className="hidden @sm:inline"> · {within}</span>}
-        {age && <span className="hidden @md:inline"> · {age}</span>}
-        {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
-      </span>
-      {action}
-    </div>
-  )
+  const title = [[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')
+  return { count, brief, within, age, gaps, why, title }
 }
 
 /** Why a ref has no row, in the words the heading's tooltip uses. */

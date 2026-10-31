@@ -11,6 +11,7 @@ import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
+import { declaresFooter, footerItems, footerPressed } from '@/live/footer.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
   KEHIKKO,
@@ -35,7 +36,7 @@ import {
   NothingPicked,
   Troubled,
 } from '@/view/absence.tsx'
-import { takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
+import { payloadFor, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -122,6 +123,11 @@ export function App() {
    */
   const walk = useRef<GotoHandler>(() => {})
   const onGoto = useCallback<GotoHandler>((message, answer) => walk.current(message, answer), [])
+  /* A press on the footer the host draws, reached through a ref for the same reason as `walk`:
+     what it acts on (the selection, the copy) is defined below the bridge. */
+  const footerPress = useRef<(item: string, value: unknown, carried?: 'copy' | 'open') => Promise<string | void> | string>(
+    () => 'This app has nothing in its footer yet.',
+  )
 
   const {
     sight,
@@ -137,6 +143,9 @@ export function App() {
     chosen,
     offerFilters,
     header,
+    footer,
+    drawsFooter,
+    hostCarries,
     refreshable,
     setFilters,
     kept,
@@ -149,7 +158,8 @@ export function App() {
     openAddress,
     readEpics,
     goToEpic,
-  } = useKehikot(ID, onGoto, ({ item, value }) => {
+  } = useKehikot(ID, onGoto, ({ item, value, place, carried }) => {
+    if (place === 'footer') return footerPress.current(item, value, carried)
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
     setOrdering(asked)
@@ -572,7 +582,10 @@ export function App() {
    * says when the key is this page's rather than a text copy's).
    */
   const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
-  const { copied, copy } = useCopyMany(selected)
+  const { copied, copy, noteCopied } = useCopyMany(selected)
+  /* Protocol 2.40.0: the footer the host draws is declared only where the host also carries out the
+     selection's copy and open in the person's click; anywhere else the page keeps its own bar. */
+  const footing = declaresFooter(drawsFooter, hostCarries)
 
   /* "In epics": read from the host each time the menu opens, and worked out over the selection as it stands. */
   const [epicsRead, setEpicsRead] = useState<{ reading: EpicsReading } | { why: string } | null>(null)
@@ -590,6 +603,25 @@ export function App() {
     if ('why' in epicsRead) return { state: 'failed', why: epicsRead.why }
     return { state: 'read', links: epicsFor(selected.map((one) => one.ref), epicsRead.reading, rows) }
   }, [epicsRead, selected, rows])
+  /* With the footer the host draws there is no menu opening here to read the epics on, so they are
+     read when something becomes selected, for its "In epics" jump. */
+  const anySelected = selected.length > 0
+  useEffect(() => {
+    if (footing && where === 'hosted' && anySelected) readEpicsNow()
+  }, [footing, where, anySelected, readEpicsNow])
+
+  footerPress.current = (item, value, carried) =>
+    footerPressed(
+      item,
+      value,
+      {
+        copied: noteCopied,
+        clear: () => select([]),
+        goToEpic,
+      },
+      carried,
+    )
+
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -639,6 +671,43 @@ export function App() {
 
   const again = useCallback(() => read(), [read])
 
+  const cover = coverFor({ where, projectPath, server })
+
+  /**
+   * The footer the host draws, when it says it draws one (`drawsFooter`, protocol 2.38.0): the
+   * heading's facts and the selection menu's acts as `kehikot.footer` items (`live/footer.ts`),
+   * declared again whenever they change, and `[]` while no list is on screen. With any other host
+   * nothing is declared and the page draws `Heading` itself, below.
+   */
+  const listed = !cover && sight.at === 'read' && (rows.length > 0 || Boolean(sight.trouble))
+  const footerNow = useMemo(() => {
+    if (!listed || sight.at !== 'read') return []
+    return footerItems(
+      {
+        project: sight.project,
+        showing: shown.length,
+        total: rows.length,
+        scope: sifting.scope?.from ?? null,
+        at: sight.reading.at,
+        unread: sight.reading.missing,
+      },
+      selected.length
+        ? {
+            count: selected.length,
+            openable: selected.filter((row) => Boolean(row.url)).length,
+            copied,
+            epics: where === 'hosted' ? inEpicsState : null,
+            linked: payloadFor('linked', selected),
+            ids: payloadFor('ids', selected),
+            urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
+          }
+        : null,
+    )
+  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState])
+  useEffect(() => {
+    if (footing) footer(footerNow)
+  }, [footing, footerNow, footer])
+
   /* Try again, on the cover for a server that did not answer: ask whether it is
      there now, and if it is, ask the host for the reading as it holds it. */
   const knock = useCallback(() => {
@@ -658,7 +727,6 @@ export function App() {
    * the three states `Sight` starts in are the ones the cover has just
    * answered for.
    */
-  const cover = coverFor({ where, projectPath, server })
   if (cover || sight.at === 'listening' || sight.at === 'unhosted' || sight.at === 'no-project') {
     return <Cover state={cover ?? 'waiting'} name="References" onRetry={knock} />
   }
@@ -787,28 +855,30 @@ export function App() {
         host cannot count rows it does not render. `view/heading.tsx` has the
         whole argument.
       */}
-      <Heading
-        project={sight.project}
-        showing={shown.length}
-        total={rows.length}
-        scope={sifting.scope?.from ?? null}
-        at={held.at}
-        unread={held.missing}
-        action={
-          selected.length >= 1 ? (
-            <SelectionMenu
-              count={selected.length}
-              urls={selected.map((row) => row.url)}
-              copied={copied}
-              onCopy={(kind) => void copy(kind)}
-              onClear={() => select([])}
-              epics={where === 'hosted' ? inEpicsState : null}
-              onOpen={readEpicsNow}
-              onGo={(slug) => void goToEpic(slug)}
-            />
-          ) : null
-        }
-      />
+      {!footing && (
+        <Heading
+          project={sight.project}
+          showing={shown.length}
+          total={rows.length}
+          scope={sifting.scope?.from ?? null}
+          at={held.at}
+          unread={held.missing}
+          action={
+            selected.length >= 1 ? (
+              <SelectionMenu
+                count={selected.length}
+                urls={selected.map((row) => row.url)}
+                copied={copied}
+                onCopy={(kind) => void copy(kind)}
+                onClear={() => select([])}
+                epics={where === 'hosted' ? inEpicsState : null}
+                onOpen={readEpicsNow}
+                onGo={(slug) => void goToEpic(slug)}
+              />
+            ) : null
+          }
+        />
+      )}
     </div>
   )
 }

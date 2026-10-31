@@ -25,7 +25,9 @@ import type { CopyKind } from './copy-many.tsx'
  * Read when the menu opens (`onOpen`), never before.
  *
  * Drawn in the page, never as a header item: a clipboard write and a new window
- * both need the person's own press in this frame. A Radix menu, so the trigger
+ * both need the person's own press in this frame. With a host that draws the
+ * module's footer (protocol 2.38.0) the same acts are footer items instead
+ * (`live/footer.ts`), and a copy the clipboard refuses there is said. A Radix menu, so the trigger
  * opens it with Enter, Space or the down arrow, arrows move, Escape closes and
  * focus goes back to the trigger.
  */
