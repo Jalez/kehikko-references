@@ -271,8 +271,11 @@ export interface Kehikot {
    * one.
    */
   kept: string | null | undefined
-  /** Ask the host to keep this string. Fire and forget; a host that will not is not an emergency. */
-  keep: (state: string) => void
+  /**
+   * Ask the host to keep this string, for this container (this module on this kehikko), after
+   * `after` ms of quiet. Fire and forget; a host that will not is not an emergency.
+   */
+  keep: (state: string, after?: number) => void
   /**
    * The refs the open epic names — every step's refs and the umbrella — or
    * `null` for "no epic is open, or what it names could not be read".

@@ -508,23 +508,23 @@ export function App() {
    * two orders in a row should produce one write and not two, and nothing here
    * is waiting on the write.
    *
-   * The cleanup cancels the pending write on every change, so a page torn down
-   * mid-press writes nothing rather than something nobody settled on.
+   * The delay is the client's (`remember`'s `after`), not a timer here: the
+   * host keeps the order per container — this module on one kehikko — and a
+   * write still waiting when the person moves to another kehikko is sent for
+   * the kehikko it was made on, before that one's order arrives. A timer here
+   * was cancelled by the move, and the order chosen just before it was lost.
    */
   useEffect(() => {
     if (restored.current === undefined) return
-    const timer = setTimeout(() => {
-      const now = writing({ ordering, seen: seenBook })
-      /* Nothing is sent when the settings are still exactly what the host handed
-         back. Restoring them sets state, which runs this effect, which would
-         otherwise write the same string back on every single load — a call whose
-         only possible effect is to overwrite a value with itself, made once per
-         page, by every framed copy of this module. */
-      if (now === restored.current) return
-      restored.current = now
-      keep(now)
-    }, 400)
-    return () => clearTimeout(timer)
+    const now = writing({ ordering, seen: seenBook })
+    /* Nothing is sent when the settings are still exactly what the host handed
+       back. Restoring them sets state, which runs this effect, which would
+       otherwise write the same string back on every single load — a call whose
+       only possible effect is to overwrite a value with itself, made once per
+       page, by every framed copy of this module. */
+    if (now === restored.current) return
+    restored.current = now
+    keep(now, 400)
   }, [ordering, seenBook, keep])
 
   /**

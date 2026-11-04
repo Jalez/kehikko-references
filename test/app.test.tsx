@@ -792,6 +792,30 @@ describe('remembering the order, which is all this module keeps for itself', () 
     expect(JSON.parse(written.state)).toEqual({ v: 3, o: 'ref' })
   })
 
+  test('each kehikko keeps its own order: moving shows the next one\'s, and an order chosen just before is kept for the one it was chosen on', async () => {
+    const door = stubDoor({ [PROJECT]: answered(8) })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT, null, [], {}, { kehikko: { id: 1, name: 'One' }, kept: null }))
+    await settle()
+    expect(sortedBy(host)?.value).toBe('moved')
+
+    press(host, 'ref')
+    /* Moved before the write settled: it still goes, for the kehikko the order was chosen on. */
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { kehikko: { id: 2, name: 'Two' }, kept: null }))
+    await settle()
+    const written = host.calls('state.set') as { state: string; kehikko?: number }[]
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatchObject({ kehikko: 1 })
+    expect(JSON.parse(written[0]!.state)).toEqual({ v: 3, o: 'ref' })
+    /* The kehikko moved to kept nothing: its defaults, not the last one's order. */
+    expect(sortedBy(host)?.value).toBe('moved')
+
+    act(() => host.context(PROJECT, [], 'an-epic', {}, { kehikko: { id: 3, name: 'Three' }, kept: '{"v":3,"o":"ref"}' }))
+    await settle()
+    expect(sortedBy(host)?.value).toBe('ref')
+  })
+
   test('nothing is written before the greeting has been read, or the memory erases itself', async () => {
     const host = stubHost(stubDoor({}))
     render(<App />)
