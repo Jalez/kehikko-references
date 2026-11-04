@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { copyPayload, idsOfAll, payloadOfAll, type Copied, type Copyable } from '@/live/copy.ts'
+import { copyPayload, idsOfAll, payloadOfAll, type Copied, type Copyable, type CopyOptions } from '@/live/copy.ts'
 import { stacksOf } from '@/live/stack.ts'
 
 /**
@@ -16,8 +16,8 @@ import { stacksOf } from '@/live/stack.ts'
 export type CopyKind = 'linked' | 'ids'
 
 /** What to put on the clipboard for `kind`. */
-export function payloadFor(kind: CopyKind, rows: Copyable[]) {
-  return kind === 'ids' ? idsOfAll(rows) : payloadOfAll(rows)
+export function payloadFor(kind: CopyKind, rows: Copyable[], options: CopyOptions = {}) {
+  return kind === 'ids' ? idsOfAll(rows, options) : payloadOfAll(rows, options)
 }
 
 /** The parts of a keydown this rule reads; a real `KeyboardEvent` is one. */
@@ -50,8 +50,8 @@ export function takesCopyKey(event: CopyKey, list: Element | null, textSelected:
 }
 
 /** What a copy of `rows` as `kind` takes: how many, how many stacks came along, and the text. */
-export function copiedOf(kind: CopyKind, rows: Copyable[]): Copied {
-  return { count: rows.length, stacks: stacksOf(rows).length, plain: payloadFor(kind, rows).plain }
+export function copiedOf(kind: CopyKind, rows: Copyable[], options: CopyOptions = {}): Copied {
+  return { count: rows.length, stacks: stacksOf(rows).length, plain: payloadFor(kind, rows, options).plain }
 }
 
 /**

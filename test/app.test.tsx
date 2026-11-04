@@ -2143,6 +2143,48 @@ describe('the footer: the host draws it when it says so, the page draws its own 
     expect(pressedLast(host)).toMatchObject({ ok: false })
   })
 
+  describe('in a tiny container: one card at a time', () => {
+    const had = (globalThis as { ResizeObserver?: unknown }).ResizeObserver
+    afterEach(() => {
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = had
+    })
+    /* A list 300 by 80 pixels: under three rows tall. */
+    const tiny = () => {
+      ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+        constructor(private readonly told: ResizeObserverCallback) {}
+        observe() {
+          this.told([{ contentRect: { width: 300, height: 80 } } as ResizeObserverEntry], this as unknown as ResizeObserver)
+        }
+        disconnect() {}
+        unobserve() {}
+      }
+    }
+
+    test('cards instead of rows, the newest unseen first, and the footer says where: 1 / 3', async () => {
+      tiny()
+      const recent = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString()
+      const rows = [row('gh#1', { updatedAt: recent(30) }), row('gh#2', { updatedAt: recent(1) }), row('gh#3', { updatedAt: '2026-01-01T00:00:00Z' })]
+      const door = stubDoor({ [PROJECT]: { ok: true, data: readingOf(rows) } })
+      const host = stubHost(door)
+      render(<App />)
+      act(() => host.greet(PROJECT, null, [], {}, { kehikko: { id: 3, key: 'wide', name: 'Wide' } }, CARRYING))
+      await settle()
+      const cards = [...document.querySelectorAll<HTMLElement>('[data-card]')].map((card) => card.dataset.ref)
+      expect(cards).toEqual(['gh#2', 'gh#1', 'gh#3'])
+      expect(document.querySelectorAll('[data-unseen-mark]')).toHaveLength(2)
+      const items = lastFooter(host)!
+      expect(footerItemsSchema.safeParse(items).success).toBe(true)
+      expect(items[0]).toMatchObject({ kind: 'text', id: 'position', text: '1 / 3' })
+      /* On screen for a moment, the first card is seen on this kehikko, and kept with the order. */
+      /* Each wait its own act: a render the timer schedules lands when its act ends. */
+      await act(() => new Promise((done) => setTimeout(done, 1000)))
+      await act(() => new Promise((done) => setTimeout(done, 600)))
+      const kept = host.calls('state.set').at(-1) as { state: string } | undefined
+      expect(JSON.parse(kept!.state).s.wide[1]).toHaveProperty(['gh#2'])
+      expect(document.querySelectorAll('[data-unseen-mark]')).toHaveLength(1)
+    })
+  })
+
   test('a header press still sorts while the footer is declared', async () => {
     const host = await listed(CARRYING)
     press(host, 'ref')

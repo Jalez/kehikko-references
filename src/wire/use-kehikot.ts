@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { askReading, askRefresh } from '@/live/ask.ts'
 import { askEpics, type EpicsReading } from '@/live/epics.ts'
 import type { Sight } from '@/live/sight.ts'
+import { kehikkoKey } from '@/live/one-up.ts'
 import {
   contentStamp,
   filterChoiceSchema,
@@ -311,6 +312,8 @@ export interface Kehikot {
    * the scope's.
    */
   aimed: string[] | null
+  /** Which kehikko this page stands on, as the key its seen record is kept under (`kehikkoKey`); `''` with no canvases. */
+  kehikko: string
   /** `context.dispositions`: what people have marked about why a reference closed. */
   marks: Disposition[]
   /**
@@ -358,6 +361,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [epicRefs, setEpicRefs] = useState<string[] | null>(null)
   const [aimed, setAimed] = useState<string[] | null>(null)
+  const [kehikko, setKehikko] = useState('')
   const [marks, setMarks] = useState<Disposition[]>([])
   /**
    * The connection, read at the moment something is asked. Assigned from
@@ -615,6 +619,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
        canvas. */
     const pointed = aimedAt(context.containers ?? [], id)
     setAimed((was) => (was === pointed || (was && pointed && same(was, pointed)) ? was : pointed))
+    setKehikko(kehikkoKey(context.kehikko))
     const marked = context.dispositions ?? []
     setMarks((was) => (JSON.stringify(was) === JSON.stringify(marked) ? was : marked))
 
@@ -875,6 +880,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       keep,
       epicRefs,
       aimed,
+      kehikko,
       marks,
       parts,
       wholeProject,
@@ -906,6 +912,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       keep,
       epicRefs,
       aimed,
+      kehikko,
       marks,
       parts,
       wholeProject,

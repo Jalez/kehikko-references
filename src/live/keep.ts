@@ -1,3 +1,6 @@
+import { LIMITS } from 'kehikot-module-protocol'
+
+import type { Seen, SeenBook } from './one-up.ts'
 import { DEFAULT_ORDER, ORDER_LABELS, type Ordering } from './order.ts'
 
 /**
@@ -74,6 +77,75 @@ const VERSION = 3
 
 export interface Kept {
   ordering: Ordering
+  /**
+   * What each kehikko has seen, for the one-up view's "unseen first" (`one-up.ts`).
+   * Optional and additive under the same version: an older version of this app
+   * reads `o` and ignores `s`, and writing without it forgets what was seen,
+   * which is a fresh start rather than a broken one. Never in browser storage.
+   */
+  seen?: SeenBook
+}
+
+/** Epoch seconds as base 36: `w` and each ref's activity, short because the whole string is capped. */
+const b36 = (n: number) => Math.max(0, Math.floor(n)).toString(36)
+const un36 = (text: unknown): number | null => {
+  if (typeof text !== 'string' || !/^[0-9a-z]{1,10}$/.test(text)) return null
+  const n = parseInt(text, 36)
+  return Number.isFinite(n) ? n : null
+}
+
+function seenWritten(book: SeenBook): Record<string, [string, Record<string, string>]> {
+  const out: Record<string, [string, Record<string, string>]> = {}
+  for (const [key, seen] of Object.entries(book)) {
+    const r: Record<string, string> = {}
+    for (const [ref, at] of Object.entries(seen.r)) r[ref] = b36(at)
+    out[key] = [b36(seen.w), r]
+  }
+  return out
+}
+
+function seenRead(raw: unknown): SeenBook | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const book: SeenBook = {}
+  for (const [key, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(entry) || entry.length !== 2) continue
+    const w = un36(entry[0])
+    const refs = entry[1]
+    if (w === null || typeof refs !== 'object' || refs === null || Array.isArray(refs)) continue
+    const r: Seen['r'] = {}
+    for (const [ref, at] of Object.entries(refs as Record<string, unknown>)) {
+      const n = un36(at)
+      if (n !== null && ref) r[ref] = n
+    }
+    book[key] = { w, r }
+  }
+  return Object.keys(book).length ? book : undefined
+}
+
+/**
+ * The seen book cut to fit the protocol's cap: the least recently touched
+ * kehikko goes first, then, in the last one left, the refs seen longest ago
+ * (each then counts as unseen again only if it moved after the watermark).
+ */
+function trimmed(ordering: Ordering, book: SeenBook): string {
+  const kept: SeenBook = { ...book }
+  for (;;) {
+    const text = JSON.stringify({ v: VERSION, o: ordering, ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
+    if (text.length <= LIMITS.MODULE_STATE) return text
+    const keys = Object.keys(kept)
+    if (keys.length > 1) {
+      delete kept[keys[0]!]
+      continue
+    }
+    const last = kept[keys[0]!]!
+    const refs = Object.entries(last.r).sort((a, b) => a[1] - b[1])
+    if (!refs.length) {
+      delete kept[keys[0]!]
+      continue
+    }
+    const drop = Math.max(1, Math.ceil(refs.length / 8))
+    kept[keys[0]!] = { w: last.w, r: Object.fromEntries(refs.slice(drop)) }
+  }
 }
 
 /**
@@ -87,7 +159,8 @@ export interface Kept {
  * would be keeping something that belongs in this app's own store.
  */
 export function writing(kept: Kept): string {
-  return JSON.stringify({ v: VERSION, o: kept.ordering })
+  if (!kept.seen || Object.keys(kept.seen).length === 0) return JSON.stringify({ v: VERSION, o: kept.ordering })
+  return trimmed(kept.ordering, kept.seen)
 }
 
 /**
@@ -114,5 +187,6 @@ export function reading(state: string | null | undefined): Kept | null {
   if (held.v !== VERSION) return null
 
   const ordering = (Object.keys(ORDER_LABELS) as Ordering[]).find((value) => value === held.o) ?? DEFAULT_ORDER
-  return { ordering }
+  const seen = seenRead(held.s)
+  return seen ? { ordering, seen } : { ordering }
 }

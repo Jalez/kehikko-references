@@ -4,7 +4,8 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
-import { selectedInOrder } from '@/live/copy.ts'
+import { copiedSaid, selectedInOrder, type Copied } from '@/live/copy.ts'
+import { isUnseen, markSeen, oneUpFits, oneUpOrder, positionSaid, seenOf, type SeenBook } from '@/live/one-up.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { failingRefs } from '@/live/pipeline.ts'
@@ -41,6 +42,8 @@ import { Heading } from '@/view/heading.tsx'
 import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { SourceTrouble } from '@/view/sources.tsx'
+import { ItemMenu, useItemMenu } from '@/view/item-menu.tsx'
+import { OneUp } from '@/view/one-up.tsx'
 
 /**
  * The composition, and only the composition.
@@ -55,6 +58,12 @@ import { SourceTrouble } from '@/view/sources.tsx'
  * be. If this file ever grows a second concern, the concern is in the wrong
  * file.
  */
+
+/** How long a card stays on screen before its activity counts as seen. */
+const SEEN_AFTER_MS = 800
+
+/** The words for an item-menu copy the clipboard refused. */
+export const MENU_REFUSED = 'The clipboard did not take that copy.'
 
 /** One row, in CSS pixels. Stated once, because two places believe it: the row's height and the height we ask for. */
 const ROW_HEIGHT = 36
@@ -152,6 +161,7 @@ export function App() {
     keep,
     epicRefs,
     aimed,
+    kehikko,
     marks,
     parts,
     wholeProject,
@@ -466,6 +476,8 @@ export function App() {
    * by the very load that was meant to restore it.
    */
   const restored = useRef<string | null | undefined>(undefined)
+  /* What each kehikko has seen, for the one-up view's order (`live/one-up.ts`); kept with the order. */
+  const [seenBook, setSeenBook] = useState<SeenBook>({})
 
   useEffect(() => {
     /* `undefined` is "no greeting yet", and it is the whole reason `kept` has
@@ -483,6 +495,7 @@ export function App() {
        explicitly saying it has forgotten one. */
     const remembered = reading(kept) ?? { ordering: DEFAULT_ORDER }
     setOrdering(remembered.ordering)
+    setSeenBook(remembered.seen ?? {})
   }, [kept])
 
   /**
@@ -501,7 +514,7 @@ export function App() {
   useEffect(() => {
     if (restored.current === undefined) return
     const timer = setTimeout(() => {
-      const now = writing({ ordering })
+      const now = writing({ ordering, seen: seenBook })
       /* Nothing is sent when the settings are still exactly what the host handed
          back. Restoring them sets state, which runs this effect, which would
          otherwise write the same string back on every single load — a call whose
@@ -512,7 +525,7 @@ export function App() {
       keep(now)
     }, 400)
     return () => clearTimeout(timer)
-  }, [ordering, keep])
+  }, [ordering, seenBook, keep])
 
   /**
    * The plain click: this row becomes the whole selection.
@@ -577,6 +590,64 @@ export function App() {
   const focus = useMemo(() => focusOf(rows, sifting), [rows, sifting])
 
   /**
+   * The one-up view, for a tiny container (`oneUpFits`): measured on the list's
+   * own box, since a container is resized on the canvas and the window is not.
+   */
+  const list = useRef<HTMLDivElement | null>(null)
+  const [listElement, setListElement] = useState<HTMLDivElement | null>(null)
+  const listRef = useCallback((element: HTMLDivElement | null) => {
+    list.current = element
+    setListElement(element)
+  }, [])
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null)
+  useEffect(() => {
+    const element = listElement
+    const Observer = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver
+    if (!element || !Observer) return
+    const observer = new Observer((entries) => {
+      const rect = entries[entries.length - 1]?.contentRect
+      if (rect) setBox((was) => (was && was.width === rect.width && was.height === rect.height ? was : { width: rect.width, height: rect.height }))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [listElement])
+  const oneUp = oneUpFits(box?.width, box?.height)
+  /* The clock "unseen" is measured against for a kehikko with no record yet, fixed for this page. */
+  const [opened] = useState(() => Date.now())
+  const seen = useMemo(() => seenOf(seenBook, kehikko, opened), [seenBook, kehikko, opened])
+  /* The order is worked out from what was seen when the list last changed, not on every card seen:
+     a card marked seen must not jump to the back while it is on screen. */
+  const seenRef = useRef(seen)
+  seenRef.current = seen
+  const ordered = useMemo(
+    () => (oneUp ? oneUpOrder(shown, seenRef.current) : shown),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [oneUp, shown, kehikko],
+  )
+  const unseen = useMemo(() => new Set(shown.filter((row) => isUnseen(row, seen)).map((row) => row.ref)), [shown, seen])
+  const [oneUpAt, setOneUpAt] = useState<{ at: number; ref: string | null }>({ at: 0, ref: null })
+  const onCardAt = useCallback((at: number, ref: string | null) => setOneUpAt({ at, ref }), [])
+  /* A card on screen for a moment is seen, on this kehikko. */
+  useEffect(() => {
+    if (!oneUp || !oneUpAt.ref) return
+    const row = shown.find((one) => one.ref === oneUpAt.ref)
+    if (!row || !isUnseen(row, seen)) return
+    const timer = setTimeout(() => setSeenBook((book) => markSeen(book, kehikko, row, opened)), SEEN_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [oneUp, oneUpAt.ref, shown, seen, kehikko, opened])
+
+  /* The item menu (right-click, Shift+F10, a long press) and what its last copy said. */
+  const itemMenu = useItemMenu()
+  const [menuSaid, setMenuSaid] = useState<{ said: string; tooltip?: string } | null>(null)
+  const menuTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => void (menuTimer.current && clearTimeout(menuTimer.current)), [])
+  const onMenuCopied = useCallback((copied: Copied | null) => {
+    setMenuSaid(copied ? { said: copiedSaid(copied), tooltip: copied.plain } : { said: MENU_REFUSED })
+    if (menuTimer.current) clearTimeout(menuTimer.current)
+    menuTimer.current = setTimeout(() => setMenuSaid(null), copied && copied.stacks === 0 ? 2500 : 4000)
+  }, [])
+
+  /**
    * The selected rows as listed, for copying several at once: the bar in the
    * heading when two or more are selected, and Cmd+C in the list (`takesCopyKey`
    * says when the key is this page's rather than a text copy's).
@@ -622,7 +693,6 @@ export function App() {
       carried,
     )
 
-  const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (selected.length === 0) return
@@ -702,8 +772,9 @@ export function App() {
             urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
           }
         : null,
+      { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid },
     )
-  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState])
+  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
   useEffect(() => {
     if (footing) footer(footerNow)
   }, [footing, footerNow, footer])
@@ -806,7 +877,7 @@ export function App() {
           changed, and the rows are still exactly what the last reading found.
         </p>
       )}
-      <div ref={list} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={listRef} className="relative min-h-0 flex-1 overflow-y-auto" {...itemMenu.handlers}>
         {rows.length === 0 ? (
           <NothingFound project={sight.project} reading={held} />
         ) : shown.length === 0 && nothingPicked(rows, sifting) ? (
@@ -834,9 +905,16 @@ export function App() {
         ) : shown.length === 0 && narrowing(sifting) ? (
           <NothingMatches total={rows.length} clear={() => void clearAll()} />
         ) : (
-          <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} />
+          oneUp ? (
+            <OneUp rows={ordered} unseen={unseen} selection={selection} onPick={pick} onAt={onCardAt} />
+          ) : (
+            <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} />
+          )
         )}
       </div>
+      {itemMenu.menu && (
+        <ItemMenu at={itemMenu.menu} rows={rows} shown={oneUp ? ordered : shown} onClose={itemMenu.close} onCopied={onMenuCopied} />
+      )}
       {/*
         The table's heading, which is the only chrome left, and the module's footer:
         it ends the page, after the list, because the host's frame header
@@ -863,6 +941,13 @@ export function App() {
           scope={sifting.scope?.from ?? null}
           at={held.at}
           unread={held.missing}
+          readout={
+            oneUp || menuSaid ? (
+              <span data-heading="readout" className="shrink-0 font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">
+                {[oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menuSaid?.said].filter(Boolean).join(' · ')}
+              </span>
+            ) : null
+          }
           action={
             selected.length >= 1 ? (
               <SelectionMenu

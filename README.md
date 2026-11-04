@@ -220,6 +220,34 @@ module's footer: last in the page, sticky at the bottom, the list scrolling
 above it, so the host's frame header, which overlaps the top of a folded or
 collapsed container, never covers it. It wraps rather than overflows.
 
+### One at a time in a tiny container, and the item menu
+
+Under three rows tall (108 pixels of list), or narrower than the tight fit
+(240) and shorter than 240, the list becomes one card at a time
+(`live/one-up.ts`, `view/one-up.tsx`). Each card is the list's whole height
+and says what a row hides: the state in words, the whole title, where it sits
+in its stack, CI, the review, the last activity, and "Unseen". The list snaps
+(`scroll-snap-type: y mandatory`), so a wheel, a trackpad or a swipe lands on a
+whole card; the arrow keys, Page Up/Down, Home and End move one card. The
+footer leads with where you are, `3 / 12`. A tall narrow column stays a list.
+
+The cards are ordered unseen first, newest activity first, then the rest by
+recent activity. "Seen" is kept per kehikko, in the string the host keeps for
+this module (`state.set`, `live/keep.ts`), never in browser storage: a card on
+screen for 0.8 seconds is seen up to its current activity, the person's own
+activity is always seen, and a kehikko with no record yet counts the last three
+days as unseen. The record is trimmed to fit the protocol's cap, least
+recently used kehikko first.
+
+Right-click a row or a card, press Shift+F10 or the context-menu key on it, or
+hold it on a touch screen, for the item menu (`view/item-menu.tsx`): Copy this
+(with link) or its id; Copy all filtered (with links) or their ids, everything
+the list shows; Copy related (with links) or their ids, the item's whole stack
+and what it is tied to. The copies are the formats above; a related copy
+carries whole stacks, so nothing in them is "(not selected)". The footer says
+what was copied, "Copied 12". The menu closes on Escape, Tab, a press outside
+it, or when focus leaves for another module's frame.
+
 ### The footer the host draws
 
 A host that says in its greeting that it draws a module's footer
@@ -762,6 +790,8 @@ src/live/sift.ts        the only place a row may be hidden, all three groups off
 src/live/order.ts       five orders, and where a value the reading lacks belongs
 src/live/keep.ts        the one setting this module still owns, and how it is distrusted
 src/live/markers.ts     the stack, who holds it, and activity by somebody else: every marker's sentence
+src/live/one-up.ts      when one card at a time, its order, and what each kehikko has seen
+src/live/item-menu.ts   what the right-click menu copies
 src/live/faces.ts       people's faces: which avatar hosts are allowed, the image policy, initials, column widths
 src/live/sight.ts       the states of knowing
 src/view/               the row and its markers, the list, the table’s heading, failing sources, and the words for absence

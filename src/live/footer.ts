@@ -69,7 +69,20 @@ export const FOOTER = {
   copyIds: 'copy-ids',
   epics: 'epics',
   clear: 'clear',
+  position: 'position',
+  menuCopied: 'menu-copied',
 } as const
+
+/**
+ * What else the footer reads out: where the one-up view is (`3 / 12`, first, so a
+ * folded two-row container keeps it), and what the item menu just copied
+ * ("Copied 12"), or why it did not.
+ */
+export interface FooterNow {
+  position?: string | null
+  /** The item menu's last copy, said for a few seconds: what it took, or a refusal sentence. */
+  menu?: { said: string; tooltip?: string } | null
+}
 
 /** Cut to `max` characters, with an ellipsis when cut. */
 function cut(text: string, max: number): string {
@@ -77,10 +90,13 @@ function cut(text: string, max: number): string {
 }
 
 /** The footer's items for what the page is showing. */
-export function footerItems(facts: HeadingFacts, selection: FooterSelection | null = null): FooterItemInput[] {
+export function footerItems(facts: HeadingFacts, selection: FooterSelection | null = null, now: FooterNow = {}): FooterItemInput[] {
   const said = headingSaid(facts)
   const tip = (text: string) => cut(text, LIMITS.FOOTER_TOOLTIP)
-  const items: FooterItemInput[] = [{ kind: 'text', id: FOOTER.count, text: said.count, tooltip: tip(said.title) }]
+  const items: FooterItemInput[] = []
+  if (now.position) items.push({ kind: 'text', id: FOOTER.position, text: now.position, tooltip: 'Which reference is on screen, of those shown. Scroll or use the arrow keys for the next.' })
+  items.push({ kind: 'text', id: FOOTER.count, text: said.count, tooltip: tip(said.title), ...(now.position ? { optional: true } : {}) })
+  if (now.menu) items.push({ kind: 'text', id: FOOTER.menuCopied, text: now.menu.said, align: 'end', ...(now.menu.tooltip ? { tooltip: tip(now.menu.tooltip) } : {}) })
   if (said.within) items.push({ kind: 'text', id: FOOTER.scope, text: said.within, optional: true, tooltip: tip(`What the count is of: ${said.within}.`) })
   if (said.age) items.push({ kind: 'text', id: FOOTER.age, text: said.age, optional: true })
   if (said.gaps) items.push({ kind: 'text', id: FOOTER.unread, text: said.gaps, optional: true, tooltip: tip(said.why.join('\n')) })

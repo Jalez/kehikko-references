@@ -83,13 +83,26 @@ function stackBlock(place: StackPlace, copied: readonly string[], urls: Readonly
   return { plain: `${heading}\n${plainLines.join('\n')}`, html: `<p>${escapeHtml(heading)}</p><p>${htmlLines.join('')}</p>` }
 }
 
+/**
+ * How a copy marks its stacks. `whole`: a copy of an item's related references,
+ * which carries its whole stack on purpose, so no member is "(not selected)".
+ */
+export interface CopyOptions {
+  whole?: boolean
+}
+
+/** The stacks the rows are in, each with what counts as copied in it: every member for a whole copy. */
+function stacksCopied(rows: Copyable[], options: CopyOptions) {
+  return stacksOf(rows).map(({ place, copied }) => ({ place, copied: options.whole ? place.members.map((m) => m.ref) : copied }))
+}
+
 /** Several rows (or one), one line each with its title, in the same two formats, and then each stack they are in, as references. */
-export function payloadOfAll(rows: Copyable[]): Payload {
+export function payloadOfAll(rows: Copyable[], options: CopyOptions = {}): Payload {
   const each = rows.map(payloadOf)
   let html = each.map((p) => `<div>${p.html}</div>`).join('')
   let plain = each.map((p) => p.plain).join('\n')
   const urls = new Map(rows.map((row) => [row.ref, row.url]))
-  for (const { place, copied } of stacksOf(rows)) {
+  for (const { place, copied } of stacksCopied(rows, options)) {
     const block = stackBlock(place, copied, urls)
     plain += `\n\n${block.plain}`
     html += block.html
@@ -103,9 +116,9 @@ export function payloadOfAll(rows: Copyable[]): Payload {
  * shape the linked copy gives them. The same text in both formats, so a rich
  * paste gets no markup.
  */
-export function idsOfAll(rows: Copyable[]): Payload {
+export function idsOfAll(rows: Copyable[], options: CopyOptions = {}): Payload {
   let plain = rows.map((row) => row.ref).join(' ')
-  for (const { place, copied } of stacksOf(rows)) {
+  for (const { place, copied } of stacksCopied(rows, options)) {
     const lines = stackLines(place, copied)
     plain += place.forked ? `\n\n${stackHeading(place)}\n${lines.join('\n')}` : `\n\n${stackHeading(place)} ${lines[0]}`
   }
