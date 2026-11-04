@@ -118,9 +118,13 @@ export function initialsOf(name: string): string {
 /** How many faces a marker draws before it says `+N` for the rest. */
 export const FACES_SHOWN = 3
 
-/** The faces a marker draws and how many more it does not. */
-export function facesShown<T extends Face>(faces: readonly T[]): { shown: T[]; more: number } {
-  return { shown: faces.slice(0, FACES_SHOWN), more: Math.max(0, faces.length - FACES_SHOWN) }
+/**
+ * The faces a marker draws and how many more it does not: `max` of them
+ * (three, fewer in a narrow list: `live/fit.ts`), never fewer than one.
+ */
+export function facesShown<T extends Face>(faces: readonly T[], max: number = FACES_SHOWN): { shown: T[]; more: number } {
+  const room = Math.max(1, Math.floor(max))
+  return { shown: faces.slice(0, room), more: Math.max(0, faces.length - room) }
 }
 
 /**

@@ -6,7 +6,9 @@ import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
 import { tieSaid } from '@/live/ties.ts'
+import { stackSentence } from '@/live/stack.ts'
 import { Markers } from './markers.tsx'
+import { fitLook, type RowFit } from '@/live/fit.ts'
 import { CopyButton } from './copy-button.tsx'
 
 /**
@@ -105,19 +107,13 @@ import { CopyButton } from './copy-button.tsx'
  * is on it" is half of what somebody scans for — but they are searchable too,
  * and the two things that are NOT searchable have to survive.
  *
- * Dropped under 24rem of the frame: **the title** (issue #24). That used to
- * be the one thing never dropped, and the reason it no longer is, is where
- * this list is read at that width: beside Journeys, where pressing a row shows
- * that reference in the journey with its title at full length. A narrow row is
- * for finding the one to press and seeing who holds it, so its width goes to
- * the identifier, the state and the markers. The title stays reachable: it is
- * in the row's tooltip, and an `sr-only` copy keeps it in the pressable box's
- * accessible name at every width.
- *
- * This threshold is measured against the FRAME (`@sm/frame:`, the app's named
- * container), not the pressable box: the markers sit beside that box, so its
- * width differs from row to row, and a title that came and went with how many
- * markers a row has would make a column of rows that do not agree.
+ * Never dropped since 3.17.0: **the title**, truncated, its whole in the row's
+ * tooltip. Under 24rem of the frame it used to be dropped (issue #24), on the
+ * argument that a narrow list beside Journeys is for finding the row to press.
+ * In practice a column of bare numbers had to be hovered row by row to be
+ * read, so the width now comes from the slack instead (`live/fit.ts`): gaps and
+ * padding first, then faces overlap and fold into `+N`, and the title keeps
+ * what is left — a few words at 200 pixels, most of a line at 380.
  *
  * Never dropped, at any width: **the identifier, the state and the markers**
  * (`markers.tsx`: the stack, who is assigned, where the review stands, and
@@ -135,10 +131,11 @@ import { CopyButton } from './copy-button.tsx'
  *
  * Under 20rem the row used to be two lines, the identifier and the state on
  * the first and the title on the whole of the second, because a one-line row
- * left the title twelve pixels at 220. With the title dropped under 24rem that
- * second line has nothing to hold, so the row is one line, 36 pixels, at every
+ * left the title twelve pixels at 220. The row is one line, 36 pixels, at every
  * width — more rows on screen in exactly the narrow container that has the
- * least height to spare.
+ * least height to spare — and what makes room for the title on it is the
+ * compaction in `live/fit.ts`, measured on the list's own width. Only where the
+ * markers still do not fit do they wrap under the identifier and title.
  *
  * The fixed columns come back at 28rem and not before. They exist for
  * alignment — a column of ragged identifiers is a column you have to read
@@ -203,7 +200,7 @@ export function overview(row: Reference, now: number = Date.now()): string {
   if (mine) parts.push(`my role: ${mine}`)
   const tie = tieSaid(row)
   if (tie) parts.push(tie)
-  if (row.stack) parts.push(`stacked ${row.stack.at} of ${row.stack.of}: ${row.stack.members.map((m) => m.ref).join(' → ')}`)
+  if (row.stack) parts.push(stackSentence(row.stack, row.ref))
   const assigned = assignedSaid(row)
   if (assigned) parts.push(assigned)
   const review = reviewOf(row.reviewers)
@@ -222,9 +219,12 @@ export function ReferenceRow({
   onToggle,
   onOpenLink,
   now,
+  fit = 'wide',
 }: {
   row: Reference
   landed: boolean
+  /** How tightly the list is drawn, from its own width (`live/fit.ts`). */
+  fit?: RowFit
   /** Hand a marker's link to the canvas (`address.open`), or null to follow it in a new tab. Not the open icon's: that opens the person's browser. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
   /** The clock the activity marker says "3 h ago" against. Tests pass one; the page reads it at drawing. */
@@ -237,9 +237,11 @@ export function ReferenceRow({
   onToggle: (ref: string) => void
 }) {
   const at = now ?? Date.now()
+  const look = fitLook(fit)
   return (
     <li
       data-ref={row.ref}
+      data-fit={fit}
       data-kind={row.kind}
       data-selected={selected ? 'true' : 'false'}
       className={cn(
@@ -282,7 +284,7 @@ export function ReferenceRow({
           220 pixels a 16-pixel target with 3 pixels of slack either side is a
           thing people miss, and the misses land on the row and replace their
           selection. */}
-      <span className="flex shrink-0 items-center pr-1 pl-2">
+      <span className={cn('flex shrink-0 items-center', look.compactRow ? 'pr-0.5 pl-1.5' : 'pr-1 pl-2')}>
         <Checkbox
           checked={selected}
           onCheckedChange={() => onToggle(row.ref)}
@@ -300,7 +302,13 @@ export function ReferenceRow({
       <button
         type="button"
         onClick={() => onPick(row.ref)}
-        className="@container flex h-9 min-w-32 flex-1 items-center gap-2 pr-1 pl-1 text-left text-sm hover:bg-accent/60 @md:gap-3 @sm/frame:min-w-0"
+        className={cn(
+          '@container flex h-9 flex-1 items-center text-left text-sm hover:bg-accent/60 @sm/frame:min-w-0',
+          /* Under 20rem of the list the slack goes first (`live/fit.ts`): the identifier and the
+             title sit 4 pixels apart, and the box keeps just enough width for a few words of title
+             before the markers wrap under it. */
+          look.compactRow ? 'min-w-24 gap-1 px-0.5' : 'min-w-32 gap-2 pr-1 pl-1 @md:gap-3',
+        )}
       >
         {/* The mark rides INSIDE the identifier's box rather than beside it,
             so that the fixed 5.5rem column above 28rem still holds one thing
@@ -311,25 +319,18 @@ export function ReferenceRow({
           <span className="truncate text-right font-mono text-xs tabular-nums text-muted-foreground">{row.ref}</span>
         </span>
 
-        {/* Under 24rem of the frame the title is not drawn (issue #24) and
-            this copy keeps it in the button's accessible name, so a screen
-            reader still hears what the row is; above it the drawn title is
-            the name and this one is gone. */}
-        <span data-title-spoken className="sr-only @sm/frame:hidden">
-          {row.title || 'no title in the reading'}
-        </span>
-
-        <span
-          data-title
-          className={cn('hidden min-w-0 flex-1 truncate @sm/frame:block', !row.title && 'text-muted-foreground italic')}
-        >
+        {/* The title at every width, truncated: the row's tooltip says all of it. It
+            used to be dropped under 24rem of the frame (issue #24), which left a
+            narrow list a column of numbers; a few words of title are what tell
+            two rows apart at a glance. */}
+        <span data-title className={cn('block min-w-0 flex-1 truncate', !row.title && 'text-muted-foreground italic')}>
           {row.title || (row.unreadable ? 'this reference arrived with no reading at all' : 'no title in the reading')}
         </span>
 
         {/* The tie to an issue — `part of #3912` on a change, `has contributions from !3907` on the
             issue (protocol 2.26.0) — beside the title and kept while it truncates, so a merge request
             that delivers a piece of an issue says which. Plain text, never a link. Under 24rem of the
-            frame it goes with the title and is still spoken, and the row's tooltip says it. */}
+            frame it is not drawn, leaving the width to the title; it is still spoken, and the row's tooltip says it. */}
         {tieSaid(row) && (
           <span
             data-tie
@@ -376,7 +377,7 @@ export function ReferenceRow({
         </span>
       </button>
 
-      <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} />
+      <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} look={look} />
 
       {/* From 24rem of the frame the copy button ends the row; below that it is
           dropped, because there is no room for it beside the markers and the

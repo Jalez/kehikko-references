@@ -45,7 +45,7 @@ describe('footerItems', () => {
   })
 
   test('several to open: flat, saying one at a time; none to open is disabled with a sentence; a copy is said', () => {
-    const many = footerItems(facts, { count: 9, openable: 9, copied: 9, epics: null, urls: Array.from({ length: 9 }, (_, n) => `https://x.test/${n}`) })
+    const many = footerItems(facts, { count: 9, openable: 9, copied: { count: 9, stacks: 0, plain: 'x' }, epics: null, urls: Array.from({ length: 9 }, (_, n) => `https://x.test/${n}`) })
     parses(many)
     expect(many.find((item) => item.id === 'open')).toMatchObject({ disabled: OPEN_ONE })
     expect(many.find((item) => item.id === 'open')).not.toHaveProperty('open')

@@ -115,9 +115,20 @@ from a name.
 - **The stack** — `⧉ 2/3` on a change whose base branch is another open
   change's head branch (protocol 2.8.0 `stack`, which the host works out across
   its reading). Its tooltip lists the whole stack bottom first, refs and
-  titles, this one marked; a fork in the stack is indented. Pressing it opens
-  the same list as buttons, and pressing one selects that change, as pressing
-  its row would. The stack is worked out over every row read
+  titles, this one marked. Pressing it opens the same list as buttons, and
+  pressing one selects that change, as pressing its row would. A stack that
+  forks — two changes built on the same one — is a tree, not a line
+  (`live/stack.ts`): the marker says `⑂ 4` (how many changes the tree holds,
+  since `3 of 4` would claim a line), its label names the branch this change
+  is on (`#12 → #14`), and the tooltip and popover draw the tree with text fork
+  markers, `├─ └─ │`, never colour or indentation alone:
+
+  ```
+  #12 base
+  ├─ #13
+  │  └─ #15
+  └─ #14
+  ``` The stack is worked out over every row read
   (`stackPlaces` in `live/markers.ts`), so a filter that hides the change
   underneath does not unstack this one.
 - **Assigned** — the faces of whoever is assigned (see *Faces* below), naming
@@ -168,6 +179,15 @@ Each row's copy button (from 24rem of the frame; narrower, the selection menu
 copies) puts its reference, linked, and its title on the clipboard
 (`live/copy.ts`): `text/html` with the reference as a link, and `text/plain` as
 Markdown, `[!4013](url) title`.
+
+Every copy takes the stacks along: after the copied lines, each stack the
+copied changes are in, once, bottom first, the copied ones marked `(copied)`.
+A line of changes is a numbered list (`<ol>` in the html); a forked stack is
+the tree above, in a ```` ```text ```` block in the Markdown and `<pre>` in the
+html, so the fork survives the paste. "Copy ids" adds the stack as refs only:
+`#21 → #22 → #23` on one line, or the tree. Afterwards the bar and the footer
+say what was copied — `Copied 2 + stack` — and the footer's tooltip is the
+text itself.
 
 Clicking a row selects it, and a module that shows pages shows it. There is no
 per-row menu. With one or more rows selected the bar shows a menu labelled
@@ -482,9 +502,9 @@ narrows, pieces drop from the right in this order:
 3. **The people** (under 24rem) — reluctantly, because *who is on it* is half
    of what somebody scans for. Searchable too, and the markers say who holds
    it at every width.
-4. **The title** (under 24rem of the frame, issue #24) — see below.
 
-Never dropped, at any width: **the identifier, the state and the markers**.
+Never dropped, at any width: **the identifier, the state, the title
+(truncated) and the markers**.
 The identifier is what somebody is looking for, the state is what they came to
 check, and the markers say whether somebody already holds it.
 
@@ -493,27 +513,31 @@ wide layout would have drawn it. "The filter searches it" is a fair answer to
 somebody who knows the word to type and no answer at all to somebody who does
 not, so hovering a row says everything the row would say at full width.
 
-### The title goes under 24rem, and the row is one line
+### Compact rows: the title stays, the slack goes
 
-The title used to be the one thing never dropped. It is dropped under 24rem of
-the frame now because of where the list is read at that width: beside Journeys,
-where pressing a row shows that reference in the journey with its title at full
-length. A narrow row is for finding the one to press and seeing who holds it,
-so its width goes to the identifier, the state and the markers. The title is in
-the row's tooltip, and an `sr-only` copy keeps it in the pressable box's
-accessible name, so a screen reader hears what the row is at every width.
+From 3.4.0 the title was dropped under 24rem of the frame, on the argument
+that a narrow list beside Journeys is for finding the row to press. It left a
+narrow list a column of bare numbers to hover one by one, so since 3.17.0 the
+title is drawn at every width, truncated, its whole in the row's tooltip, and
+the room for it comes from the slack instead (`live/fit.ts`). The fit is
+decided from the list's own width (a `ResizeObserver` on the list, never the
+window):
 
-The threshold asks the frame by name (`@sm/frame:`, the app's root is
-`@container/frame`) rather than the pressable box, because the markers sit
-beside that box: its width differs from row to row, and a title that came and
-went with how many markers a row has would make a column of rows that disagree.
+| List width | Fit | What gives way |
+| --- | --- | --- |
+| under 240px | `tight` | Gaps and padding inside the row; markers in 20px boxes edge to edge, the pipeline's box under the state's; **one** face per marker and `+N`, overlapping further |
+| 240–319px | `narrow` | The same, **two** faces per marker |
+| 320–383px | `snug` | The row's gaps; three faces, 24px marks |
+| 384px and up | `wide` | Nothing: the columns of the container queries below |
+
+The `+N` always says how many more, and each marker's label names everybody.
 
 Under 20rem the row used to be two lines — the identifier and the state on the
 first, the title on the whole of the second — because a one-line row in a
-220-pixel container left the title **twelve pixels**. With no title to hold,
-that second line went with it: the row is one line, 36 pixels, at every width
-it fits, which is more rows on screen in the container with the least height
-to spare. The fixed columns, which exist so a column of identifiers can be
+220-pixel container left the title **twelve pixels**. With the compaction
+above the title keeps a few words at 200 pixels, so the row stays one line, 36
+pixels, at every width it fits — more rows on screen in the container with the
+least height to spare — and only markers that still do not fit wrap under it. The fixed columns, which exist so a column of identifiers can be
 scanned rather than read, come back at 28rem, where there is width to pay for
 them.
 

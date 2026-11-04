@@ -11,6 +11,7 @@ import {
 import { linkSaid, NOT_IN_ANY_EPIC, type EpicsState } from '@/live/epics.ts'
 import { openOutside } from '@/live/links.ts'
 import type { CopyKind } from './copy-many.tsx'
+import { copiedSaid, type Copied } from '@/live/copy.ts'
 
 /**
  * The one menu for what is selected, in the module's bar, shown while one or
@@ -53,8 +54,8 @@ export function SelectionMenu({
   count: number
   /** The addresses of the selected rows, in the order the list shows them. */
   urls: readonly (string | null | undefined)[]
-  /** How many were copied a moment ago, or null. */
-  copied: number | null
+  /** What was copied a moment ago, or null. */
+  copied: Copied | null
   onCopy: (kind: CopyKind) => void
   onClear: () => void
   /** The "In epics" section, or null where no host answers (nothing is drawn). */
@@ -105,7 +106,7 @@ export function SelectionMenu({
             className="flex h-5 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-[11px] leading-none text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:text-foreground"
           >
             {done ? <Check className="size-3" aria-hidden="true" /> : <ListChecks className="size-3" aria-hidden="true" />}
-            <span aria-live="polite">{done ? `Copied ${copied}` : `${count} selected`}</span>
+            <span aria-live="polite" title={copied?.plain}>{copied ? copiedSaid(copied) : `${count} selected`}</span>
             <ChevronDown className="size-3" aria-hidden="true" />
           </button>
         </DropdownMenuTrigger>

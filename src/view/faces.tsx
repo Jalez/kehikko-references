@@ -28,14 +28,14 @@ const STATE_BADGE: Record<ReviewerFace['state'], { icon: ReactNode; tone?: strin
 }
 
 /** One face: the picture when it may be loaded and has not failed, else initials. */
-function Avatar({ face, badge, z }: { face: Face; badge?: ReviewerFace['state']; z: number }) {
+function Avatar({ face, badge, z, tight }: { face: Face; badge?: ReviewerFace['state']; z: number; tight: boolean }) {
   const [failed, setFailed] = useState(false)
   const src = face.avatarUrl && !failed && imageLoadable(face.avatarUrl) ? face.avatarUrl : null
   return (
     <span
       data-face={face.login ?? face.name}
       data-state={badge}
-      className="relative -ml-1 inline-flex size-4 shrink-0 first:ml-0"
+      className={cn('relative inline-flex size-4 shrink-0 first:ml-0', tight ? '-ml-1.5' : '-ml-1')}
       style={{ zIndex: z }}
     >
       <span className="inline-flex size-4 items-center justify-center overflow-hidden rounded-full bg-[color-mix(in_oklab,var(--muted-foreground)_22%,var(--background))] ring-1 ring-background">
@@ -73,13 +73,16 @@ function Avatar({ face, badge, z }: { face: Face; badge?: ReviewerFace['state'];
   )
 }
 
-/** Up to three faces overlapping, and `+N` for the rest. */
-export function Faces({ faces }: { faces: readonly (Face | ReviewerFace)[] }) {
-  const { shown, more } = facesShown(faces)
+/**
+ * Up to `max` faces overlapping (three; fewer in a narrow list), and `+N` for
+ * the rest. `tight` overlaps them further, so only part of each shows.
+ */
+export function Faces({ faces, max, tight = false }: { faces: readonly (Face | ReviewerFace)[]; max?: number; tight?: boolean }) {
+  const { shown, more } = facesShown(faces, max)
   return (
-    <span data-faces className="inline-flex items-center">
+    <span data-faces data-shown={shown.length} className="inline-flex items-center">
       {shown.map((face, i) => (
-        <Avatar key={`${face.login ?? face.name}:${i}`} face={face} badge={'state' in face ? face.state : undefined} z={shown.length - i + 1} />
+        <Avatar key={`${face.login ?? face.name}:${i}`} face={face} badge={'state' in face ? face.state : undefined} z={shown.length - i + 1} tight={tight} />
       ))}
       {more > 0 && (
         <span

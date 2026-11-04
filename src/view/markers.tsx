@@ -7,6 +7,7 @@ import {
   CircleQuestionMark,
   CircleSlash,
   CircleX,
+  GitFork,
   GitMerge,
   GitPullRequest,
   GitPullRequestClosed,
@@ -21,11 +22,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
+import { stackPath, stackTree } from '@/live/stack.ts'
 import { stateLook, stateSaid, type StateLook } from '@/live/state.ts'
 import type { Reference } from '@/live/reference.ts'
 import { handLink, handsLink } from '@/live/links.ts'
 import { pipelineSaid, type Pipeline } from '@/live/pipeline.ts'
 import { Faces } from './faces.tsx'
+import { fitLook, type FitLook } from '@/live/fit.ts'
 import { openOutside } from '@/live/links.ts'
 
 /**
@@ -52,6 +55,13 @@ import { openOutside } from '@/live/links.ts'
  * The cluster carries `title=""` so the row's own whole-row `title` does not
  * pop up over a marker's tooltip and say everything again at once.
  */
+
+/**
+ * A marker's box: 24 pixels, or 20 in a narrow list (`live/fit.ts`), where the
+ * pipeline's box also slides 4 pixels under the state's so the two read as a
+ * pair. The boxes overlap; the 14-pixel glyphs in them do not.
+ */
+const BOX = { normal: 'w-6', compact: 'w-5', paired: 'w-5 -ml-1' }
 
 const MARK = 'inline-flex h-6 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring'
 
@@ -81,15 +91,25 @@ const FACES_MARK = {
 }
 
 /**
- * The stack: `⧉ 2/3`, the whole stack bottom first in its tooltip, and a press
- * opens the same list as buttons — pressing one selects that change, as
+ * The stack: `⧉ 2/3` on a line of changes; on a forked stack `⑂ 4`, how many
+ * changes the tree holds, because a position on a line would be false there.
+ * Its tooltip says the whole stack bottom first (a tree when forked), and a
+ * press opens the same list as buttons — pressing one selects that change, as
  * pressing its row would. A tooltip cannot hold buttons, which is why the
  * press opens a popover rather than the tooltip being made clickable.
+ *
+ * In the popover a forked stack is the tree `stackTree` draws: its glyphs are
+ * text (`├─ └─ │`), hidden from a screen reader, which hears each entry's base
+ * in its label instead. Never colour or indentation alone.
  */
-function StackMark({ row, onPick }: { row: Reference; onPick: (ref: string) => void }) {
+function StackMark({ row, onPick, tight = false }: { row: Reference; onPick: (ref: string) => void; tight?: boolean }) {
   const [open, setOpen] = useState(false)
   const place = row.stack!
   const said = stackSaid(place, row.ref)
+  const lines = place.forked ? stackTree(place.members) : null
+  const label = place.forked
+    ? `In a forked stack of ${place.of}, on the branch ${stackPath(place.members, row.ref).join(' → ')}. Show the stack`
+    : `Stacked: ${place.at} of ${place.of}. Show the stack`
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <Tooltip>
@@ -98,36 +118,48 @@ function StackMark({ row, onPick }: { row: Reference; onPick: (ref: string) => v
             <button
               type="button"
               data-marker="stack"
-              aria-label={`Stacked: ${place.at} of ${place.of}. Show the stack`}
-              className={cn(MARK, 'w-auto gap-0.5 px-1 font-mono text-[11px] tabular-nums @sm/frame:min-w-11')}
+              data-forked={place.forked ? 'true' : undefined}
+              aria-label={label}
+              className={cn(MARK, 'w-auto gap-0.5 font-mono text-[11px] tabular-nums', tight ? 'px-0.5' : 'px-1 @sm/frame:min-w-11')}
             >
-              <Layers className="size-3.5" aria-hidden="true" />
-              {place.at}/{place.of}
+              {place.forked ? <GitFork className="size-3.5" aria-hidden="true" /> : <Layers className="size-3.5" aria-hidden="true" />}
+              {place.forked ? place.of : `${place.at}/${place.of}`}
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>{said}</TooltipContent>
+        <TooltipContent className={place.forked ? 'whitespace-pre-wrap font-mono' : undefined}>{said}</TooltipContent>
       </Tooltip>
       <PopoverContent align="end" className="w-72 p-1">
-        <p className="px-2 py-1 text-xs text-muted-foreground">Stack, bottom first</p>
-        <ol aria-label={`The stack ${row.ref} is in, bottom first`}>
+        <p className="px-2 py-1 text-xs text-muted-foreground">{place.forked ? 'Forked stack, bottom first' : 'Stack, bottom first'}</p>
+        <ol aria-label={`The ${place.forked ? 'forked ' : ''}stack ${row.ref} is in, bottom first`}>
           {place.members.map((m, i) => (
             <li key={m.ref}>
               <button
                 type="button"
                 data-stack-member={m.ref}
+                data-depth={m.depth}
                 aria-current={m.ref === row.ref ? 'true' : undefined}
+                aria-label={
+                  lines
+                    ? `${m.ref}${m.title ? ` ${m.title}` : ''}${m.base ? `, on ${m.base}` : ', the bottom'}${m.ref === row.ref ? ', this one' : ''}`
+                    : undefined
+                }
                 onClick={() => {
                   onPick(m.ref)
                   setOpen(false)
                 }}
-                style={{ paddingLeft: `${0.5 + m.depth * 0.75}rem` }}
                 className={cn(
-                  'flex w-full items-baseline gap-2 rounded py-1 pr-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+                  'flex w-full items-baseline gap-2 rounded py-1 pr-2 pl-2 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
                   m.ref === row.ref && 'font-medium',
                 )}
               >
-                <span className="font-mono text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                {lines ? (
+                  <span data-tree aria-hidden="true" className="-mr-1.5 shrink-0 whitespace-pre font-mono text-xs text-muted-foreground">
+                    {lines[i]!.prefix}
+                  </span>
+                ) : (
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                )}
                 <span className="font-mono text-xs">{m.ref}</span>
                 <span className="min-w-0 flex-1 truncate">{m.title}</span>
                 {m.ref === row.ref && <span className="text-xs text-muted-foreground">this one</span>}
@@ -166,17 +198,21 @@ export function PipelineMark({
   pipeline,
   now,
   onOpenLink,
+  compact = false,
 }: {
   pipeline: Pipeline
   now: number
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
+  /** A narrow list: a 20-pixel box overlapping the state's (`live/fit.ts`). */
+  compact?: boolean
 }) {
+  const box = compact ? BOX.paired : BOX.normal
   const said = pipelineSaid(pipeline, now)
   const look = PIPELINE_LOOK[pipeline.state]
   const url = pipeline.url
   if (!url) {
     return (
-      <Mark name={`pipeline-${pipeline.state}`} said={said} label={said} className={cn('w-6', look.tone)}>
+      <Mark name={`pipeline-${pipeline.state}`} said={said} label={said} className={cn(box, look.tone)}>
         {look.icon}
       </Mark>
     )
@@ -196,7 +232,7 @@ export function PipelineMark({
             event.preventDefault()
             void handLink(url, onOpenLink)
           }}
-          className={cn(MARK, 'w-6', look.tone)}
+          className={cn(MARK, box, look.tone)}
         >
           {look.icon}
         </a>
@@ -226,11 +262,11 @@ const STATE_LOOK: Record<StateLook, { icon: ReactNode; tone: string }> = {
   unseen: { icon: <CircleQuestionMark className="size-3.5" aria-hidden="true" />, tone: 'text-muted-foreground' },
 }
 
-export function StateMark({ row }: { row: Reference }) {
+export function StateMark({ row, compact = false }: { row: Reference; compact?: boolean }) {
   const look = stateLook(row)
   const said = stateSaid(row)
   return (
-    <Mark name={`state-${look}`} said={said} label={said} className={cn('w-6', STATE_LOOK[look].tone)}>
+    <Mark name={`state-${look}`} said={said} label={said} className={cn(compact ? BOX.compact : BOX.normal, STATE_LOOK[look].tone)}>
       {STATE_LOOK[look].icon}
     </Mark>
   )
@@ -242,7 +278,7 @@ export function StateMark({ row }: { row: Reference }) {
  * person's own browser (`openOutside`), where that activity is. Never handed to
  * the canvas.
  */
-export function ActivityMark({ last, url }: { last: string; url: string | null }) {
+export function ActivityMark({ last, url, compact = false }: { last: string; url: string | null; compact?: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -255,7 +291,7 @@ export function ActivityMark({ last, url }: { last: string; url: string | null }
             event.stopPropagation()
             openOutside(url)
           }}
-          className={cn(MARK, 'w-6 text-foreground')}
+          className={cn(MARK, compact ? BOX.compact : BOX.normal, 'text-foreground')}
         >
           <BellDot className="size-3.5" aria-hidden="true" />
         </button>
@@ -272,7 +308,7 @@ export function ActivityMark({ last, url }: { last: string; url: string | null }
  * that the slots are not drawn: the cluster is only as wide as what it says,
  * which is what lets a narrow row keep its identifier and state on one line.
  */
-const CLUSTER = 'ml-auto flex shrink-0 items-center justify-end gap-0.5'
+const CLUSTER = 'ml-auto flex shrink-0 items-center justify-end'
 const SLOT = {
   stack: <span aria-hidden="true" className="hidden w-11 @sm/frame:block" />,
   assigned: <span aria-hidden="true" data-slot="assigned" className="hidden h-6 w-[var(--faces-assigned,56px)] @sm/frame:block" />,
@@ -286,33 +322,37 @@ export function Markers({
   now,
   onPick,
   onOpenLink,
+  look = fitLook('wide'),
 }: {
   row: Reference
   now: number
   onPick: (ref: string) => void
   /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
+  /** How tightly the list is drawn (`live/fit.ts`). */
+  look?: FitLook
 }) {
   const assigned = assignedSaid(row)
   const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
   const pipeline = row.kind === 'change' ? row.pipeline : undefined
   const last = unaddressed(row, now)
+  const compact = look.compactMarks
   return (
-    <span data-markers title="" className={CLUSTER}>
-      {row.stack ? <StackMark row={row} onPick={onPick} /> : SLOT.stack}
+    <span data-markers title="" className={cn(CLUSTER, compact ? 'gap-0' : 'gap-0.5')}>
+      {row.stack ? <StackMark row={row} onPick={onPick} tight={compact} /> : SLOT.stack}
       {assigned ? (
-        <Mark name="assigned" said={assigned} label={assigned} className={FACES_MARK.assigned}>
-          <Faces faces={row.assignedFaces} />
+        <Mark name="assigned" said={assigned} label={assigned} className={cn(FACES_MARK.assigned, compact && 'px-0')}>
+          <Faces faces={row.assignedFaces} max={look.faces} tight={look.facesTight} />
         </Mark>
       ) : SLOT.assigned}
       {review ? (
-        <Mark name={`review-${review.word}`} said={review.said} label={review.said} className={FACES_MARK.review}>
-          <Faces faces={row.reviewerFaces ?? []} />
+        <Mark name={`review-${review.word}`} said={review.said} label={review.said} className={cn(FACES_MARK.review, compact && 'px-0')}>
+          <Faces faces={row.reviewerFaces ?? []} max={look.faces} tight={look.facesTight} />
         </Mark>
       ) : SLOT.review}
-      <StateMark row={row} />
-      {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} /> : SLOT.pipeline}
-      {last ? <ActivityMark last={last} url={row.url ?? null} /> : SLOT.mark}
+      <StateMark row={row} compact={compact} />
+      {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} compact={compact} /> : SLOT.pipeline}
+      {last ? <ActivityMark last={last} url={row.url ?? null} compact={compact} /> : SLOT.mark}
     </span>
   )
 }

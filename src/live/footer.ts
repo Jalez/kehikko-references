@@ -1,5 +1,6 @@
 import { LIMITS, runOpenRefusal, type FooterItemInput, type RunCopy } from 'kehikot-module-protocol'
 
+import { copiedSaid, type Copied } from './copy.ts'
 import { headingSaid, type HeadingFacts } from '@/view/heading.tsx'
 import { linkSaid, NOT_IN_ANY_EPIC, type EpicsState } from './epics.ts'
 
@@ -33,8 +34,8 @@ export interface FooterSelection {
   count: number
   /** How many of the selected rows have an address to open. */
   openable: number
-  /** How many were copied a moment ago, or null. */
-  copied: number | null
+  /** What was copied a moment ago (how many, and the stacks that came along), or null. */
+  copied: Copied | null
   /** The "In epics" reading, or null where no host answers it. */
   epics: EpicsState | null
   /** What Copy and Copy ids put on the clipboard (protocol 2.40.0: the host writes it). */
@@ -87,12 +88,20 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
 
   const epics = selection.epics
   const none = epics?.state === 'read' && epics.links.length === 0
+  const copied = selection.copied
   items.push({
     kind: 'text',
     id: FOOTER.selected,
-    text: selection.copied !== null ? `Copied ${selection.copied}` : `${selection.count} selected`,
+    text: copied ? copiedSaid(copied) : `${selection.count} selected`,
     align: 'end',
-    ...(none ? { tooltip: NOT_IN_ANY_EPIC } : epics?.state === 'failed' ? { tooltip: tip(epics.why) } : {}),
+    /* Just after a copy the tooltip is what went on the clipboard, stacks and all. */
+    ...(copied
+      ? { tooltip: tip(copied.plain) }
+      : none
+        ? { tooltip: NOT_IN_ANY_EPIC }
+        : epics?.state === 'failed'
+          ? { tooltip: tip(epics.why) }
+          : {}),
   })
   /* Protocol 2.40.0: Open hands the host one https address, which it opens in the person's click. */
   const openable = (selection.urls ?? []).filter((url) => runOpenRefusal(url) === null)
@@ -117,7 +126,7 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     label: 'Copy',
     align: 'end',
     optional: true,
-    tooltip: 'Copy the selected references with links and titles.',
+    tooltip: 'Copy the selected references with links and titles, and the stacks they are in.',
     ...(linked ? { copy: linked } : { disabled: COPY_TOO_MUCH }),
   })
   items.push({
@@ -126,7 +135,7 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     label: 'Copy ids',
     align: 'end',
     optional: true,
-    tooltip: 'Copy the ids of the selected references.',
+    tooltip: 'Copy the ids of the selected references, and the stacks they are in.',
     ...(ids ? { copy: ids } : { disabled: COPY_TOO_MUCH }),
   })
   if (epics?.state === 'read') {
@@ -154,8 +163,8 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
 
 /** What a footer press can do, handed in by the page. */
 export interface FooterActs {
-  /** The host copied the selection (protocol 2.40.0): say so ("Copied 3"); nothing is written here. */
-  copied: () => void
+  /** The host copied the selection (protocol 2.40.0): say so ("Copied 3", "Copied 2 + stack"); nothing is written here. */
+  copied: (kind: 'linked' | 'ids') => void
   clear: () => void
   goToEpic: (slug: string) => Promise<boolean>
 }
@@ -174,7 +183,7 @@ export async function footerPressed(item: string, value: unknown, acts: FooterAc
   if (item === FOOTER.open) return carried === 'open' ? undefined : OPEN_REFUSED
   if (item === FOOTER.copy || item === FOOTER.copyIds) {
     if (carried !== 'copy') return COPY_REFUSED
-    return void acts.copied()
+    return void acts.copied(item === FOOTER.copyIds ? 'ids' : 'linked')
   }
   if (item === FOOTER.clear) return void acts.clear()
   if (item === FOOTER.epics) {

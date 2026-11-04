@@ -12,12 +12,22 @@
  *
  * A row with no `url` is never given one (see `reference.ts`): its reference is
  * then plain in both formats.
+ *
+ * A row in a stack takes its stack along (`live/stack.ts`): after the rows, each
+ * stack they are in once, bottom first, the copied changes marked. A line of
+ * changes is a numbered list; a forked stack is a tree, in a code block in the
+ * Markdown and `<pre>` in the html, so the fork survives the paste.
  */
+
+import type { StackPlace } from './markers.ts'
+import { stackHeading, stackLines, stacksOf } from './stack.ts'
 
 export interface Copyable {
   ref: string
   title: string
   url: string | null
+  /** Where it sits in a stack, when it does: copied along with it. */
+  stack?: StackPlace
 }
 
 export interface Payload {
@@ -50,22 +60,54 @@ export function payloadOf(row: Copyable): Payload {
   }
 }
 
-/** Several rows, one line each, in the same two formats. */
+/** Several rows (or one), one line each, in the same two formats, and then the stacks they are in. */
 export function payloadOfAll(rows: Copyable[]): Payload {
   const each = rows.map(payloadOf)
-  return {
-    html: each.map((p) => `<div>${p.html}</div>`).join(''),
-    plain: each.map((p) => p.plain).join('\n'),
+  let html = each.map((p) => `<div>${p.html}</div>`).join('')
+  let plain = each.map((p) => p.plain).join('\n')
+  for (const { place, copied } of stacksOf(rows)) {
+    const heading = stackHeading(place, copied)
+    const lines = stackLines(place, copied, true)
+    if (place.forked) {
+      plain += `\n\n${heading}\n\`\`\`text\n${lines.join('\n')}\n\`\`\``
+      html += `<p>${escapeHtml(heading)}</p><pre>${escapeHtml(lines.join('\n'))}</pre>`
+    } else {
+      plain += `\n\n${heading}\n${lines.join('\n')}`
+      html += `<p>${escapeHtml(heading)}</p><ol>${lines.map((line) => `<li>${escapeHtml(line.replace(/^\d+\. /, ''))}</li>`).join('')}</ol>`
+    }
   }
+  return { html, plain }
 }
 
 /**
  * Just the references, space-separated (`!4019 !4039 #3911`), for a prompt or a
- * commit message. The same text in both formats, so a rich paste gets no markup.
+ * commit message, and then the stacks they are in as references only: a line of
+ * changes on one line (`#12 → #13 → #15`), a forked stack as a tree. The same
+ * text in both formats, so a rich paste gets no markup.
  */
 export function idsOfAll(rows: Copyable[]): Payload {
-  const plain = rows.map((row) => row.ref).join(' ')
-  return { html: escapeHtml(plain), plain }
+  let plain = rows.map((row) => row.ref).join(' ')
+  for (const { place, copied } of stacksOf(rows)) {
+    const heading = stackHeading(place, copied)
+    plain += place.forked
+      ? `\n\n${heading}\n${stackLines(place, [], false).join('\n')}`
+      : `\n\n${heading} ${place.members.map((m) => m.ref).join(' → ')}`
+  }
+  return { html: plain.includes('\n') ? `<pre>${escapeHtml(plain)}</pre>` : escapeHtml(plain), plain }
+}
+
+/** What a copy took: how many references, and how many stacks came along. */
+export interface Copied {
+  count: number
+  stacks: number
+  /** The plain text that went on the clipboard, for saying what was copied. */
+  plain: string
+}
+
+/** What was copied, as the bar and the footer say it: `Copied 3`, `Copied 2 + stack`, `Copied 4 + 2 stacks`. */
+export function copiedSaid(copied: Pick<Copied, 'count' | 'stacks'>): string {
+  if (copied.stacks === 0) return `Copied ${copied.count}`
+  return `Copied ${copied.count} + ${copied.stacks === 1 ? 'stack' : `${copied.stacks} stacks`}`
 }
 
 /**
