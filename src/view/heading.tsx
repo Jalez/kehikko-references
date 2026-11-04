@@ -110,6 +110,7 @@ export function Heading({
   at,
   unread = [],
   now,
+  readout = null,
   action = null,
 }: {
   /** The absolute project folder. The last segment is drawn; the whole thing is the tooltip. */
@@ -126,6 +127,8 @@ export function Heading({
   now?: number
   /** Drawn at the line's end: what can be done with the selected rows (`SelectionMenu`), when there is anything. */
   action?: ReactNode
+  /** Drawn before `action`: where the one-up view is (`3 / 12`), and what the item menu just copied. */
+  readout?: ReactNode
 }) {
   const { count, brief, within, age, gaps, title } = headingSaid({ project, showing, total, scope, at, unread, now })
 
@@ -146,6 +149,7 @@ export function Heading({
         {age && <span className="hidden @md:inline"> · {age}</span>}
         {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
       </span>
+      {readout}
       {action}
     </div>
   )
