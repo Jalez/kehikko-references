@@ -125,44 +125,72 @@ describe('a copy takes the stack along', () => {
   const fork = collect(FORK)
   const pick = (...refs: string[]) => refs.map((ref) => fork.find((r) => r.ref === ref)!)
 
-  test('one stacked change: its line, then the forked stack as a tree in a code block, it marked', () => {
+  test('one stacked change: its line, then the forked stack as ids in a code block, the others not selected', () => {
     const p = payloadOfAll(pick('#13'))
     expect(p.plain).toBe(
       [
         `[#13](${fork[1]!.url}) left`,
         '',
-        'Forked stack of #13, bottom first:',
+        'Forked stack, bottom first:',
         '```text',
-        '#12 base',
-        '├─ #13 left (copied)',
-        '│  └─ #15 top',
-        '└─ #14 right',
+        '#12 (not selected)',
+        '├─ #13',
+        '│  └─ #15 (not selected)',
+        '└─ #14 (not selected)',
         '```',
       ].join('\n'),
     )
-    expect(p.html).toContain('<p>Forked stack of #13, bottom first:</p><pre>#12 base\n├─ #13 left (copied)\n│  └─ #15 top\n└─ #14 right</pre>')
+    expect(p.html).toContain(`<p>Forked stack, bottom first:</p><pre>#12 (not selected)\n├─ <a href="${fork[1]!.url}">#13</a>\n│  └─ #15 (not selected)\n└─ #14 (not selected)</pre>`)
+    expect(p.plain).not.toContain('(copied)')
   })
 
-  test('several from one stack: the stack once, every copied one marked', () => {
-    const p = payloadOfAll(pick('#13', '#14'))
+  test('the whole stack selected: titles once in the list, the tree is ids only with no markers', () => {
+    const p = payloadOfAll(fork)
+    expect(p.plain.split('\n').slice(4)).toEqual(['', 'Forked stack, bottom first:', '```text', '#12', '├─ #13', '│  └─ #15', '└─ #14', '```'])
+    expect(p.plain.match(/ base/g)).toHaveLength(1)
     expect(p.plain.match(/Forked stack/g)).toHaveLength(1)
-    expect(p.plain).toContain('Forked stack of #13 and #14, bottom first:')
-    expect(p.plain).toContain('├─ #13 left (copied)')
-    expect(p.plain).toContain('└─ #14 right (copied)')
   })
 
-  test('a line: a numbered list, in Markdown and as <ol>', () => {
+  test('a line: one line of ids, in Markdown and html', () => {
     const line = collect(LINE)
     const p = payloadOfAll([line[2]!])
-    expect(p.plain.split('\n').slice(1)).toEqual(['', 'Stack of #23, bottom first:', '1. #21 one', '2. #22 two', '3. #23 three (copied)'])
-    expect(p.html).toContain('<ol><li>#21 one</li><li>#22 two</li><li>#23 three (copied)</li></ol>')
+    expect(p.plain.split('\n').slice(1)).toEqual(['', 'Stack, bottom first:', '#21 (not selected) → #22 (not selected) → #23'])
+    expect(p.html).toContain(`<p>Stack, bottom first:</p><p>#21 (not selected) → #22 (not selected) → <a href="${line[2]!.url}">#23</a></p>`)
+    expect(payloadOfAll(line).plain.split('\n').slice(-1)).toEqual(['#21 → #22 → #23'])
   })
 
-  test('Copy ids: the ids, then the stack as refs only — a tree for a fork, one line for a line', () => {
-    expect(idsOfAll(pick('#15', '#14')).plain).toBe(
-      ['#15 #14', '', 'Forked stack of #15 and #14, bottom first:', '#12', '├─ #13', '│  └─ #15', '└─ #14'].join('\n'),
+  test('mixed: stacked, unstacked and a stack with an unselected member', () => {
+    const rows = [...collect(LINE), ...fork, ...collect([row('#99', { kind: 'change', title: 'alone' })])]
+    const picked = ['#99', '#13', '#21', '#23', '#14'].map((ref) => rows.find((r) => r.ref === ref)!)
+    const ordered = [rows.find((r) => r.ref === '#21')!, rows.find((r) => r.ref === '#23')!, rows.find((r) => r.ref === '#13')!, rows.find((r) => r.ref === '#14')!, picked[0]!]
+    expect(payloadOfAll(ordered).plain.replace(/\]\([^)]*\)/g, ']')).toBe(
+      [
+        '[#21] one',
+        '[#23] three',
+        '[#13] left',
+        '[#14] right',
+        '[#99] alone',
+        '',
+        'Stack, bottom first:',
+        '#21 → #22 (not selected) → #23',
+        '',
+        'Forked stack, bottom first:',
+        '```text',
+        '#12 (not selected)',
+        '├─ #13',
+        '│  └─ #15 (not selected)',
+        '└─ #14',
+        '```',
+      ].join('\n'),
     )
-    expect(idsOfAll([collect(LINE)[0]!]).plain).toBe('#21\n\nStack of #21, bottom first: #21 → #22 → #23')
+  })
+
+  test('Copy ids: the ids, then the stacks as refs, the same shape and the same marks', () => {
+    expect(idsOfAll(pick('#15', '#14')).plain).toBe(
+      ['#15 #14', '', 'Forked stack, bottom first:', '#12 (not selected)', '├─ #13 (not selected)', '│  └─ #15', '└─ #14'].join('\n'),
+    )
+    expect(idsOfAll(collect(LINE)).plain).toBe('#21 #22 #23\n\nStack, bottom first: #21 → #22 → #23')
+    expect(idsOfAll([collect(LINE)[0]!]).plain).toBe('#21\n\nStack, bottom first: #21 → #22 (not selected) → #23 (not selected)')
     /* A rich paste keeps the lines. */
     expect(idsOfAll(pick('#14')).html).toStartWith('<pre>#14\n\n')
   })
@@ -177,7 +205,7 @@ describe('a copy takes the stack along', () => {
     const rows = [...collect(LINE), ...fork]
     const picked = [rows.find((r) => r.ref === '#14')!, rows.find((r) => r.ref === '#22')!]
     expect(stacksOf(picked).map((s) => s.place.members[0]!.ref)).toEqual(['#12', '#21'])
-    expect(stackLines(stacksOf(picked)[1]!.place, ['#22'], false)).toEqual(['1. #21', '2. #22 (copied)', '3. #23'])
+    expect(stackLines(stacksOf(picked)[1]!.place, ['#22'])).toEqual(['#21 (not selected) → #22 → #23 (not selected)'])
   })
 
   test('what was copied is said: in the bar and the footer, the text in the footer’s tooltip', async () => {
