@@ -70,7 +70,7 @@ function rowBox(container: HTMLElement): HTMLElement {
   return li
 }
 
-describe('what a row may never stop showing, and the title it now may (issue #24)', () => {
+describe('what a row may never stop showing: the identifier, the state and the title', () => {
   const two: ('identifier' | 'state')[] = ['identifier', 'state']
 
   /** Every class on the element and its ancestors inside the row. */
@@ -96,26 +96,15 @@ describe('what a row may never stop showing, and the title it now may (issue #24
     for (const rule of rulesUp(found!, line)) expect(rule).not.toMatch(/(^|:)(hidden|sr-only)$/)
   })
 
-  test('the title is not drawn under 24rem of the frame, and is drawn from it', () => {
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+  test.each([200, 280, 380, 600])('the title is drawn at %ipx, truncated, its whole in the row’s tooltip', (width) => {
+    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} width={width} />)
     const title = rowLine(container).querySelector('[data-title]') as HTMLElement
     expect(title.textContent).toStartWith('Until Journeys')
-    const rules = title.className.split(/\s+/)
-    expect(rules).toContain('hidden')
-    /* Measured against the FRAME by name, not the pressable box: the markers
-       beside the box make its width differ from row to row. */
-    expect(rules).toContain('@sm/frame:block')
-  })
-
-  test('where the title is not drawn it is still the pressable box’s accessible name, and in the row’s tooltip', () => {
-    const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const spoken = rowLine(container).querySelector('[data-title-spoken]') as HTMLElement
-    expect(spoken.textContent).toStartWith('Until Journeys')
-    const rules = spoken.className.split(/\s+/)
-    /* Read by a screen reader below 24rem, gone above it where the drawn one is the name. */
-    expect(rules).toContain('sr-only')
-    expect(rules).toContain('@sm/frame:hidden')
-    expect(rowBox(container).getAttribute('title')).toContain('Until Journeys')
+    for (const rule of rulesUp(title, rowLine(container))) expect(rule).not.toMatch(/(^|:)(hidden|sr-only)$/)
+    expect(title.className.split(/\s+/)).toContain('truncate')
+    expect(rowBox(container).getAttribute('title')).toContain('Until Journeys can be read from a module, a container is a picture of one')
+    /* No second, spoken-only copy: the drawn title is the accessible name at every width. */
+    expect(container.querySelector('[data-title-spoken]')).toBeNull()
   })
 
   test('the markers carry no rule that hides them at any width', () => {

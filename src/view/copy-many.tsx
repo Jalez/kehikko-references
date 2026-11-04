@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { copyPayload, idsOfAll, payloadOfAll, type Copyable } from '@/live/copy.ts'
+import { copyPayload, idsOfAll, payloadOfAll, type Copied, type Copyable } from '@/live/copy.ts'
+import { stacksOf } from '@/live/stack.ts'
 
 /**
  * Copying the selected references at once: one line each, linked, with their
@@ -48,34 +49,45 @@ export function takesCopyKey(event: CopyKey, list: Element | null, textSelected:
   return element === element.ownerDocument.body || (list !== null && list.contains(element))
 }
 
+/** What a copy of `rows` as `kind` takes: how many, how many stacks came along, and the text. */
+export function copiedOf(kind: CopyKind, rows: Copyable[]): Copied {
+  return { count: rows.length, stacks: stacksOf(rows).length, plain: payloadFor(kind, rows).plain }
+}
+
 /**
- * The copy itself and what it said: `copied` is how many were copied, for a
- * moment after, or null. One place, so the bar and Cmd+C say the same.
+ * The copy itself and what it said: `copied` is what was copied — how many,
+ * how many stacks came along, and the text — for a few seconds after, or null.
+ * One place, so the bar, the footer and Cmd+C say the same.
  */
 export function useCopyMany(rows: Copyable[]) {
-  const [copied, setCopied] = useState<number | null>(null)
+  const [copied, setCopied] = useState<Copied | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
+  const say = useCallback((what: Copied) => {
+    setCopied(what)
+    if (timer.current) clearTimeout(timer.current)
+    /* Long enough to read what came along, short enough not to linger over the next selection. */
+    timer.current = setTimeout(() => setCopied(null), what.stacks > 0 ? 4000 : 1500)
+  }, [])
   const copy = useCallback(
     (kind: CopyKind) => {
       if (rows.length === 0) return Promise.resolve(false)
-      const count = rows.length
+      const what = copiedOf(kind, rows)
       return copyPayload(payloadFor(kind, rows)).then((ok) => {
         if (!ok) return false
-        setCopied(count)
-        if (timer.current) clearTimeout(timer.current)
-        timer.current = setTimeout(() => setCopied(null), 1500)
+        say(what)
         return true
       })
     },
-    [rows],
+    [rows, say],
   )
   /* The host wrote the clipboard itself, in the person's click (protocol 2.40.0): say it was copied, as a copy here would. */
-  const noteCopied = useCallback(() => {
-    if (rows.length === 0) return
-    setCopied(rows.length)
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setCopied(null), 1500)
-  }, [rows])
+  const noteCopied = useCallback(
+    (kind: CopyKind = 'linked') => {
+      if (rows.length === 0) return
+      say(copiedOf(kind, rows))
+    },
+    [rows, say],
+  )
   return { copied, copy, noteCopied }
 }

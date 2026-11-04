@@ -1,6 +1,7 @@
 import type { LastActivityKind, TrackerActivity, TrackerReviewer, TrackerRow } from 'kehikot-module-protocol'
 
 import type { Reference } from './reference.ts'
+import { isForked, stackTree } from './stack.ts'
 
 /**
  * The row's markers: what a narrow row says about a reference besides its
@@ -26,17 +27,30 @@ import type { Reference } from './reference.ts'
  * The stack
  * ------------------------------------------------------------------------ */
 
-/** One change of a stack, bottom first. `depth` is how far above the bottom: two at one depth are a fork. */
+/**
+ * One change of a stack, bottom first, depth first: each change is followed by
+ * everything built on it before its next sibling. `depth` is how far above the
+ * bottom, and `base` the change it is built on (null for the bottom). Two
+ * changes with one base are a fork: the stack is a tree, not a line
+ * (`live/stack.ts` draws it as one).
+ */
 export interface StackMember {
   ref: string
   title: string
   depth: number
+  base: string | null
 }
 
-/** Where a change sits in its stack: `at` of `of`, counting from the bottom, and the whole stack. */
+/**
+ * Where a change sits in its stack: `at` of `of`, counting from the bottom in
+ * the members' order, and the whole stack. `forked` when some change in it has
+ * more than one change built on it: then `at` is no position on a line, and
+ * nothing says it as one.
+ */
 export interface StackPlace {
   at: number
   of: number
+  forked: boolean
   members: StackMember[]
 }
 
@@ -65,31 +79,36 @@ export function stackPlaces(rows: readonly TrackerRow[]): Map<string, StackPlace
     if (!members) {
       members = []
       const seen = new Set<string>()
-      const walk = (one: TrackerRow, depth: number) => {
+      const walk = (one: TrackerRow, depth: number, base: string | null) => {
         if (seen.has(one.ref)) return
         seen.add(one.ref)
-        members!.push({ ref: one.ref, title: one.title, depth })
+        members!.push({ ref: one.ref, title: one.title, depth, base })
         for (const above of one.stack?.above ?? []) {
           const next = byRef.get(above)
-          if (next) walk(next, depth + 1)
+          if (next) walk(next, depth + 1, one.ref)
         }
       }
-      walk(bottom, 0)
+      walk(bottom, 0, null)
       walked.set(bottom.ref, members)
     }
     const at = members.findIndex((m) => m.ref === row.ref)
     if (members.length < 2 || at < 0) continue
-    out.set(row.ref, { at: at + 1, of: members.length, members })
+    out.set(row.ref, { at: at + 1, of: members.length, forked: isForked(members), members })
   }
   return out
 }
 
-/** The stack as the marker's tooltip says it: one line each, bottom first, this one marked. */
+/**
+ * The stack as the marker's tooltip says it, bottom first, this one marked: a
+ * line of changes numbered, a forked stack as a tree (`stackTree`).
+ */
 export function stackSaid(place: StackPlace, ref: string): string {
-  const lines = place.members.map(
-    (m, i) => `${'  '.repeat(m.depth)}${i + 1}. ${m.ref}${m.title ? ` ${m.title}` : ''}${m.ref === ref ? ' (this one)' : ''}`,
-  )
-  return [`Stacked: ${place.at} of ${place.of}, bottom first`, ...lines].join('\n')
+  if (!place.forked) {
+    const lines = place.members.map((m, i) => `${i + 1}. ${m.ref}${m.title ? ` ${m.title}` : ''}${m.ref === ref ? ' (this one)' : ''}`)
+    return [`Stacked: ${place.at} of ${place.of}, bottom first`, ...lines].join('\n')
+  }
+  const lines = stackTree(place.members).map((line) => `${line.prefix}${line.ref}${line.title ? ` ${line.title}` : ''}${line.ref === ref ? ' (this one)' : ''}`)
+  return [`Forked stack of ${place.of}, bottom first`, ...lines].join('\n')
 }
 
 /* ------------------------------------------------------------------------ *

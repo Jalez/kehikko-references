@@ -1,7 +1,8 @@
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 
 import { facesColumns } from '@/live/faces.ts'
+import { rowFit, type RowFit } from '@/live/fit.ts'
 import type { Reference } from '@/live/reference.ts'
 import { ReferenceRow } from './reference-row.tsx'
 
@@ -27,8 +28,11 @@ export function ReferenceList({
   onPick,
   onToggle,
   onOpenLink,
+  width,
 }: {
   rows: readonly Reference[]
+  /** The list's width in CSS pixels, when the caller knows it (a test); otherwise measured here. */
+  width?: number
   landedOn: string | null
   /**
    * The canvas's selection, as refs, straight from `kehikot.context`.
@@ -52,12 +56,30 @@ export function ReferenceList({
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
 }) {
   const picked = new Set(selection)
+  /* How tightly the rows are drawn comes from this list's own width, never the
+     window's: a container is resized by dragging its corner on the canvas
+     (`live/fit.ts`). Measured before paint, so a narrow list never flashes wide. */
+  const list = useRef<HTMLUListElement>(null)
+  /* The fit, not the width, is held: dragging a corner re-renders the rows only when a threshold is crossed. */
+  const [measured, setMeasured] = useState<RowFit>('wide')
+  useLayoutEffect(() => {
+    const element = list.current
+    const Observer = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver
+    if (width !== undefined || !element || !Observer) return
+    const observer = new Observer((entries) => {
+      const box = entries[entries.length - 1]?.contentRect
+      if (box) setMeasured(rowFit(box.width))
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [width])
+  const fit = width !== undefined ? rowFit(width) : measured
   /* The faces columns are as wide as this list needs (`facesColumns`), set
      once here and read by every row's markers and empty slots. */
   const columns = facesColumns(rows)
   const widths = { '--faces-assigned': `${columns.assigned}px`, '--faces-review': `${columns.review}px` } as CSSProperties
   return (
-    <ul className="divide-border" style={widths}>
+    <ul ref={list} data-fit={fit} className="divide-border" style={widths}>
       {rows.map((row) => (
         <ReferenceRow
           key={row.key}
@@ -67,6 +89,7 @@ export function ReferenceList({
           onPick={onPick}
           onToggle={onToggle}
           onOpenLink={onOpenLink ?? null}
+          fit={fit}
         />
       ))}
     </ul>

@@ -48,11 +48,13 @@ describe('the stack order (issue #23)', () => {
     ].map(parse)
     const place = stackPlaces(forked).get('gh#44')!
     expect(place.members).toEqual([
-      { ref: 'gh#41', title: 'Bottom', depth: 0 },
-      { ref: 'gh#42', title: 'Left', depth: 1 },
-      { ref: 'gh#44', title: 'Right', depth: 1 },
+      { ref: 'gh#41', title: 'Bottom', depth: 0, base: null },
+      { ref: 'gh#42', title: 'Left', depth: 1, base: 'gh#41' },
+      { ref: 'gh#44', title: 'Right', depth: 1, base: 'gh#41' },
     ])
     expect(place.at).toBe(3)
+    expect(place.forked).toBe(true)
+    expect(stackPlaces(STACK.map(parse)).get('gh#42')!.forked).toBe(false)
   })
 
   test('a change below that the reading does not hold ends the walk there; alone, it is no stack', () => {
@@ -63,7 +65,7 @@ describe('the stack order (issue #23)', () => {
 
   test('the tooltip says the stack in order, refs and titles, and marks this one', () => {
     const place = stackPlaces(STACK.map(parse)).get('gh#42')!
-    expect(stackSaid(place, 'gh#42')).toBe(['Stacked: 2 of 3, bottom first', '1. gh#41 Bottom', '  2. gh#42 Middle (this one)', '    3. gh#43 Top'].join('\n'))
+    expect(stackSaid(place, 'gh#42')).toBe(['Stacked: 2 of 3, bottom first', '1. gh#41 Bottom', '2. gh#42 Middle (this one)', '3. gh#43 Top'].join('\n'))
   })
 
   test('collect gives each stacked row its place, worked out over every row read', () => {
