@@ -96,23 +96,21 @@ export function stacksOf(rows: ReadonlyArray<{ ref: string; stack?: StackPlace }
   return [...out.values()]
 }
 
-/** `#13`, `#13 and #14`, `#13, #14 and #15`. */
-function named(refs: readonly string[]): string {
-  return refs.length < 2 ? (refs[0] ?? '') : `${refs.slice(0, -1).join(', ')} and ${refs[refs.length - 1]}`
+/** What a copied stack's block is headed with. */
+export function stackHeading(place: StackPlace): string {
+  return `${place.forked ? 'Forked stack' : 'Stack'}, bottom first:`
 }
 
-/** What a copied stack's block is headed with. */
-export function stackHeading(place: StackPlace, copied: readonly string[]): string {
-  return `${place.forked ? 'Forked stack' : 'Stack'} of ${named(copied)}, bottom first:`
-}
+/** The marker on a stack member that was not among the copied rows: the only one a reader learns from. */
+export const NOT_SELECTED = ' (not selected)'
 
 /**
- * A stack as lines of text: numbered for a line, a tree for a fork. With
- * `titles`, each change's title follows its ref; the copied ones are marked.
+ * A stack as lines of references, no titles (the list above has them, once):
+ * a line of changes as one line (`!21 → !22 → !23`), a forked stack as a tree.
+ * A member that was not copied says so. `label` writes a ref (plain, or a link).
  */
-export function stackLines(place: StackPlace, copied: readonly string[], titles: boolean): string[] {
-  const mark = (ref: string) => (copied.includes(ref) ? ' (copied)' : '')
-  const title = (m: StackMember) => (titles && m.title ? ` ${m.title.replace(/\s+/g, ' ').trim()}` : '')
-  if (!place.forked) return place.members.map((m, i) => `${i + 1}. ${m.ref}${title(m)}${mark(m.ref)}`)
-  return stackTree(place.members).map((line) => `${line.prefix}${line.ref}${title(line)}${mark(line.ref)}`)
+export function stackLines(place: StackPlace, copied: readonly string[], label: (ref: string) => string = (ref) => ref): string[] {
+  const one = (ref: string) => `${label(ref)}${copied.includes(ref) ? '' : NOT_SELECTED}`
+  if (!place.forked) return [place.members.map((m) => one(m.ref)).join(' → ')]
+  return stackTree(place.members).map((line) => `${line.prefix}${one(line.ref)}`)
 }
