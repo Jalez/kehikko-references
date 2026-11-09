@@ -1,5 +1,8 @@
 import { MANIFEST_KIND, PROTOCOL, manifestSchema, type Manifest } from 'kehikot-module-protocol'
 import pkg from './package.json'
+/* This module's introduction (protocol 2.57.0): slides the host shows in its introduction dialog. Also
+   read as a file from the repository, so a person can watch it before the module runs or is installed. */
+import intro from './intro.json'
 
 /**
  * What this app says about itself when a host asks.
@@ -358,6 +361,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     'pointed at — very often a change is already open for it. Picking a row sets the canvas selection ' +
     'and other modules react to it, so select the reference you are working on and leave it selected ' +
     'while you work.',
+  intro,
   entry: '/',
   /* What its content belongs to (protocol 2.29.0): one mode per scope, the default first. */
   modes: [

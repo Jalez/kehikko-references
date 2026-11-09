@@ -1,0 +1,73 @@
+{
+  "slides": [
+    {
+      "title": "Every issue and change, for the work you are on",
+      "body": "References lists the issues, merge requests and pull requests of the open project, narrowed to the epic and parts you picked.",
+      "art": {
+        "label": "issues and changes from the project's trackers gathered into one list",
+        "shapes": [
+          { "kind": "pane", "x": 40, "y": 10, "w": 240, "h": 130 },
+          { "kind": "box", "x": 52, "y": 28, "w": 216, "h": 20, "round": 4, "tone": "card", "motion": "drop", "delay": 0.2 },
+          { "kind": "dot", "x": 63, "y": 38, "r": 3.5, "tone": "ok" },
+          { "kind": "text", "x": 72, "y": 41, "text": "#128", "size": 8, "mono": true, "tone": "muted" },
+          { "kind": "rows", "x": 100, "y": 36, "widths": [120], "tone": "text" },
+          { "kind": "box", "x": 52, "y": 54, "w": 216, "h": 20, "round": 4, "tone": "card", "motion": "drop", "delay": 0.6 },
+          { "kind": "dot", "x": 63, "y": 64, "r": 3.5, "tone": "busy" },
+          { "kind": "text", "x": 72, "y": 67, "text": "!415", "size": 8, "mono": true, "tone": "muted" },
+          { "kind": "rows", "x": 100, "y": 62, "widths": [96], "tone": "text" },
+          { "kind": "box", "x": 52, "y": 80, "w": 216, "h": 20, "round": 4, "tone": "card", "motion": "drop", "delay": 1 },
+          { "kind": "dot", "x": 63, "y": 90, "r": 3.5, "tone": "ok" },
+          { "kind": "text", "x": 72, "y": 93, "text": "#131", "size": 8, "mono": true, "tone": "muted" },
+          { "kind": "rows", "x": 100, "y": 88, "widths": [134], "tone": "text" },
+          { "kind": "box", "x": 52, "y": 106, "w": 216, "h": 20, "round": 4, "tone": "card", "motion": "drop", "delay": 1.4 },
+          { "kind": "dot", "x": 63, "y": 116, "r": 3.5, "tone": "muted" },
+          { "kind": "text", "x": 72, "y": 119, "text": "#97", "size": 8, "mono": true, "tone": "muted" },
+          { "kind": "rows", "x": 100, "y": 114, "widths": [80], "tone": "text" }
+        ]
+      }
+    },
+    {
+      "title": "Pick a part, and the list follows",
+      "body": "Choose parts of the epic in the bar: the list keeps only what belongs to them. Its filters and order in the header narrow and sort it.",
+      "art": {
+        "label": "a part picked in the bar, and the list dimming what does not belong to it",
+        "shapes": [
+          { "kind": "box", "x": 30, "y": 10, "w": 260, "h": 20, "round": 4, "tone": "card" },
+          { "kind": "rows", "x": 40, "y": 18, "widths": [40], "tone": "text" },
+          { "kind": "box", "x": 140, "y": 14, "w": 56, "h": 12, "round": 6, "tone": "strong", "motion": "chip" },
+          { "kind": "rows", "x": 150, "y": 18, "widths": [36], "tone": "text" },
+          { "kind": "pointer", "x": 182, "y": 22, "motion": "pop", "delay": 0.2 },
+          { "kind": "pane", "x": 30, "y": 38, "w": 260, "h": 102 },
+          { "kind": "rows", "x": 44, "y": 56, "widths": [180], "tone": "text" },
+          { "kind": "rows", "x": 44, "y": 72, "widths": [150], "motion": "narrow" },
+          { "kind": "rows", "x": 44, "y": 88, "widths": [200], "tone": "text" },
+          { "kind": "rows", "x": 44, "y": 104, "widths": [130], "motion": "narrow" },
+          { "kind": "rows", "x": 44, "y": 120, "widths": [166], "motion": "narrow" }
+        ]
+      }
+    },
+    {
+      "title": "Pick one to work on it",
+      "body": "Press an item to pick it: the modules beside it follow — its checklist, its diff, a session about it. The box in the header makes this container a target.",
+      "art": {
+        "label": "one item picked, and two other containers turning to it",
+        "shapes": [
+          { "kind": "pane", "x": 14, "y": 14, "w": 140, "h": 122 },
+          { "kind": "box", "x": 24, "y": 32, "w": 120, "h": 18, "round": 4, "tone": "card" },
+          { "kind": "rows", "x": 32, "y": 39, "widths": [80] },
+          { "kind": "box", "x": 24, "y": 56, "w": 120, "h": 18, "round": 4, "tone": "strong", "motion": "pop", "delay": 0.4 },
+          { "kind": "rows", "x": 32, "y": 63, "widths": [92], "tone": "text" },
+          { "kind": "box", "x": 24, "y": 80, "w": 120, "h": 18, "round": 4, "tone": "card" },
+          { "kind": "rows", "x": 32, "y": 87, "widths": [70] },
+          { "kind": "pointer", "x": 120, "y": 66, "motion": "pop", "delay": 0.2 },
+          { "kind": "line", "x": 158, "y": 65, "x2": 184, "y2": 40, "tone": "strong", "dashed": true, "motion": "draw", "delay": 0.8 },
+          { "kind": "line", "x": 158, "y": 65, "x2": 184, "y2": 106, "tone": "strong", "dashed": true, "motion": "draw", "delay": 0.9 },
+          { "kind": "pane", "x": 188, "y": 14, "w": 118, "h": 56, "motion": "pop", "delay": 1 },
+          { "kind": "rows", "x": 198, "y": 32, "widths": [80, 60, 70], "gap": 10, "motion": "rise", "delay": 1.2 },
+          { "kind": "pane", "x": 188, "y": 80, "w": 118, "h": 56, "motion": "pop", "delay": 1.1 },
+          { "kind": "rows", "x": 198, "y": 98, "widths": [60, 84, 50], "gap": 10, "motion": "rise", "delay": 1.3 }
+        ]
+      }
+    }
+  ]
+}
