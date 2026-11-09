@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LIMITS } from 'kehikot-module-protocol'
@@ -5,7 +6,7 @@ import { LIMITS } from 'kehikot-module-protocol'
 import { collect } from '@/live/collect.ts'
 import type { Copied, Payload } from '@/live/copy.ts'
 import { footerItems, FOOTER } from '@/live/footer.ts'
-import { MENU_ACTIONS, menuCopy, menuRows, opensMenu } from '@/live/item-menu.ts'
+import { MENU_ACTIONS, menuCopy, menuHasStacks, menuRows, opensMenu } from '@/live/item-menu.ts'
 import { reading, writing } from '@/live/keep.ts'
 import {
   LOOKBACK_SECONDS,
@@ -173,7 +174,7 @@ describe('related', () => {
 describe('what each menu action copies', () => {
   const shown = [by('#23'), by('#22'), by('#30')]
   const action = (id: string) => MENU_ACTIONS.find((a) => a.id === id)!
-  const copy = (id: string, ref = '#22') => menuCopy(action(id), by(ref), shown, READING)
+  const copy = (id: string, ref = '#22', stack = true) => menuCopy(action(id), by(ref), shown, READING, stack)
 
   test('copy this, with link: the title line, then its stack as ids, the others not selected', () => {
     expect(copy('this-linked').payload.plain).toBe(
@@ -203,6 +204,26 @@ describe('what each menu action copies', () => {
     ])
     expect(linked.html).toContain(`<a href="${url('#21')}">#21</a> → <a href="${url('#22')}">#22</a>`)
   })
+  test('with stack off (the default) the copies are the rows and nothing else', () => {
+    expect(copy('this-ids', '#22', false).payload.plain).toBe('#22')
+    expect(copy('this-linked', '#22', false).payload.plain).toBe(`[#22](${url('#22')}) two`)
+    expect(copy('this-ids', '#22', false).copied).toMatchObject({ count: 1, stacks: 0 })
+    expect(copy('filtered-ids', '#22', false).payload.plain).toBe('#23 #22 #30')
+    expect(copy('filtered-linked', '#22', false).payload.plain).not.toContain('Stack')
+    expect(copy('filtered-ids', '#22', false).copied.stacks).toBe(0)
+  })
+  test('copy related keeps the whole stack with the choice off', () => {
+    expect(copy('related-ids', '#22', false).payload.plain).toBe('#22 #21 #23 #9\n\nStack, bottom first: #21 → #22 → #23')
+    expect(copy('related-linked', '#22', false).payload.plain).toContain('Stack, bottom first')
+  })
+  test('With stack means something only when the item or a shown row is stacked', () => {
+    expect(menuHasStacks(by('#30'), [by('#30'), by('#9')])).toBe(false)
+    expect(menuHasStacks(by('#30'), shown)).toBe(true)
+    expect(menuHasStacks(by('#22'), [])).toBe(true)
+  })
+  test('menuCopy defaults to no stack', () => {
+    expect(menuCopy(action('this-ids'), by('#22'), shown, READING).payload.plain).toBe('#22')
+  })
   test('the rows each scope takes', () => {
     expect(menuRows('this', by('#9'), shown, READING).map((r) => r.ref)).toEqual(['#9'])
     expect(menuRows('filtered', by('#9'), shown, READING).map((r) => r.ref)).toEqual(['#23', '#22', '#30'])
@@ -216,8 +237,18 @@ describe('what each menu action copies', () => {
 })
 
 /** A list with the menu wired as the page wires it. */
-function Harness({ onCopied, copy }: { onCopied: (c: Copied | null) => void; copy: (p: Payload) => Promise<boolean> }) {
+function Harness({
+  onCopied,
+  copy,
+  stackable = false,
+}: {
+  onCopied: (c: Copied | null) => void
+  copy: (p: Payload) => Promise<boolean>
+  /** Wire "With stack" as the page does, kept in this component. */
+  stackable?: boolean
+}) {
   const menu = useItemMenu()
+  const [stack, setStack] = useState(false)
   return (
     <div>
       <div data-testid="list" {...menu.handlers}>
@@ -228,7 +259,7 @@ function Harness({ onCopied, copy }: { onCopied: (c: Copied | null) => void; cop
         ))}
       </div>
       <button type="button">elsewhere</button>
-      {menu.menu && <ItemMenu at={menu.menu} rows={READING} shown={READING} onClose={menu.close} onCopied={onCopied} copy={copy} />}
+      {menu.menu && <ItemMenu at={menu.menu} rows={READING} shown={READING} onClose={menu.close} onCopied={onCopied} copy={copy} {...(stackable ? { stack, onStack: setStack } : {})} />}
     </div>
   )
 }
@@ -262,6 +293,27 @@ describe('the item menu', () => {
     expect(said[0]).toMatchObject({ count: 4, stacks: 1 })
   })
 
+  test('With stack: drawn only with a stack in reach, off at first, and it changes what the copies take', async () => {
+    const copies: Payload[] = []
+    render(<Harness onCopied={() => {}} copy={async (p) => (copies.push(p), true)} stackable />)
+    fireEvent.contextMenu(screen.getByRole('button', { name: '#22' }), { clientX: 10, clientY: 10 })
+    const box = () => screen.getByRole('menu').querySelector('[data-action="stack"]')!
+    expect(box().getAttribute('role')).toBe('menuitemcheckbox')
+    expect(box().getAttribute('aria-checked')).toBe('false')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menu').querySelector('[data-action="this-ids"]')!)
+    })
+    expect(copies[0]!.plain).toBe('#22')
+    fireEvent.contextMenu(screen.getByRole('button', { name: '#22' }), { clientX: 10, clientY: 10 })
+    fireEvent.click(box())
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(box().getAttribute('aria-checked')).toBe('true')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menu').querySelector('[data-action="this-ids"]')!)
+    })
+    expect(copies[1]!.plain).toBe('#22\n\nStack, bottom first: #21 (not selected) → #22 → #23 (not selected)')
+  })
+
   test('Shift+F10 opens it from the keyboard, focus on the first item; arrows move, Enter chooses, focus returns', async () => {
     const { copies } = setup()
     const trigger = screen.getByRole('button', { name: '#30' })
@@ -278,7 +330,7 @@ describe('the item menu', () => {
     await act(async () => {
       fireEvent.keyDown(document.activeElement!, { key: 'Enter' })
     })
-    expect(copies[0]!.plain).toBe('#30 #9 #23 #22 #21\n\nStack, bottom first: #21 → #22 → #23')
+    expect(copies[0]!.plain).toBe('#30 #9 #23 #22 #21')
     expect(document.activeElement).toBe(trigger)
   })
 

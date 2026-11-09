@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 
 import { copyPayload, type Copied } from '@/live/copy.ts'
-import { LONG_PRESS_MS, LONG_PRESS_SLOP, MENU_ACTIONS, menuCopy, menuDisabled, menuRows, opensMenu, type MenuAction } from '@/live/item-menu.ts'
+import { LONG_PRESS_MS, LONG_PRESS_SLOP, MENU_ACTIONS, menuCopy, menuDisabled, menuHasStacks, menuRows, opensMenu, type MenuAction } from '@/live/item-menu.ts'
 import type { Reference } from '@/live/reference.ts'
 
 /**
@@ -116,6 +116,8 @@ export function ItemMenu({
   shown,
   onClose,
   onCopied,
+  stack = false,
+  onStack,
   copy = copyPayload,
 }: {
   at: MenuAt
@@ -126,6 +128,9 @@ export function ItemMenu({
   onClose: () => void
   /** A copy landed (what it took), or the clipboard refused it (null). */
   onCopied: (copied: Copied | null) => void
+  /** "With stack": whether the copies take the stacks along (the related copies always do). */
+  stack?: boolean
+  onStack?: (on: boolean) => void
   /** The clipboard write; a test hands its own. */
   copy?: typeof copyPayload
 }) {
@@ -171,13 +176,13 @@ export function ItemMenu({
   if (!row) return null
 
   const choose = (action: MenuAction) => {
-    const { payload, copied } = menuCopy(action, row, shown, rows)
+    const { payload, copied } = menuCopy(action, row, shown, rows, stack)
     close(true)
     void copy(payload).then((ok) => onCopied(ok ? copied : null))
   }
 
   const onKeyDown = (event: ReactKeyboardEvent) => {
-    const items = [...(box.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"])') ?? [])]
+    const items = [...(box.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]') ?? [])]
     const now = items.indexOf(document.activeElement as HTMLElement)
     const go = (i: number) => items[(i + items.length) % items.length]?.focus({ preventScroll: true })
     switch (event.key) {
@@ -249,6 +254,29 @@ export function ItemMenu({
           })}
         </div>
       ))}
+      {onStack && menuHasStacks(row, shown) && (
+        <div role="group" className="mt-1 border-t border-border pt-1">
+          <div
+            role="menuitemcheckbox"
+            aria-checked={stack}
+            tabIndex={-1}
+            data-action="stack"
+            title="Add each stack the copied references are in. Copy related always does."
+            onClick={() => onStack(!stack)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              onStack(!stack)
+            }}
+            className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1 text-xs outline-hidden select-none focus:bg-accent focus:text-accent-foreground"
+          >
+            <span aria-hidden="true" className="flex size-3 shrink-0 items-center justify-center rounded-[3px] border border-border text-[9px] leading-none">
+              {stack ? '✓' : ''}
+            </span>
+            <span className="min-w-0 flex-1 truncate">With stack</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

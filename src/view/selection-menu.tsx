@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -46,6 +47,9 @@ export function SelectionMenu({
   urls,
   copied,
   onCopy,
+  stacked = false,
+  withStack = false,
+  onStack,
   onClear,
   epics = null,
   onOpen,
@@ -57,6 +61,11 @@ export function SelectionMenu({
   /** What was copied a moment ago, or null. */
   copied: Copied | null
   onCopy: (kind: CopyKind) => void
+  /** Some selected row is in a stack: only then does "With stack" mean anything, so only then is it drawn. */
+  stacked?: boolean
+  /** Whether the copies above take the stacks along (off unless the person turned it on). */
+  withStack?: boolean
+  onStack?: (on: boolean) => void
   onClear: () => void
   /** The "In epics" section, or null where no host answers (nothing is drawn). */
   epics?: EpicsState | null
@@ -127,6 +136,17 @@ export function SelectionMenu({
             <Copy aria-hidden="true" />
             Copy ids
           </DropdownMenuItem>
+          {stacked && onStack && (
+            <DropdownMenuCheckboxItem
+              data-item="stack"
+              checked={withStack}
+              onCheckedChange={(on) => onStack(on === true)}
+              onSelect={(event) => event.preventDefault()}
+              title="Add each stack the selected references are in to what Copy and Copy ids put on the clipboard"
+            >
+              With stack
+            </DropdownMenuCheckboxItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem data-item="clear" onSelect={onClear}>
             <X aria-hidden="true" />

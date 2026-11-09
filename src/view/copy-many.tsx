@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 import { copyPayload, idsOfAll, payloadOfAll, type Copied, type Copyable, type CopyOptions } from '@/live/copy.ts'
 import { stacksOf } from '@/live/stack.ts'
@@ -11,6 +11,14 @@ import { stacksOf } from '@/live/stack.ts'
  * Drawn in the page, never as a header item: a header press reaches this page as
  * a message, and a clipboard write needs the person's own press in this frame.
  */
+
+/**
+ * Whether a copy takes the stacks along: the person's choice, kept per kehikko (`live/keep.ts`)
+ * and put beside the copy acts (the selection menu, the footer's toggle, the item menu). The row's
+ * own copy button reads it from here. Off unless turned on.
+ */
+export const StackChoice = createContext(false)
+export const useStackChoice = () => useContext(StackChoice)
 
 /** The two things a copy of several rows can be. */
 export type CopyKind = 'linked' | 'ids'
@@ -51,7 +59,7 @@ export function takesCopyKey(event: CopyKey, list: Element | null, textSelected:
 
 /** What a copy of `rows` as `kind` takes: how many, how many stacks came along, and the text. */
 export function copiedOf(kind: CopyKind, rows: Copyable[], options: CopyOptions = {}): Copied {
-  return { count: rows.length, stacks: stacksOf(rows).length, plain: payloadFor(kind, rows, options).plain }
+  return { count: rows.length, stacks: options.stack || options.whole ? stacksOf(rows).length : 0, plain: payloadFor(kind, rows, options).plain }
 }
 
 /**
@@ -59,7 +67,7 @@ export function copiedOf(kind: CopyKind, rows: Copyable[], options: CopyOptions 
  * how many stacks came along, and the text — for a few seconds after, or null.
  * One place, so the bar, the footer and Cmd+C say the same.
  */
-export function useCopyMany(rows: Copyable[]) {
+export function useCopyMany(rows: Copyable[], stack = false) {
   const [copied, setCopied] = useState<Copied | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
@@ -72,22 +80,22 @@ export function useCopyMany(rows: Copyable[]) {
   const copy = useCallback(
     (kind: CopyKind) => {
       if (rows.length === 0) return Promise.resolve(false)
-      const what = copiedOf(kind, rows)
-      return copyPayload(payloadFor(kind, rows)).then((ok) => {
+      const what = copiedOf(kind, rows, { stack })
+      return copyPayload(payloadFor(kind, rows, { stack })).then((ok) => {
         if (!ok) return false
         say(what)
         return true
       })
     },
-    [rows, say],
+    [rows, say, stack],
   )
   /* The host wrote the clipboard itself, in the person's click (protocol 2.40.0): say it was copied, as a copy here would. */
   const noteCopied = useCallback(
     (kind: CopyKind = 'linked') => {
       if (rows.length === 0) return
-      say(copiedOf(kind, rows))
+      say(copiedOf(kind, rows, { stack }))
     },
-    [rows, say],
+    [rows, say, stack],
   )
   return { copied, copy, noteCopied }
 }

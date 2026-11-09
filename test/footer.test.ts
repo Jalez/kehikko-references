@@ -130,6 +130,7 @@ describe('footerPressed', () => {
     const did: string[] = []
     const all: FooterActs = {
       copied: () => void did.push('copied'),
+      setStack: (on) => void did.push(`stack ${on}`),
       clear: () => void did.push('clear'),
       goToEpic: async (slug) => (did.push(`go ${slug}`), slug !== 'nope'),
     }

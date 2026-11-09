@@ -3,13 +3,15 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { copyPayload, payloadOfAll, type Copyable } from '@/live/copy.ts'
+import { useStackChoice } from './copy-many.tsx'
 
 /**
- * Copies the row's reference (linked), and its title, and the stack it is in. Beside the row's button,
+ * Copies the row's reference (linked), and its title, and the stack it is in when "With stack" is on. Beside the row's button,
  * not inside it, and stops the click anyway so nothing the row does can follow.
  * Shows a check for a moment once the clipboard took it.
  */
 export function CopyButton({ row }: { row: Copyable }) {
+  const withStack = useStackChoice() && Boolean(row.stack)
   const [done, setDone] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
@@ -19,10 +21,10 @@ export function CopyButton({ row }: { row: Copyable }) {
         <button
           type="button"
           data-copy
-          aria-label={`Copy ${row.ref} with its link and title${row.stack ? ', and its stack' : ''}`}
+          aria-label={`Copy ${row.ref} with its link and title${withStack ? ', and its stack' : ''}`}
           onClick={(event) => {
             event.stopPropagation()
-            void copyPayload(payloadOfAll([row])).then((ok) => {
+            void copyPayload(payloadOfAll([row], { stack: withStack })).then((ok) => {
               if (!ok) return
               setDone(true)
               if (timer.current) clearTimeout(timer.current)
@@ -34,7 +36,7 @@ export function CopyButton({ row }: { row: Copyable }) {
           {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
         </button>
       </TooltipTrigger>
-      <TooltipContent>{done ? (row.stack ? 'Copied, with its stack' : 'Copied') : row.stack ? 'Copy reference and its stack' : 'Copy reference'}</TooltipContent>
+      <TooltipContent>{done ? (withStack ? 'Copied, with its stack' : 'Copied') : withStack ? 'Copy reference and its stack' : 'Copy reference'}</TooltipContent>
     </Tooltip>
   )
 }
