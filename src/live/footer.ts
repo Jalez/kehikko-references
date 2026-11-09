@@ -38,7 +38,11 @@ export interface FooterSelection {
   copied: Copied | null
   /** The "In epics" reading, or null where no host answers it. */
   epics: EpicsState | null
-  /** What Copy and Copy ids put on the clipboard (protocol 2.40.0: the host writes it). */
+  /** Some selected row is in a stack: only then is "With stack" in the footer. */
+  stacked?: boolean
+  /** Whether the copies take the stacks along (off unless turned on). */
+  withStack?: boolean
+  /** What Copy and Copy ids put on the clipboard (protocol 2.40.0: the host writes it), with the stacks only if `withStack`. */
   linked?: RunCopy
   ids?: RunCopy
   /** The selected rows' addresses that can be opened, in order. */
@@ -67,6 +71,7 @@ export const FOOTER = {
   open: 'open',
   copy: 'copy',
   copyIds: 'copy-ids',
+  stack: 'with-stack',
   epics: 'epics',
   clear: 'clear',
   position: 'position',
@@ -136,13 +141,14 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
   /* And the copies hand the host their text, which it writes in the person's click. */
   const linked = carriedCopy(selection.linked)
   const ids = carriedCopy(selection.ids)
+  const withStack = selection.stacked === true && selection.withStack === true
   items.push({
     kind: 'run',
     id: FOOTER.copy,
     label: 'Copy',
     align: 'end',
     optional: true,
-    tooltip: 'Copy the selected references with links and titles, and the stacks they are in.',
+    tooltip: withStack ? 'Copy the selected references with links and titles, and the stacks they are in.' : 'Copy the selected references with links and titles.',
     ...(linked ? { copy: linked } : { disabled: COPY_TOO_MUCH }),
   })
   items.push({
@@ -151,9 +157,21 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
     label: 'Copy ids',
     align: 'end',
     optional: true,
-    tooltip: 'Copy the ids of the selected references, and the stacks they are in.',
+    tooltip: withStack ? 'Copy the ids of the selected references, and the stacks they are in.' : 'Copy the ids of the selected references, nothing else.',
     ...(ids ? { copy: ids } : { disabled: COPY_TOO_MUCH }),
   })
+  /* Beside the two copies it changes, and only where it means something: a stack is selected. */
+  if (selection.stacked) {
+    items.push({
+      kind: 'toggle',
+      id: FOOTER.stack,
+      label: 'With stack',
+      checked: selection.withStack === true,
+      align: 'end',
+      optional: true,
+      tooltip: 'Add each stack the selected references are in to what Copy and Copy ids put on the clipboard.',
+    })
+  }
   if (epics?.state === 'read') {
     const options = epics.links
       .filter((link) => link.slug.length <= LIMITS.HEADER_ID)
@@ -181,6 +199,8 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
 export interface FooterActs {
   /** The host copied the selection (protocol 2.40.0): say so ("Copied 3", "Copied 2 + stack"); nothing is written here. */
   copied: (kind: 'linked' | 'ids') => void
+  /** "With stack" was turned on or off. */
+  setStack: (on: boolean) => void
   clear: () => void
   goToEpic: (slug: string) => Promise<boolean>
 }
@@ -200,6 +220,10 @@ export async function footerPressed(item: string, value: unknown, acts: FooterAc
   if (item === FOOTER.copy || item === FOOTER.copyIds) {
     if (carried !== 'copy') return COPY_REFUSED
     return void acts.copied(item === FOOTER.copyIds ? 'ids' : 'linked')
+  }
+  if (item === FOOTER.stack) {
+    if (typeof value !== 'boolean') return 'Say whether to copy with the stack: true or false.'
+    return void acts.setStack(value)
   }
   if (item === FOOTER.clear) return void acts.clear()
   if (item === FOOTER.epics) {

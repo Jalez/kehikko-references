@@ -180,14 +180,20 @@ copies) puts its reference, linked, and its title on the clipboard
 (`live/copy.ts`): `text/html` with the reference as a link, and `text/plain` as
 Markdown, `[!4013](url) title`.
 
-Every copy takes the stacks along: after the copied lines, each stack the
-copied changes are in, once, bottom first, the copied ones marked `(copied)`.
-A line of changes is a numbered list (`<ol>` in the html); a forked stack is
-the tree above, in a ```` ```text ```` block in the Markdown and `<pre>` in the
-html, so the fork survives the paste. "Copy ids" adds the stack as refs only:
-`#21 → #22 → #23` on one line, or the tree. Afterwards the bar and the footer
-say what was copied — `Copied 2 + stack` — and the footer's tooltip is the
-text itself.
+A copy takes the stacks along only when asked. "With stack" is a checkbox beside
+the copy acts, drawn only while a selected (or, in the item menu, a listed) row is
+in a stack: in the selection menu after Copy ids, in the footer as a toggle
+after Copy and Copy ids, and in the item menu below its copies. It is off by
+default, kept per kehikko with the order (`live/keep.ts`, `k`), and read by the
+row's copy button too. Off, a copy is the lines (or the ids) and nothing else.
+On, after the copied lines, each stack the copied changes are in, once, bottom
+first, the ones not copied marked `(not selected)`. A line of changes is one
+line (`!21 → !22 → !23`); a forked stack is the tree, in a ```` ```text ````
+block in the Markdown and `<pre>` in the html, so the fork survives the paste.
+"Copy ids" with the stack adds it as refs only. "Copy related" is the exception:
+it is the stack by definition, so it always copies it whole. Afterwards the bar
+and the footer say what was copied (`Copied 2`, or `Copied 2 + stack` with the
+stack) and the footer's tooltip is the text itself.
 
 Clicking a row selects it, and a module that shows pages shows it. There is no
 per-row menu. With one or more rows selected the bar shows a menu labelled
@@ -243,8 +249,9 @@ Right-click a row or a card, press Shift+F10 or the context-menu key on it, or
 hold it on a touch screen, for the item menu (`view/item-menu.tsx`): Copy this
 (with link) or its id; Copy all filtered (with links) or their ids, everything
 the list shows; Copy related (with links) or their ids, the item's whole stack
-and what it is tied to. The copies are the formats above; a related copy
-carries whole stacks, so nothing in them is "(not selected)". The footer says
+and what it is tied to. The copies are the formats above, with the stack only under
+"With stack"; a related copy always carries whole stacks, so nothing in them
+is "(not selected)". The footer says
 what was copied, "Copied 12". The menu closes on Escape, Tab, a press outside
 it, or when focus leaves for another module's frame.
 

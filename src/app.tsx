@@ -37,7 +37,8 @@ import {
   NothingPicked,
   Troubled,
 } from '@/view/absence.tsx'
-import { payloadFor, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
+import { stacksOf } from '@/live/stack.ts'
+import { payloadFor, StackChoice, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -478,6 +479,8 @@ export function App() {
   const restored = useRef<string | null | undefined>(undefined)
   /* What each kehikko has seen, for the one-up view's order (`live/one-up.ts`); kept with the order. */
   const [seenBook, setSeenBook] = useState<SeenBook>({})
+  /* "With stack": whether a copy takes the stacks along. Off until the person turns it on, and kept per kehikko with the order. */
+  const [withStack, setWithStack] = useState(false)
 
   useEffect(() => {
     /* `undefined` is "no greeting yet", and it is the whole reason `kept` has
@@ -496,6 +499,7 @@ export function App() {
     const remembered = reading(kept) ?? { ordering: DEFAULT_ORDER }
     setOrdering(remembered.ordering)
     setSeenBook(remembered.seen ?? {})
+    setWithStack(remembered.stack === true)
   }, [kept])
 
   /**
@@ -516,7 +520,7 @@ export function App() {
    */
   useEffect(() => {
     if (restored.current === undefined) return
-    const now = writing({ ordering, seen: seenBook })
+    const now = writing({ ordering, seen: seenBook, stack: withStack })
     /* Nothing is sent when the settings are still exactly what the host handed
        back. Restoring them sets state, which runs this effect, which would
        otherwise write the same string back on every single load — a call whose
@@ -525,7 +529,7 @@ export function App() {
     if (now === restored.current) return
     restored.current = now
     keep(now, 400)
-  }, [ordering, seenBook, keep])
+  }, [ordering, seenBook, withStack, keep])
 
   /**
    * The plain click: this row becomes the whole selection.
@@ -653,10 +657,12 @@ export function App() {
    * says when the key is this page's rather than a text copy's).
    */
   const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
-  const { copied, copy, noteCopied } = useCopyMany(selected)
+  const { copied, copy, noteCopied } = useCopyMany(selected, withStack)
   /* Protocol 2.40.0: the footer the host draws is declared only where the host also carries out the
      selection's copy and open in the person's click; anywhere else the page keeps its own bar. */
   const footing = declaresFooter(drawsFooter, hostCarries)
+  /* "With stack" means something only while a selected row is in a stack. */
+  const selectedStacked = useMemo(() => stacksOf(selected).length > 0, [selected])
 
   /* "In epics": read from the host each time the menu opens, and worked out over the selection as it stands. */
   const [epicsRead, setEpicsRead] = useState<{ reading: EpicsReading } | { why: string } | null>(null)
@@ -687,6 +693,7 @@ export function App() {
       value,
       {
         copied: noteCopied,
+        setStack: setWithStack,
         clear: () => select([]),
         goToEpic,
       },
@@ -767,14 +774,16 @@ export function App() {
             openable: selected.filter((row) => Boolean(row.url)).length,
             copied,
             epics: where === 'hosted' ? inEpicsState : null,
-            linked: payloadFor('linked', selected),
-            ids: payloadFor('ids', selected),
+            stacked: selectedStacked,
+            withStack,
+            linked: payloadFor('linked', selected, { stack: withStack }),
+            ids: payloadFor('ids', selected, { stack: withStack }),
             urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
           }
         : null,
       { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid },
     )
-  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
+  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
   useEffect(() => {
     if (footing) footer(footerNow)
   }, [footing, footerNow, footer])
@@ -824,6 +833,7 @@ export function App() {
        the row's own middle is, so the heading's columns and the row's cannot
        part company at any width. It is named `frame` so that a row's title
        can ask it directly, past the row's own container (`reference-row.tsx`). */
+    <StackChoice.Provider value={withStack}>
     <div ref={frame} className="@container/frame flex h-full flex-col">
       {/*
         A source that could not be read, over the rows it gave before.
@@ -913,7 +923,7 @@ export function App() {
         )}
       </div>
       {itemMenu.menu && (
-        <ItemMenu at={itemMenu.menu} rows={rows} shown={oneUp ? ordered : shown} onClose={itemMenu.close} onCopied={onMenuCopied} />
+        <ItemMenu at={itemMenu.menu} rows={rows} shown={oneUp ? ordered : shown} onClose={itemMenu.close} onCopied={onMenuCopied} stack={withStack} onStack={setWithStack} />
       )}
       {/*
         The table's heading, which is the only chrome left, and the module's footer:
@@ -955,6 +965,9 @@ export function App() {
                 urls={selected.map((row) => row.url)}
                 copied={copied}
                 onCopy={(kind) => void copy(kind)}
+                stacked={selectedStacked}
+                withStack={withStack}
+                onStack={setWithStack}
                 onClear={() => select([])}
                 epics={where === 'hosted' ? inEpicsState : null}
                 onOpen={readEpicsNow}
@@ -965,5 +978,6 @@ export function App() {
         />
       )}
     </div>
+    </StackChoice.Provider>
   )
 }

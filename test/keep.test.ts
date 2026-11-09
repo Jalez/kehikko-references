@@ -27,6 +27,23 @@ describe('the round trip', () => {
   })
 })
 
+describe('with stack', () => {
+  test('off is not written at all, so what was kept before reads as off and the string is unchanged', () => {
+    expect(writing({ ordering: 'stale' })).toBe(writing({ ordering: 'stale', stack: false }))
+    expect(JSON.parse(writing({ ordering: 'stale', stack: false }))).not.toHaveProperty('k')
+    expect(reading('{"v":3,"o":"stale"}')).toEqual({ ordering: 'stale' })
+  })
+  test('on survives the round trip, with and without a seen book', () => {
+    expect(reading(writing({ ordering: 'stale', stack: true }))).toEqual({ ordering: 'stale', stack: true })
+    const seen = { '1': { w: 100, r: { '#1': 50 } } }
+    expect(reading(writing({ ordering: 'ref', seen, stack: true }))).toEqual({ ordering: 'ref', seen, stack: true })
+  })
+  test('anything but 1 in the field reads as off', () => {
+    expect(reading('{"v":3,"o":"ref","k":true}')).toEqual({ ordering: 'ref' })
+    expect(reading('{"v":3,"o":"ref","k":"1"}')).toEqual({ ordering: 'ref' })
+  })
+})
+
 describe('nothing a host hands back can break the page', () => {
   const rubbish = [null, undefined, '', 'not json at all', '[]', '"a string"', '42', '{}', '{"v":99,"o":"ref"}']
 

@@ -13,7 +13,9 @@
  * A row with no `url` is never given one (see `reference.ts`): its reference is
  * then plain in both formats.
  *
- * A row in a stack takes its stack along (`live/stack.ts`): after the rows, each
+ * A row in a stack takes its stack along only when asked (`stack: true`; "with
+ * stack" in the menus and the footer, off until the person turns it on, and
+ * always on for a copy of the related references): after the rows, each
  * stack they are in once, bottom first, as references only (the titles are in
  * the list above, once). A line of changes is one line (`!21 → !22 → !23`); a
  * forked stack is a tree, in a code block in the Markdown and `<pre>` in the
@@ -89,10 +91,13 @@ function stackBlock(place: StackPlace, copied: readonly string[], urls: Readonly
  */
 export interface CopyOptions {
   whole?: boolean
+  /** Take the stacks the rows are in along. Off by default: a copy is the rows and nothing else. */
+  stack?: boolean
 }
 
 /** The stacks the rows are in, each with what counts as copied in it: every member for a whole copy. */
 function stacksCopied(rows: Copyable[], options: CopyOptions) {
+  if (!options.stack && !options.whole) return []
   return stacksOf(rows).map(({ place, copied }) => ({ place, copied: options.whole ? place.members.map((m) => m.ref) : copied }))
 }
 

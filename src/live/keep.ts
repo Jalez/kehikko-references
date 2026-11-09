@@ -84,6 +84,12 @@ export interface Kept {
    * which is a fresh start rather than a broken one. Never in browser storage.
    */
   seen?: SeenBook
+  /**
+   * Whether a copy takes the stacks along ("with stack"). Off unless the person turned it on, and
+   * written only then (`k`), so a string that never had it reads as off and one that is off is
+   * the string it always was. Additive under the same version.
+   */
+  stack?: boolean
 }
 
 /** Epoch seconds as base 36: `w` and each ref's activity, short because the whole string is capped. */
@@ -127,10 +133,10 @@ function seenRead(raw: unknown): SeenBook | undefined {
  * kehikko goes first, then, in the last one left, the refs seen longest ago
  * (each then counts as unseen again only if it moved after the watermark).
  */
-function trimmed(ordering: Ordering, book: SeenBook): string {
+function trimmed(ordering: Ordering, book: SeenBook, stack: boolean): string {
   const kept: SeenBook = { ...book }
   for (;;) {
-    const text = JSON.stringify({ v: VERSION, o: ordering, ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
+    const text = JSON.stringify({ v: VERSION, o: ordering, ...(stack ? { k: 1 } : {}), ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
     if (text.length <= LIMITS.MODULE_STATE) return text
     const keys = Object.keys(kept)
     if (keys.length > 1) {
@@ -159,8 +165,9 @@ function trimmed(ordering: Ordering, book: SeenBook): string {
  * would be keeping something that belongs in this app's own store.
  */
 export function writing(kept: Kept): string {
-  if (!kept.seen || Object.keys(kept.seen).length === 0) return JSON.stringify({ v: VERSION, o: kept.ordering })
-  return trimmed(kept.ordering, kept.seen)
+  const stack = kept.stack === true
+  if (!kept.seen || Object.keys(kept.seen).length === 0) return JSON.stringify({ v: VERSION, o: kept.ordering, ...(stack ? { k: 1 } : {}) })
+  return trimmed(kept.ordering, kept.seen, stack)
 }
 
 /**
@@ -188,5 +195,6 @@ export function reading(state: string | null | undefined): Kept | null {
 
   const ordering = (Object.keys(ORDER_LABELS) as Ordering[]).find((value) => value === held.o) ?? DEFAULT_ORDER
   const seen = seenRead(held.s)
-  return seen ? { ordering, seen } : { ordering }
+  const stack = held.k === 1
+  return { ordering, ...(seen ? { seen } : {}), ...(stack ? { stack } : {}) }
 }

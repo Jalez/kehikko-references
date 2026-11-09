@@ -7,10 +7,10 @@ import type { Reference } from './reference.ts'
  * What the item menu (right-click, Shift+F10, the context-menu key, or a long
  * press on a row or card) copies. Pure: `view/item-menu.tsx` draws it.
  *
- * Three scopes, each as a linked copy (the titles, linked, then the stacks as
- * ids: the format of 3.17.2) or as ids only:
+ * Three scopes, each as a linked copy (the titles, linked) or as ids only, and
+ * with the stacks the rows are in only when the person turned "With stack" on:
  *
- * - **this**: the item, with its stack as the row's own copy gives it;
+ * - **this**: the item;
  * - **filtered**: every row the current filters and scope show, in the order shown;
  * - **related**: the item's whole stack and what it is tied to (`relatedOf`),
  *   each stack whole, so nothing in it is "(not selected)".
@@ -55,11 +55,13 @@ export function menuCopy(
   row: Reference,
   shown: readonly Reference[],
   rows: readonly Reference[],
+  stack = false,
 ): { payload: Payload; copied: Copied } {
   const picked = menuRows(action.scope, row, shown, rows)
-  const options = { whole: action.scope === 'related' }
+  const options = { whole: action.scope === 'related', stack }
   const payload = action.kind === 'ids' ? idsOfAll(picked, options) : payloadOfAll(picked, options)
-  return { payload, copied: { count: picked.length, stacks: stacksOf(picked).length, plain: payload.plain } }
+  const stacks = options.whole || stack ? stacksOf(picked).length : 0
+  return { payload, copied: { count: picked.length, stacks, plain: payload.plain } }
 }
 
 /** Whether a keydown opens the item menu: Shift+F10, or the context-menu key. */
@@ -71,3 +73,8 @@ export function opensMenu(event: { key: string; shiftKey: boolean; altKey: boole
 /** How long a touch is held before it opens the menu, and how far it may drift. */
 export const LONG_PRESS_MS = 500
 export const LONG_PRESS_SLOP = 10
+
+/** Whether "With stack" means anything for what the menu can copy: the item or something shown is in a stack. */
+export function menuHasStacks(row: Reference, shown: readonly Reference[]): boolean {
+  return stacksOf([row, ...shown]).length > 0
+}
