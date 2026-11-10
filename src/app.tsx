@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { TrackerSource } from 'kehikot-module-protocol'
 import { probeServer } from 'kehikot-module-protocol/client'
 import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/client/react'
 
@@ -7,7 +8,8 @@ import { collect } from '@/live/collect.ts'
 import { copiedSaid, selectedInOrder, type Copied } from '@/live/copy.ts'
 import { hasNewActivity, isUnseen, markSeen, oneUpFits, oneUpOrder, positionSaid, seenOf, type SeenBook } from '@/live/one-up.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
-import { reading, writing } from '@/live/keep.ts'
+import { reading, writing, type QuietBook } from '@/live/keep.ts'
+import { closing, shownTroubles, stillFailing, troubleSaid } from '@/live/trouble.ts'
 import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
@@ -61,6 +63,9 @@ import { OneUp } from '@/view/one-up.tsx'
  */
 
 /** How long a card stays on screen before its activity counts as seen. */
+/** No sources, one array, so a memo over it does not change on every render. */
+const NO_SOURCES: readonly TrackerSource[] = []
+
 const SEEN_AFTER_MS = 800
 
 /** The words for an item-menu copy the clipboard refused. */
@@ -145,6 +150,7 @@ export function App() {
     projectPath,
     busy,
     read,
+    refresh,
     refreshNote,
     resize,
     selection,
@@ -481,6 +487,8 @@ export function App() {
   const [seenBook, setSeenBook] = useState<SeenBook>({})
   /* "With stack": whether a copy takes the stacks along. Off until the person turns it on, and kept per kehikko with the order. */
   const [withStack, setWithStack] = useState(false)
+  /* The read-failure notices closed on each kehikko (`live/trouble.ts`), kept with the order. */
+  const [quietBook, setQuietBook] = useState<QuietBook>({})
 
   useEffect(() => {
     /* `undefined` is "no greeting yet", and it is the whole reason `kept` has
@@ -500,6 +508,7 @@ export function App() {
     setOrdering(remembered.ordering)
     setSeenBook(remembered.seen ?? {})
     setWithStack(remembered.stack === true)
+    setQuietBook(remembered.quiet ?? {})
   }, [kept])
 
   /**
@@ -520,7 +529,7 @@ export function App() {
    */
   useEffect(() => {
     if (restored.current === undefined) return
-    const now = writing({ ordering, seen: seenBook, stack: withStack })
+    const now = writing({ ordering, seen: seenBook, stack: withStack, quiet: quietBook })
     /* Nothing is sent when the settings are still exactly what the host handed
        back. Restoring them sets state, which runs this effect, which would
        otherwise write the same string back on every single load — a call whose
@@ -529,7 +538,7 @@ export function App() {
     if (now === restored.current) return
     restored.current = now
     keep(now, 400)
-  }, [ordering, seenBook, withStack, keep])
+  }, [ordering, seenBook, withStack, quietBook, keep])
 
   /**
    * The plain click: this row becomes the whole selection.
@@ -714,6 +723,8 @@ export function App() {
         copied: noteCopied,
         setStack: setWithStack,
         clear: () => select([]),
+        retry: refresh,
+        closeTroubles: () => closeTroubles(troubled),
         goToEpic,
       },
       carried,
@@ -767,6 +778,39 @@ export function App() {
 
   const again = useCallback(() => read(), [read])
 
+  /* The sources that could not be read, less the notices closed on this kehikko (`live/trouble.ts`). */
+  const sources = sight.at === 'read' ? sight.reading.sources : NO_SOURCES
+  const quiet = quietBook[kehikko]
+  const troubled = useMemo(() => shownTroubles(sources, quiet), [sources, quiet])
+  /* A closed notice is forgotten once its source stops failing (or fails differently), so the next failure shows. */
+  useEffect(() => {
+    if (sight.at !== 'read' || !quiet) return
+    const standing = stillFailing(quiet, sources)
+    if (standing.length === quiet.length) return
+    setQuietBook((book) => {
+      const next = { ...book }
+      if (standing.length) next[kehikko] = standing
+      else delete next[kehikko]
+      return next
+    })
+  }, [sight.at, sources, quiet, kehikko])
+  const closeTroubles = useCallback(
+    (those: readonly TrackerSource[]) => setQuietBook((book) => ({ ...book, [kehikko]: closing(book[kehikko], those) })),
+    [kehikko],
+  )
+  const troubleNow = useMemo(() => {
+    if (!troubled.length) return null
+    const said = troubled.map((source) => {
+      const words = troubleSaid(source)
+      return `${source.host}/${source.repo}: ${words.said}${words.known ? ` Details: ${words.details}` : ''}`
+    })
+    return {
+      text: troubled.length === 1 ? `${troubled[0]!.host}/${troubled[0]!.repo} could not be read` : `${troubled.length} sources could not be read`,
+      tooltip: said.join('\n'),
+      busy,
+    }
+  }, [troubled, busy])
+
   const cover = coverFor({ where, projectPath, server })
 
   /**
@@ -801,9 +845,9 @@ export function App() {
             urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
           }
         : null,
-      { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid },
+      { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid, trouble: troubleNow },
     )
-  }, [listed, sight, shown.length, rows.length, sifting.scope, fresh.size, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
+  }, [troubleNow, listed, sight, shown.length, rows.length, sifting.scope, fresh.size, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
   useEffect(() => {
     if (footing) footer(footerNow)
   }, [footing, footerNow, footer])
@@ -870,7 +914,7 @@ export function App() {
         Drawn between the heading and the list rather than over them, because
         each is a fact about the rows underneath it and belongs against them.
       */}
-      <SourceTrouble sources={held.sources} />
+      <SourceTrouble sources={held.sources} quiet={quiet} busy={busy} onRetry={refresh} onClose={(source) => closeTroubles([source])} />
       {sight.trouble && (
         <p className="border-b border-border bg-destructive/10 px-3 py-1.5 text-xs text-muted-foreground">
           {sight.trouble.why} What is below is the reading as the host last handed it over.

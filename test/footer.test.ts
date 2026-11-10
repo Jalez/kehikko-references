@@ -162,3 +162,28 @@ describe('footerPressed', () => {
     expect(await footerPressed('frobnicate', undefined, acts().all)).toContain('frobnicate')
   })
 })
+
+describe('the read-failure notice in the footer', () => {
+  const trouble = { text: 'gitlab.innovium.ai/a/b could not be read', tooltip: 'x', busy: false }
+  test('is a text with Try again and Dismiss acting on it, and nothing when there is no failure', () => {
+    expect(footerItems(facts).some((item) => item.id === FOOTER.trouble)).toBe(false)
+    const items = footerItems(facts, null, { trouble })
+    parses(items)
+    expect(items.find((item) => item.id === FOOTER.trouble)).toMatchObject({ kind: 'text', level: 'warn' })
+    expect(items.find((item) => item.id === FOOTER.troubleRetry)).toMatchObject({ kind: 'run', actsOn: FOOTER.trouble })
+    expect(items.find((item) => item.id === FOOTER.troubleClose)).toMatchObject({ kind: 'run', actsOn: FOOTER.trouble })
+  })
+  test('says Reading… and is flat while a read runs', () => {
+    const items = footerItems(facts, null, { trouble: { ...trouble, busy: true } })
+    parses(items)
+    expect(items.find((item) => item.id === FOOTER.trouble)).toMatchObject({ text: 'Reading…' })
+    expect(items.find((item) => item.id === FOOTER.troubleRetry)).toMatchObject({ disabled: expect.any(String) })
+  })
+  test('the presses reach the page', async () => {
+    const calls: string[] = []
+    const acts = { copied: () => {}, setStack: () => {}, clear: () => {}, goToEpic: async () => true, retry: () => void calls.push('retry'), closeTroubles: () => void calls.push('close') }
+    expect(await footerPressed(FOOTER.troubleRetry, undefined, acts)).toBeUndefined()
+    expect(await footerPressed(FOOTER.troubleClose, undefined, acts)).toBeUndefined()
+    expect(calls).toEqual(['retry', 'close'])
+  })
+})
