@@ -5,7 +5,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
 import { copiedSaid, selectedInOrder, type Copied } from '@/live/copy.ts'
-import { isUnseen, markSeen, oneUpFits, oneUpOrder, positionSaid, seenOf, type SeenBook } from '@/live/one-up.ts'
+import { hasNewActivity, isUnseen, markSeen, oneUpFits, oneUpOrder, positionSaid, seenOf, type SeenBook } from '@/live/one-up.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing } from '@/live/keep.ts'
 import { failingRefs } from '@/live/pipeline.ts'
@@ -629,6 +629,25 @@ export function App() {
     [oneUp, shown, kehikko],
   )
   const unseen = useMemo(() => new Set(shown.filter((row) => isUnseen(row, seen)).map((row) => row.ref)), [shown, seen])
+  /* Somebody else's activity this kehikko has not seen: the row's bell and bold title, and the footer's count. */
+  const fresh = useMemo(() => new Set(shown.filter((row) => hasNewActivity(row, seen)).map((row) => row.ref)), [shown, seen])
+  /* Seen when the person looks at it: selects it (here or anywhere on the kehikko), or presses its bell. */
+  const seeRefs = useCallback(
+    (refs: readonly string[]) => {
+      const looked = rows.filter((row) => refs.includes(row.ref))
+      if (looked.length) setSeenBook((book) => looked.reduce((next, row) => markSeen(next, kehikko, row, opened), book))
+    },
+    [rows, kehikko, opened],
+  )
+  const onSeen = useCallback((ref: string) => seeRefs([ref]), [seeRefs])
+  const selectedBefore = useRef<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    const before = selectedBefore.current
+    selectedBefore.current = new Set(selection)
+    const added = selection.filter((ref) => !before.has(ref))
+    if (added.length) seeRefs(added)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection])
   const [oneUpAt, setOneUpAt] = useState<{ at: number; ref: string | null }>({ at: 0, ref: null })
   const onCardAt = useCallback((at: number, ref: string | null) => setOneUpAt({ at, ref }), [])
   /* A card on screen for a moment is seen, on this kehikko. */
@@ -767,6 +786,7 @@ export function App() {
         scope: sifting.scope?.from ?? null,
         at: sight.reading.at,
         unread: sight.reading.missing,
+        fresh: fresh.size,
       },
       selected.length
         ? {
@@ -783,7 +803,7 @@ export function App() {
         : null,
       { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid },
     )
-  }, [listed, sight, shown.length, rows.length, sifting.scope, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
+  }, [listed, sight, shown.length, rows.length, sifting.scope, fresh.size, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
   useEffect(() => {
     if (footing) footer(footerNow)
   }, [footing, footerNow, footer])
@@ -918,7 +938,7 @@ export function App() {
           oneUp ? (
             <OneUp rows={ordered} unseen={unseen} selection={selection} onPick={pick} onAt={onCardAt} />
           ) : (
-            <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} />
+            <ReferenceList rows={shown} landedOn={landedOn} selection={selection} onPick={pick} onToggle={toggle} onOpenLink={openAddress} fresh={fresh} onSeen={onSeen} />
           )
         )}
       </div>
@@ -951,6 +971,7 @@ export function App() {
           scope={sifting.scope?.from ?? null}
           at={held.at}
           unread={held.missing}
+          fresh={fresh.size}
           readout={
             oneUp || menuSaid ? (
               <span data-heading="readout" className="shrink-0 font-mono text-[11px] leading-tight tabular-nums text-muted-foreground">

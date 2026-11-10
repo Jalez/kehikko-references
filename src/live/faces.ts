@@ -1,5 +1,7 @@
 import type { TrackerPerson, TrackerReviewer, TrackerRow } from 'kehikot-module-protocol'
 
+import type { ReviewerWord } from './activity.ts'
+
 /**
  * People's faces: the tiny avatars the assignee and reviewer markers draw
  * (protocol 2.10.0 `people`). Pure, except for the one image policy a page
@@ -66,6 +68,8 @@ export interface Face {
 /** A reviewer's face, with where their review stands: the badge on the picture. */
 export interface ReviewerFace extends Face {
   state: TrackerReviewer['state']
+  /** Their standing from everything they did (`activity.ts`), which the badge draws. Absent: drawn from `state`. */
+  word?: ReviewerWord
 }
 
 /** A person in the row's `people` map, by login; exact first, then ignoring case. Never a prototype key. */

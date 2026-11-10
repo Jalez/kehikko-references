@@ -2209,6 +2209,35 @@ describe('the footer: the host draws it when it says so, the page draws its own 
     })
   })
 
+  test('new activity by somebody else: the bell, a bold title and the footer count, cleared by selecting it', async () => {
+    const recent = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString()
+    const rows = [
+      row('gh#1', { kind: 'change', lastActivity: { login: 'mona', at: recent(1), kind: 'comment', mine: false } }),
+      row('gh#2', { kind: 'change', lastActivity: { login: 'jalez', at: recent(1), kind: 'comment', mine: true } }),
+      row('gh#3', { kind: 'change', lastActivity: { login: 'ali', at: recent(2), kind: 'commit', mine: false } }),
+    ]
+    const door = stubDoor({ [PROJECT]: { ok: true, data: readingOf(rows) } })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT, null, [], {}, { kehikko: { id: 3, key: 'wide', name: 'Wide' } }, CARRYING))
+    await settle()
+    const fresh = () => [...document.querySelectorAll<HTMLElement>('li[data-fresh="true"]')].map((li) => li.dataset.ref)
+    expect(fresh()).toEqual(['gh#1', 'gh#3'])
+    expect(document.querySelectorAll('[data-marker="new-activity"]')).toHaveLength(2)
+    expect(document.querySelector('li[data-ref="gh#1"] [data-title]')!.className).toContain('font-semibold')
+    expect(lastFooter(host)!.find((item) => item.id === 'news')).toMatchObject({ kind: 'text', text: '2 with new activity' })
+    /* Selecting it — here or anywhere on the kehikko — is looking at it. */
+    act(() => host.context(PROJECT, ['gh#1'], 'an-epic', {}, { kehikko: { id: 3, key: 'wide', name: 'Wide' } }))
+    await settle()
+    expect(fresh()).toEqual(['gh#3'])
+    expect(document.querySelector('li[data-ref="gh#1"] [data-marker="new-activity"]')).toBeNull()
+    expect(lastFooter(host)!.find((item) => item.id === 'news')).toMatchObject({ text: '1 with new activity' })
+    /* Kept per kehikko a moment later (`keep`'s 400 ms). */
+    await act(() => new Promise((done) => setTimeout(done, 600)))
+    const kept = host.calls('state.set').at(-1) as { state: string } | undefined
+    expect(JSON.parse(kept!.state).s.wide[1]).toHaveProperty(['gh#1'])
+  })
+
   test('a header press still sorts while the footer is declared', async () => {
     const host = await listed(CARRYING)
     press(host, 'ref')

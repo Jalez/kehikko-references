@@ -136,10 +136,15 @@ from a name.
   nobody is: the row's tooltip says `nobody`, and a marker on most rows would
   be noise.
 - **Review** — on a change somebody was asked to review: each reviewer's face
-  with a badge for where they stand — an hourglass (asked, not started), an eye
-  (reviewing), a ring with a bang (changes requested) or a ring with a tick
-  (approved). The tooltip leads with the strongest any reviewer gives and names
-  every reviewer with theirs.
+  with a badge for where they stand, worked out from everything they did
+  (`live/activity.ts`), not only the tracker's word — an hourglass (asked, not
+  started), an eye (reviewing: any comment, thread note or review from them
+  counts), a ring with a bang (changes requested, or threads they opened still
+  open), a ring with a tick (approved) or a commit (new commits since their
+  review). The tooltip leads with the strongest and gives every reviewer a
+  line with the specific thing and when: `Mona: Reviewing: commented 2 h ago`,
+  `Jo: Approved 1 h ago`, `Cat: Requested changes · 3 open threads · 2 h ago`,
+  `Ali: New commits since their review · approved yesterday`.
 - **State** — the row's state as a small coloured glyph, the pipeline mark's
   size and just before it, so the two read as a pair (`StateMark`; words in
   `live/state.ts`). A merge or pull request is `git-pull-request` open (green),
@@ -150,13 +155,22 @@ from a name.
   duplicate. A state the reading did not carry is a question mark, never open.
   Tooltip and `aria-label` say it in words: `Merge request · open`,
   `Issue · closed by !4019`.
-- **Unaddressed activity** — on an OPEN reference whose last activity
-  (protocol 2.8.0 `lastActivity`) was somebody else's, a bell on the row with
-  the sentence — `Last activity: mona, a review, 3 h ago` — as its tooltip and
-  label; pressing it opens the page in your browser (`openOutside`). Only when the host says whose it was against who you are
-  (`lastActivity.mine`); when it does not know who you are there is nothing,
-  never a guess from a name. Closed and merged references have nothing left to
-  address.
+- **New activity** — the last thing done was somebody else's (protocol 2.8.0
+  `lastActivity.mine === false`) and this kehikko has not seen it since: a
+  bell with a dot on the row and its title in bold, the sentence as tooltip and
+  label; pressing it opens the page in your browser (`openOutside`). It clears
+  when you select the row (here or anywhere on the kehikko) or press the bell,
+  using the seen record kept per kehikko (`live/one-up.ts`); the footer counts
+  `3 with new activity`. Only when the host says whose it was against who you
+  are; when it does not know who you are there is nothing, never a guess.
+
+The last activity itself is said as what it was — `Mona commented on line 42
+of api.ts · 5 min ago`, `Ali pushed 2 commits · 1 h ago`, `Jo approved ·
+yesterday`, `CI failed · 10 min ago` — in its own column from 28rem of the
+row's middle (truncated, the whole sentence its tooltip), on the one-up card,
+and in the row's tooltip at every width. The file, line, commit count and
+verdict come from hosts that say them (protocol 2.66.0); an older host's
+sentence says only who did what kind of thing.
 
 Every marker is its own focusable element with an `aria-label` saying the
 whole sentence, and its shadcn tooltip (`components/ui/tooltip.tsx`) opens on

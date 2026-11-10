@@ -1,10 +1,17 @@
 import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
+import { reviewerStanding, type ActivitySignals } from './activity.ts'
 import { assignedFaces, faceOf, reviewerFaces } from './faces.ts'
 import { stackPlaces, type StackPlace } from './markers.ts'
 import type { Pipeline } from './pipeline.ts'
 import type { Reference } from './reference.ts'
 import { tiesOf, type Ties } from './ties.ts'
+
+/** The last activity with its actor's display name, when `people` gives one that is not just the login. */
+function withName(row: TrackerRow, last: NonNullable<TrackerRow['lastActivity']>): ActivitySignals {
+  const name = faceOf(row, last.login).name
+  return name && name !== last.login ? { ...last, name } : last
+}
 
 /**
  * The host's shared tracker reading, turned into rows.
@@ -121,10 +128,16 @@ function fromRow(
             const named = faceOf(row, r.login).name
             return r.name || named === r.login ? r : { ...r, name: named }
           }),
-          reviewerFaces: reviewerFaces(row),
+          /* Each face's badge is their standing from everything they did (`activity.ts`), not
+             only the tracker's word: a reviewer who commented has started. */
+          reviewerFaces: reviewerFaces(row)?.map((face, i) => ({ ...face, word: reviewerStanding(row.reviewers![i]!, { reviewers: row.reviewers, lastActivity: row.lastActivity, lastPushAt: row.lastPushAt }, 0).word })),
         }
       : {}),
-    ...(row.lastActivity ? { lastActivity: row.lastActivity } : {}),
+    /* The actor's display name rides along, so the sentence says "Mona Lisa commented". */
+    ...(row.lastActivity ? { lastActivity: withName(row, row.lastActivity) } : {}),
+    ...(row.lastPushAt ? { lastPushAt: row.lastPushAt } : {}),
+    ...(row.createdAt ? { createdAt: row.createdAt } : {}),
+    ...(row.discussions ? { discussions: row.discussions } : {}),
     ...(stack ? { stack } : {}),
     /* Absent rather than `[]` when there is no tie, so an older host's rows are the rows they were. */
     ...(ties?.partOf.length ? { partOf: ties.partOf } : {}),

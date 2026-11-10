@@ -1,6 +1,7 @@
 import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
-import { assignedSaid, reviewOf, unaddressed } from '@/live/markers.ts'
+import { activitySaid, reviewOf } from '@/live/activity.ts'
+import { assignedSaid } from '@/live/markers.ts'
 import type { Reference } from '@/live/reference.ts'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { pipelineSaid } from '@/live/pipeline.ts'
@@ -203,11 +204,11 @@ export function overview(row: Reference, now: number = Date.now()): string {
   if (row.stack) parts.push(stackSentence(row.stack, row.ref))
   const assigned = assignedSaid(row)
   if (assigned) parts.push(assigned)
-  const review = reviewOf(row.reviewers)
-  if (review) parts.push(review.said)
+  const review = reviewOf(row, now)
+  if (review) parts.push(`${review.said.split('\n')[0]}: ${review.lines.join('; ')}`)
   if (row.kind === 'change' && row.pipeline) parts.push(pipelineSaid(row.pipeline, now))
-  const last = unaddressed(row, now)
-  if (last) parts.push(last)
+  const last = activitySaid(row, now)
+  if (last) parts.push(`Last activity: ${last.full}`)
   return parts.join(' · ')
 }
 
@@ -220,9 +221,15 @@ export function ReferenceRow({
   onOpenLink,
   now,
   fit = 'wide',
+  fresh = false,
+  onSeen,
 }: {
   row: Reference
   landed: boolean
+  /** Somebody else acted on it since this kehikko last saw it (`live/activity.ts`): the bell, and a bold title. */
+  fresh?: boolean
+  /** The bell was pressed: its activity is seen. */
+  onSeen?: (ref: string) => void
   /** How tightly the list is drawn, from its own width (`live/fit.ts`). */
   fit?: RowFit
   /** Hand a marker's link to the canvas (`address.open`), or null to follow it in a new tab. Not the open icon's: that opens the person's browser. */
@@ -238,9 +245,11 @@ export function ReferenceRow({
 }) {
   const at = now ?? Date.now()
   const look = fitLook(fit)
+  const last = activitySaid(row, at)
   return (
     <li
       data-ref={row.ref}
+      data-fresh={fresh ? 'true' : undefined}
       data-fit={fit}
       data-kind={row.kind}
       data-selected={selected ? 'true' : 'false'}
@@ -323,7 +332,7 @@ export function ReferenceRow({
             used to be dropped under 24rem of the frame (issue #24), which left a
             narrow list a column of numbers; a few words of title are what tell
             two rows apart at a glance. */}
-        <span data-title className={cn('block min-w-0 flex-1 truncate', !row.title && 'text-muted-foreground italic')}>
+        <span data-title className={cn('block min-w-0 flex-1 truncate', !row.title && 'text-muted-foreground italic', fresh && 'font-semibold')}>
           {row.title || (row.unreadable ? 'this reference arrived with no reading at all' : 'no title in the reading')}
         </span>
 
@@ -337,6 +346,19 @@ export function ReferenceRow({
             className="sr-only max-w-[45%] shrink-0 truncate text-xs text-muted-foreground @sm/frame:not-sr-only"
           >
             {tieSaid(row)}
+          </span>
+        )}
+
+        {/* The last activity, truncated — "Mona commented on line 42 of api.ts · 5 min ago" — with
+            the whole sentence (the path in full) as its own tooltip. From 28rem of the row's
+            middle; narrower, the row's tooltip and the bell say it. */}
+        {last && (
+          <span
+            data-activity={last.by}
+            title={`Last activity: ${last.full}`}
+            className={cn('hidden w-44 shrink-0 truncate text-right text-xs @md:block', fresh ? 'text-foreground' : 'text-muted-foreground')}
+          >
+            {last.short}
           </span>
         )}
 
@@ -377,7 +399,7 @@ export function ReferenceRow({
         </span>
       </button>
 
-      <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} look={look} />
+      <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} look={look} fresh={fresh} onSeen={onSeen} />
 
       {/* From 24rem of the frame the copy button ends the row; below that it is
           dropped, because there is no room for it beside the markers and the

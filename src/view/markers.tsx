@@ -21,7 +21,8 @@ import type { AddressOpenResult, PipelineState } from 'kehikot-module-protocol'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { assignedSaid, reviewOf, stackSaid, unaddressed } from '@/live/markers.ts'
+import { activitySaid, reviewOf } from '@/live/activity.ts'
+import { assignedSaid, stackSaid } from '@/live/markers.ts'
 import { stackPath, stackTree } from '@/live/stack.ts'
 import { stateLook, stateSaid, type StateLook } from '@/live/state.ts'
 import type { Reference } from '@/live/reference.ts'
@@ -46,11 +47,9 @@ import { openOutside } from '@/live/links.ts'
  * where there is no picture. The marker's tooltip and label name every one
  * of them and, for reviewers, where each stands.
  *
- * Never colour alone: every reviewer's state has its own shape, a badge on
- * their face — an hourglass for a review asked and not started, an eye for
- * one under way, a ring with a tick for approved, a ring with a bang for
- * changes requested — and its words in the label. Colour is only the second
- * telling.
+ * Never colour alone: every reviewer's standing has its own shape, a badge on
+ * their face (`faces.tsx`), and its words in the label, a line per reviewer
+ * (`live/activity.ts`). Colour is only the second telling.
  *
  * The cluster carries `title=""` so the row's own whole-row `title` does not
  * pop up over a marker's tooltip and say everything again at once.
@@ -273,22 +272,25 @@ export function StateMark({ row, compact = false }: { row: Reference; compact?: 
 }
 
 /**
- * The last activity, when it was somebody else's (`unaddressed`): the bell, its
- * sentence as tooltip and label, and a press opens the reference in the
- * person's own browser (`openOutside`), where that activity is. Never handed to
- * the canvas.
+ * New activity: the last thing done was somebody else's and this kehikko has
+ * not seen it since (`live/activity.ts`). The bell, its sentence as tooltip and
+ * label, and a press opens the reference in the person's own browser
+ * (`openOutside`), where that activity is, and counts it seen. Never handed to
+ * the canvas. A bell with a dot, never colour alone; the row's title is bold
+ * beside it.
  */
-export function ActivityMark({ last, url, compact = false }: { last: string; url: string | null; compact?: boolean }) {
+export function ActivityMark({ last, url, onSeen, compact = false }: { last: string; url: string | null; onSeen?: () => void; compact?: boolean }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          data-marker="unaddressed"
-          aria-label={`Unaddressed activity. ${last}. See it in your browser`}
+          data-marker="new-activity"
+          aria-label={`New activity. ${last}. See it in your browser`}
           disabled={!url}
           onClick={(event) => {
             event.stopPropagation()
+            onSeen?.()
             openOutside(url)
           }}
           className={cn(MARK, compact ? BOX.compact : BOX.normal, 'text-foreground')}
@@ -296,7 +298,7 @@ export function ActivityMark({ last, url, compact = false }: { last: string; url
           <BellDot className="size-3.5" aria-hidden="true" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>{last}</TooltipContent>
+      <TooltipContent>{`New activity: ${last}`}</TooltipContent>
     </Tooltip>
   )
 }
@@ -323,9 +325,15 @@ export function Markers({
   onPick,
   onOpenLink,
   look = fitLook('wide'),
+  fresh = false,
+  onSeen,
 }: {
   row: Reference
   now: number
+  /** Somebody else acted on it since this kehikko last saw it: the bell. */
+  fresh?: boolean
+  /** The bell was pressed: the activity is seen. */
+  onSeen?: (ref: string) => void
   onPick: (ref: string) => void
   /** Hand a link to the canvas (`address.open`), or null to follow it in a new tab. */
   onOpenLink?: ((url: string) => Promise<AddressOpenResult | null>) | null
@@ -333,9 +341,9 @@ export function Markers({
   look?: FitLook
 }) {
   const assigned = assignedSaid(row)
-  const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
+  const review = row.kind === 'change' ? reviewOf(row, now) : null
   const pipeline = row.kind === 'change' ? row.pipeline : undefined
-  const last = unaddressed(row, now)
+  const last = fresh ? activitySaid(row, now)?.full ?? null : null
   const compact = look.compactMarks
   return (
     <span data-markers title="" className={cn(CLUSTER, compact ? 'gap-0' : 'gap-0.5')}>
@@ -352,7 +360,7 @@ export function Markers({
       ) : SLOT.review}
       <StateMark row={row} compact={compact} />
       {pipeline ? <PipelineMark pipeline={pipeline} now={now} onOpenLink={onOpenLink ?? null} compact={compact} /> : SLOT.pipeline}
-      {last ? <ActivityMark last={last} url={row.url ?? null} compact={compact} /> : SLOT.mark}
+      {last ? <ActivityMark last={last} url={row.url ?? null} onSeen={onSeen ? () => onSeen(row.ref) : undefined} compact={compact} /> : SLOT.mark}
     </span>
   )
 }

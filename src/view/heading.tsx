@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { BellDot } from 'lucide-react'
 import type { TrackerMissing } from 'kehikot-module-protocol'
 
 import { projectName } from './absence.tsx'
@@ -109,6 +110,7 @@ export function Heading({
   scope = null,
   at,
   unread = [],
+  fresh = 0,
   now,
   readout = null,
   action = null,
@@ -123,6 +125,8 @@ export function Heading({
   at?: string | null
   /** The refs the reading names and holds no row for, and why. */
   unread?: readonly TrackerMissing[]
+  /** How many shown rows somebody else acted on since this kehikko last saw them. */
+  fresh?: number
   /** The time to measure the age against. A parameter so a test can hold it still. */
   now?: number
   /** Drawn at the line's end: what can be done with the selected rows (`SelectionMenu`), when there is anything. */
@@ -130,7 +134,7 @@ export function Heading({
   /** Drawn before `action`: where the one-up view is (`3 / 12`), and what the item menu just copied. */
   readout?: ReactNode
 }) {
-  const { count, brief, within, age, gaps, title } = headingSaid({ project, showing, total, scope, at, unread, now })
+  const { count, brief, within, news, age, gaps, title } = headingSaid({ project, showing, total, scope, at, unread, fresh, now })
 
   return (
     <div
@@ -146,6 +150,12 @@ export function Heading({
         <span className="@sm:hidden">{brief}</span>
         <span className="hidden @sm:inline">{count}</span>
         {within && <span className="hidden @sm:inline"> · {within}</span>}
+        {news && (
+          <span data-heading="news" className="font-semibold text-foreground">
+            {' · '}
+            <BellDot className="inline size-3 align-[-2px]" aria-hidden="true" /> {news}
+          </span>
+        )}
         {age && <span className="hidden @md:inline"> · {age}</span>}
         {gaps && <span className="hidden @md:inline"> · {gaps}</span>}
       </span>
@@ -163,6 +173,8 @@ export interface HeadingFacts {
   scope?: 'epic' | 'containers' | 'review' | 'mine' | 'failing' | null
   at?: string | null
   unread?: readonly TrackerMissing[]
+  /** How many shown rows have new activity by somebody else (`live/activity.ts`). */
+  fresh?: number
   now?: number
 }
 
@@ -171,7 +183,7 @@ export interface HeadingFacts {
  * bar (`Heading`) and the footer it declares to a host that draws one
  * (`footerItems` in `live/footer.ts`). Each is `null` when it is not said.
  */
-export function headingSaid({ project, showing, total, scope = null, at, unread = [], now }: HeadingFacts) {
+export function headingSaid({ project, showing, total, scope = null, at, unread = [], fresh = 0, now }: HeadingFacts) {
   const count = showing === total ? `${total} references` : `${showing} of ${total} shown`
   const brief = showing === total ? `${total}` : `${showing}/${total}`
   const within =
@@ -186,11 +198,12 @@ export function headingSaid({ project, showing, total, scope = null, at, unread 
             : scope === 'failing'
               ? 'pipeline failing'
               : null
+  const news = fresh > 0 ? `${fresh} with new activity` : null
   const age = at === undefined ? null : ageOf(at, now)
   const gaps = unread.length ? `${unread.length} unread` : null
   const why = unread.map((gap) => `${gap.ref}: ${MISSING[gap.reason]}`)
-  const title = [[project, count, within, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')
-  return { count, brief, within, age, gaps, why, title }
+  const title = [[project, count, within, news, age, gaps].filter(Boolean).join(' · '), ...why].join('\n')
+  return { count, brief, within, news, age, gaps, why, title }
 }
 
 /** Why a ref has no row, in the words the heading's tooltip uses. */
