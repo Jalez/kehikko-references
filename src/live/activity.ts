@@ -42,7 +42,7 @@ import type { Pipeline } from './pipeline.ts'
  * clears when the person selects the item or opens it from the bell.
  */
 
-/** A reviewer as a host from protocol 2.66.0 says one; older hosts leave the three out. */
+/** A reviewer as a host from protocol 2.66.0 says one (`reviewedAt`, `activeAt`, `openThreads`); older hosts leave the three out. */
 export interface ReviewerSignals extends TrackerReviewer {
   reviewedAt?: string
   activeAt?: string
