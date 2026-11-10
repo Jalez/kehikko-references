@@ -14,6 +14,7 @@ import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
+import { drawnOf } from '@/live/drawn.ts'
 import { declaresFooter, footerItems, footerPressed } from '@/live/footer.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
@@ -175,6 +176,7 @@ export function App() {
     openAddress,
     readEpics,
     goToEpic,
+    ready,
   } = useKehikot(ID, onGoto, ({ item, value, place, carried }) => {
     if (place === 'footer') return footerPress.current(item, value, carried)
     const asked = orderPressed(item, value)
@@ -860,6 +862,16 @@ export function App() {
     })
   }, [read])
 
+  /* Once the list (or what this page says instead of one) is on screen, the host's cover comes off
+     (protocol 2.70.0). The first read of the trackers is the host's cover, not a panel here; only a
+     read that outlasts the host's wait shows `Asking`. Never gated on `visible`. */
+  const waiting =
+    sight.at === 'read' && rows.length === 0 && !sight.trouble && sight.reading.at === null && (sight.reading.refreshing || busy)
+  const drawn = drawnOf(cover, sight, waiting)
+  useEffect(() => {
+    if (drawn) ready()
+  }, [drawn, ready])
+
   /**
    * The states every module has, drawn by the cover every module shares:
    * waiting to be greeted, nothing framing the page, no project folder, this
@@ -882,7 +894,7 @@ export function App() {
     /* Nothing read yet and a read under way is a wait, not an empty tracker:
        the host answered at once with what it had, which was nothing, and the
        context says when the read lands. */
-    if (held.at === null && (held.refreshing || busy)) return <Asking project={sight.project} />
+    if (waiting) return <Asking project={sight.project} />
     return <NothingFound project={sight.project} reading={held} />
   }
 
@@ -951,7 +963,7 @@ export function App() {
           changed, and the rows are still exactly what the last reading found.
         </p>
       )}
-      <div ref={listRef} className="relative min-h-0 flex-1 overflow-y-auto" {...itemMenu.handlers}>
+      <div ref={listRef} data-kehikot-scroll className="relative min-h-0 flex-1 overflow-y-auto" {...itemMenu.handlers}>
         {rows.length === 0 ? (
           <NothingFound project={sight.project} reading={held} />
         ) : shown.length === 0 && nothingPicked(rows, sifting) ? (

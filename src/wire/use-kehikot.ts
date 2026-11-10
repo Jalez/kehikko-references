@@ -4,6 +4,7 @@ import { askReading, askRefresh } from '@/live/ask.ts'
 import { askEpics, type EpicsReading } from '@/live/epics.ts'
 import type { Sight } from '@/live/sight.ts'
 import { kehikkoKey } from '@/live/one-up.ts'
+import { ORDER_ITEM } from '@/live/order.ts'
 import {
   contentStamp,
   filterChoiceSchema,
@@ -340,6 +341,11 @@ export interface Kehikot {
    * False from a host that does not say.
    */
   wholeProject: boolean
+  /**
+   * Say the page is drawn, so the host's cover comes off (protocol 2.70.0). Once what the page was
+   * opened for is on screen; never gated on visibility, since the host keeps a covered page hidden.
+   */
+  ready: () => void
 }
 
 /**
@@ -717,7 +723,12 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
         readEpic()
       },
     },
-    { kept: AS_KEPT },
+    {
+      kept: AS_KEPT,
+      /* The kept view (protocol 2.70.0): the list's scroll comes back per container. Not "Sort by":
+         the order is already in this page's own kept string (`live/keep.ts`), one mechanism for it. */
+      keepView: { except: [ORDER_ITEM] },
+    },
   )
   live.current = host.connection
 
@@ -887,6 +898,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       marks,
       parts,
       wholeProject,
+      ready: host.ready,
     }),
     [
       sight,
@@ -919,6 +931,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       marks,
       parts,
       wholeProject,
+      host.ready,
     ],
   )
 }
