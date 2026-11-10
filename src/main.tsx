@@ -1,6 +1,3 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-
 /**
  * Imported for its side effect, and it belongs in the ENTRY rather than beside
  * the `connect` call.
@@ -20,6 +17,7 @@ import { createRoot } from 'react-dom/client'
  */
 import 'kehikot-module-protocol/client'
 import { probeServer } from 'kehikot-module-protocol/client'
+import { mountPage } from 'kehikot-module-protocol/client/mount'
 
 import { App } from './app.tsx'
 import './index.css'
@@ -36,9 +34,8 @@ import './index.css'
 document.documentElement.classList.add('h-full')
 document.body.classList.add('h-full')
 
-const root = document.getElementById('root')
-if (!root) throw new Error('the page has no #root to mount into')
-root.classList.add('h-full')
+/* A missing root is said to the host by `mountPage` (`NO_ROOT`), not thrown here. */
+document.getElementById('root')?.classList.add('h-full')
 
 /**
  * Ask whether this app's own server is still there, at the one moment the page
@@ -53,8 +50,6 @@ root.classList.add('h-full')
  */
 import.meta.hot?.on('vite:ws:disconnect', () => void probeServer())
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+/* `mountPage` (protocol 2.70.0): StrictMode, and the protocol's `ReportErrors` around the page, so a
+   render that throws is told to the host and drawn as words instead of a blank frame. */
+mountPage('root', <App />)

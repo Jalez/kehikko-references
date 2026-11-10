@@ -1,0 +1,266 @@
+[
+  {
+    "name": "the whole list, nothing selected",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "order",
+        "label": "Sort by",
+        "value": "moved",
+        "options": [
+          {
+            "id": "moved",
+            "label": "Recent"
+          },
+          {
+            "id": "stale",
+            "label": "Oldest"
+          },
+          {
+            "id": "ref",
+            "label": "Number"
+          },
+          {
+            "id": "state",
+            "label": "State"
+          },
+          {
+            "id": "kind",
+            "label": "Kind"
+          }
+        ],
+        "agents": true
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "count",
+        "text": "412 references",
+        "tooltip": "/Users/somebody/Projects/harbour · 412 references · read 2 min ago"
+      },
+      {
+        "kind": "text",
+        "id": "age",
+        "text": "read 2 min ago",
+        "optional": true
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "narrowed to the epic, one source failing, sorted otherwise",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "order",
+        "label": "Sort by",
+        "value": "state",
+        "options": [
+          {
+            "id": "moved",
+            "label": "Recent"
+          },
+          {
+            "id": "stale",
+            "label": "Oldest"
+          },
+          {
+            "id": "ref",
+            "label": "Number"
+          },
+          {
+            "id": "state",
+            "label": "State"
+          },
+          {
+            "id": "kind",
+            "label": "Kind"
+          }
+        ],
+        "agents": true
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "count",
+        "text": "37 of 412 shown",
+        "tooltip": "/Users/somebody/Projects/harbour · 37 of 412 shown · this epic · 2 with new activity · read 2 min ago · 1 unread\n#9: its tracker has no such issue or change"
+      },
+      {
+        "kind": "text",
+        "id": "scope",
+        "text": "this epic",
+        "optional": true,
+        "tooltip": "What the count is of: this epic."
+      },
+      {
+        "kind": "text",
+        "id": "news",
+        "text": "2 with new activity",
+        "tooltip": "Somebody else acted on these since you last looked at them on this kehikko. Select one to mark it seen."
+      },
+      {
+        "kind": "text",
+        "id": "age",
+        "text": "read 2 min ago",
+        "optional": true
+      },
+      {
+        "kind": "text",
+        "id": "unread",
+        "text": "1 unread",
+        "optional": true,
+        "tooltip": "#9: its tracker has no such issue or change"
+      },
+      {
+        "kind": "text",
+        "id": "trouble",
+        "text": "gitlab.example.org/team/app could not be read",
+        "level": "warn",
+        "tooltip": "The host could not reach it."
+      },
+      {
+        "kind": "run",
+        "id": "trouble-retry",
+        "label": "Try again",
+        "icon": "refresh",
+        "actsOn": "trouble",
+        "optional": true,
+        "disabled": null,
+        "tooltip": "Read the trackers again."
+      },
+      {
+        "kind": "run",
+        "id": "trouble-close",
+        "label": "Dismiss",
+        "icon": "x",
+        "actsOn": "trouble",
+        "optional": true,
+        "tooltip": "Dismiss this until a source fails differently."
+      }
+    ],
+    "state": true
+  },
+  {
+    "name": "a reference selected, in two epics, one up",
+    "header": [
+      {
+        "kind": "switch",
+        "id": "order",
+        "label": "Sort by",
+        "value": "moved",
+        "options": [
+          {
+            "id": "moved",
+            "label": "Recent"
+          },
+          {
+            "id": "stale",
+            "label": "Oldest"
+          },
+          {
+            "id": "ref",
+            "label": "Number"
+          },
+          {
+            "id": "state",
+            "label": "State"
+          },
+          {
+            "id": "kind",
+            "label": "Kind"
+          }
+        ],
+        "agents": true
+      }
+    ],
+    "footer": [
+      {
+        "kind": "text",
+        "id": "position",
+        "text": "3 of 412",
+        "tooltip": "Which reference is on screen, of those shown. Scroll or use the arrow keys for the next."
+      },
+      {
+        "kind": "text",
+        "id": "count",
+        "text": "412 references",
+        "tooltip": "/Users/somebody/Projects/harbour · 412 references · read 2 min ago",
+        "optional": true
+      },
+      {
+        "kind": "text",
+        "id": "age",
+        "text": "read 2 min ago",
+        "optional": true
+      },
+      {
+        "kind": "text",
+        "id": "selected",
+        "text": "1 selected",
+        "align": "end"
+      },
+      {
+        "kind": "run",
+        "id": "open",
+        "label": "Open in browser",
+        "icon": "external",
+        "align": "end",
+        "optional": true,
+        "disabled": null,
+        "tooltip": "Open the selected reference in your own browser.",
+        "open": "https://github.com/o/r/issues/12"
+      },
+      {
+        "kind": "run",
+        "id": "copy",
+        "label": "Copy",
+        "align": "end",
+        "optional": true,
+        "tooltip": "Copy the selected references with links and titles.",
+        "copy": {
+          "plain": "#12 Migrate the store"
+        }
+      },
+      {
+        "kind": "run",
+        "id": "copy-ids",
+        "label": "Copy ids",
+        "align": "end",
+        "optional": true,
+        "tooltip": "Copy the ids of the selected references, nothing else.",
+        "copy": {
+          "plain": "#12"
+        }
+      },
+      {
+        "kind": "go",
+        "id": "epics",
+        "label": "In epics",
+        "options": [
+          {
+            "id": "other",
+            "label": "Another epic"
+          },
+          {
+            "id": "an-epic",
+            "label": "The open one (open now)"
+          }
+        ],
+        "align": "end",
+        "optional": true,
+        "tooltip": "The epics the selected references are in.\nAnother epic\nThe open one: part: Wiring"
+      },
+      {
+        "kind": "run",
+        "id": "clear",
+        "label": "Clear selection",
+        "icon": "x",
+        "align": "end"
+      }
+    ],
+    "state": true
+  }
+]
