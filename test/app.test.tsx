@@ -2245,3 +2245,100 @@ describe('the footer: the host draws it when it says so, the page draws its own 
     expect(sortedBy(host)?.value).toBe('ref')
   })
 })
+
+describe('a source that could not be read: try again, and close', () => {
+  const failing = {
+    tracker: 'gitlab',
+    host: 'gitlab.innovium.ai',
+    repo: 'innoviumai/innoviumai',
+    default: true,
+    listed: true,
+    at: '2026-08-26T09:12:00Z',
+    error: 'The command execution has been interrupted',
+    refreshing: false,
+  }
+  const healthy = { ...failing, error: null, at: '2026-08-27T09:12:00Z' }
+  const reading = (source: Record<string, unknown>) => ({ ok: true as const, data: readingOf(issues(3), { sources: [source] as never }) })
+  const trouble = () => document.body.querySelector('[data-sources="trouble"]')
+  const click = (name: string) => act(() => void fireEvent.click(document.body.querySelector(`[data-trouble="${name}"]`)!))
+
+  test('says it in plain words, with the host’s text kept for the details', async () => {
+    const host = stubHost(stubDoor({ [PROJECT]: reading(failing) }))
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    expect(trouble()?.textContent).toContain('Reading timed out or was interrupted; try again.')
+    expect(trouble()?.textContent).not.toContain('The command execution has been interrupted')
+    expect(document.body.querySelector('[data-trouble="said"]')?.getAttribute('title')).toContain('The command execution has been interrupted')
+  })
+
+  test('Try again asks for a fresh read, says Reading… while it runs, and the notice clears when it worked', async () => {
+    const door = stubDoor({ [PROJECT]: reading(failing) }, 'hold')
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    expect(host.calls('tracker.refresh')).toEqual([])
+
+    click('retry')
+    await settle()
+    expect(host.calls('tracker.refresh')).toEqual([{ project: true }])
+    expect(document.body.querySelector('[data-trouble="retry"]')?.textContent).toBe('Reading…')
+
+    door.answers[PROJECT] = reading(healthy)
+    act(() => host.answer('tracker.refresh', REFRESHED))
+    await settle()
+    expect(trouble()).toBeNull()
+  })
+
+  test('× hides it, and the close is kept per kehikko with the host, not in the browser', async () => {
+    const host = stubHost(stubDoor({ [PROJECT]: reading(failing) }))
+    render(<App />)
+    act(() => host.greet(PROJECT, null, [], {}, { kehikko: { id: 1, name: 'One' }, kept: null }))
+    await settle()
+    click('close')
+    expect(trouble()).toBeNull()
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 500))
+    })
+    const written = JSON.parse((host.calls('state.set').at(-1) as { state: string }).state)
+    expect(Object.values(written.q)).toEqual([[expect.stringContaining('gitlab.innovium.ai/innoviumai/innoviumai')]])
+  })
+
+  test('a closed notice stays closed on a reload, while the same failure stands', async () => {
+    const closed = `gitlab:gitlab.innovium.ai/innoviumai/innoviumai\nThe command execution has been interrupted`
+    const host = stubHost(stubDoor({ [PROJECT]: reading(failing) }))
+    render(<App />)
+    act(() => host.greet(PROJECT, JSON.stringify({ v: 3, o: 'moved', q: { '': [closed] } })))
+    await settle()
+    expect(trouble()).toBeNull()
+  })
+
+  test('it comes back when the source fails differently, and when it fails again after a good read', async () => {
+    const door = stubDoor({ [PROJECT]: reading(failing) })
+    const host = stubHost(door)
+    render(<App />)
+    act(() => host.greet(PROJECT))
+    await settle()
+    click('close')
+    expect(trouble()).toBeNull()
+
+    /* A different failure. */
+    door.answers[PROJECT] = reading({ ...failing, error: '401 Unauthorized' })
+    act(() => host.refresh())
+    await settle()
+    expect(trouble()?.textContent).toContain('glab isn\'t signed in for gitlab.innovium.ai')
+    click('close')
+    expect(trouble()).toBeNull()
+
+    /* It reads, then fails the same way again. */
+    door.answers[PROJECT] = reading(healthy)
+    act(() => host.refresh())
+    await settle()
+    expect(trouble()).toBeNull()
+    door.answers[PROJECT] = reading({ ...failing, error: '401 Unauthorized' })
+    act(() => host.refresh())
+    await settle()
+    expect(trouble()).not.toBeNull()
+  })
+})

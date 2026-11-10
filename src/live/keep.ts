@@ -90,7 +90,16 @@ export interface Kept {
    * the string it always was. Additive under the same version.
    */
   stack?: boolean
+  /**
+   * The read-failure notices closed on each kehikko (`trouble.ts`), by kehikko. Additive under the
+   * same version, and the first thing dropped when the string would not fit: a closed notice that
+   * is forgotten shows again, which is a fresh start rather than a broken one.
+   */
+  quiet?: QuietBook
 }
+
+/** Closed notices by kehikko. */
+export type QuietBook = Record<string, string[]>
 
 /** Epoch seconds as base 36: `w` and each ref's activity, short because the whole string is capped. */
 const b36 = (n: number) => Math.max(0, Math.floor(n)).toString(36)
@@ -133,10 +142,10 @@ function seenRead(raw: unknown): SeenBook | undefined {
  * kehikko goes first, then, in the last one left, the refs seen longest ago
  * (each then counts as unseen again only if it moved after the watermark).
  */
-function trimmed(ordering: Ordering, book: SeenBook, stack: boolean): string {
+function trimmed(ordering: Ordering, book: SeenBook, stack: boolean, quiet: QuietBook | undefined): string {
   const kept: SeenBook = { ...book }
   for (;;) {
-    const text = JSON.stringify({ v: VERSION, o: ordering, ...(stack ? { k: 1 } : {}), ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
+    const text = JSON.stringify({ v: VERSION, o: ordering, ...(stack ? { k: 1 } : {}), ...(quiet ? { q: quiet } : {}), ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
     if (text.length <= LIMITS.MODULE_STATE) return text
     const keys = Object.keys(kept)
     if (keys.length > 1) {
@@ -154,6 +163,25 @@ function trimmed(ordering: Ordering, book: SeenBook, stack: boolean): string {
   }
 }
 
+/** Closed notices as written: a kehikko with none is not written, and nothing at all is `undefined`. */
+function quietWritten(book: QuietBook | undefined): QuietBook | undefined {
+  if (!book) return undefined
+  const out: QuietBook = {}
+  for (const [key, list] of Object.entries(book)) if (list.length) out[key] = list
+  return Object.keys(out).length ? out : undefined
+}
+
+function quietRead(raw: unknown): QuietBook | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const out: QuietBook = {}
+  for (const [key, list] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue
+    const keys = list.filter((one): one is string => typeof one === 'string')
+    if (keys.length) out[key] = keys
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
 /**
  * The string to hand the host.
  *
@@ -166,8 +194,15 @@ function trimmed(ordering: Ordering, book: SeenBook, stack: boolean): string {
  */
 export function writing(kept: Kept): string {
   const stack = kept.stack === true
-  if (!kept.seen || Object.keys(kept.seen).length === 0) return JSON.stringify({ v: VERSION, o: kept.ordering, ...(stack ? { k: 1 } : {}) })
-  return trimmed(kept.ordering, kept.seen, stack)
+  const quiet = quietWritten(kept.quiet)
+  const plain = (q: QuietBook | undefined) => JSON.stringify({ v: VERSION, o: kept.ordering, ...(stack ? { k: 1 } : {}), ...(q ? { q } : {}) })
+  if (!kept.seen || Object.keys(kept.seen).length === 0) {
+    const text = plain(quiet)
+    return text.length <= LIMITS.MODULE_STATE ? text : plain(undefined)
+  }
+  /* The closed notices go before any of what was seen does. */
+  if (quiet && trimmed(kept.ordering, kept.seen, stack, quiet).length > LIMITS.MODULE_STATE) return trimmed(kept.ordering, kept.seen, stack, undefined)
+  return trimmed(kept.ordering, kept.seen, stack, quiet)
 }
 
 /**
@@ -196,5 +231,6 @@ export function reading(state: string | null | undefined): Kept | null {
   const ordering = (Object.keys(ORDER_LABELS) as Ordering[]).find((value) => value === held.o) ?? DEFAULT_ORDER
   const seen = seenRead(held.s)
   const stack = held.k === 1
-  return { ordering, ...(seen ? { seen } : {}), ...(stack ? { stack } : {}) }
+  const quiet = quietRead(held.q)
+  return { ordering, ...(seen ? { seen } : {}), ...(stack ? { stack } : {}), ...(quiet ? { quiet } : {}) }
 }

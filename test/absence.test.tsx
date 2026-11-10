@@ -179,13 +179,13 @@ describe('a source that could not be read, over the rows it gave before', () => 
       <SourceTrouble
         sources={[
           SOURCE,
-          { ...SOURCE, tracker: 'gitlab', host: 'gitlab.example.org', repo: 'group/project', error: 'could not be reached.', at: '2026-08-27T09:00:00Z' },
+          { ...SOURCE, tracker: 'gitlab', host: 'gitlab.example.org', repo: 'group/project', error: 'unrecognised failure.', at: '2026-08-27T09:00:00Z' },
         ]}
         now={now}
       />,
     )
     const said = document.body.textContent ?? ''
-    expect(said).toContain('gitlab.example.org/group/project could not be read: could not be reached.')
+    expect(said).toContain('gitlab.example.org/group/project could not be read: unrecognised failure.')
     expect(said).toContain('read 3 h ago')
     /* A source that read cleanly gets no line. */
     expect(said).not.toContain('example/repo could not')

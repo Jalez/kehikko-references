@@ -108,3 +108,22 @@ describe('what is kept, and what is deliberately not', () => {
     expect(writing({ ordering: 'moved' }).length).toBeLessThan(64)
   })
 })
+
+describe('closed read-failure notices', () => {
+  test('survive the round trip, per kehikko', () => {
+    const quiet = { one: ['gitlab:h/r\nboom'], two: ['github:g/r\nbang'] }
+    expect(reading(writing({ ordering: 'stale', quiet }))).toEqual({ ordering: 'stale', quiet })
+  })
+  test('are not written when there are none, so the string is what it always was', () => {
+    expect(writing({ ordering: 'stale', quiet: { one: [] } })).toBe(writing({ ordering: 'stale' }))
+  })
+  test('are what goes first when the string would not fit', () => {
+    const quiet = { one: Array.from({ length: 200 }, (_, n) => `gitlab:host/repo-${n}\n${'x'.repeat(80)}`) }
+    const text = writing({ ordering: 'ref', quiet })
+    expect(text.length).toBeLessThanOrEqual(4096)
+    expect(reading(text)).toEqual({ ordering: 'ref' })
+  })
+  test('a malformed one is dropped without costing the rest', () => {
+    expect(reading('{"v":3,"o":"ref","q":{"a":"nope","b":[1,"ok"]}}')).toEqual({ ordering: 'ref', quiet: { b: ['ok'] } })
+  })
+})

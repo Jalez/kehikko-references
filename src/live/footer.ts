@@ -77,6 +77,9 @@ export const FOOTER = {
   clear: 'clear',
   position: 'position',
   menuCopied: 'menu-copied',
+  trouble: 'trouble',
+  troubleRetry: 'trouble-retry',
+  troubleClose: 'trouble-close',
 } as const
 
 /**
@@ -88,6 +91,12 @@ export interface FooterNow {
   position?: string | null
   /** The item menu's last copy, said for a few seconds: what it took, or a refusal sentence. */
   menu?: { said: string; tooltip?: string } | null
+  /**
+   * Sources that could not be read and whose notice is not closed: what to say, the plain words and
+   * the host's own text for the tooltip, and whether a read is under way. Try again and Dismiss act
+   * on this text (`actsOn`).
+   */
+  trouble?: { text: string; tooltip: string; busy: boolean } | null
 }
 
 /** Cut to `max` characters, with an ellipsis when cut. */
@@ -107,6 +116,20 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
   if (said.news) items.push({ kind: 'text', id: FOOTER.news, text: said.news, tooltip: tip('Somebody else acted on these since you last looked at them on this kehikko. Select one to mark it seen.') })
   if (said.age) items.push({ kind: 'text', id: FOOTER.age, text: said.age, optional: true })
   if (said.gaps) items.push({ kind: 'text', id: FOOTER.unread, text: said.gaps, optional: true, tooltip: tip(said.why.join('\n')) })
+  if (now.trouble) {
+    items.push({ kind: 'text', id: FOOTER.trouble, text: now.trouble.busy ? 'Reading…' : now.trouble.text, level: 'warn', tooltip: tip(now.trouble.tooltip) })
+    items.push({
+      kind: 'run',
+      id: FOOTER.troubleRetry,
+      label: 'Try again',
+      icon: 'refresh',
+      actsOn: FOOTER.trouble,
+      optional: true,
+      disabled: now.trouble.busy ? 'Reading the trackers now.' : null,
+      tooltip: 'Read the trackers again.',
+    })
+    items.push({ kind: 'run', id: FOOTER.troubleClose, label: 'Dismiss', icon: 'x', actsOn: FOOTER.trouble, optional: true, tooltip: 'Dismiss this until a source fails differently.' })
+  }
   if (!selection || selection.count < 1) return items
 
   const epics = selection.epics
@@ -204,6 +227,10 @@ export interface FooterActs {
   /** "With stack" was turned on or off. */
   setStack: (on: boolean) => void
   clear: () => void
+  /** Read the trackers again. */
+  retry?: () => void
+  /** Close the read-failure notices on show. */
+  closeTroubles?: () => void
   goToEpic: (slug: string) => Promise<boolean>
 }
 
@@ -227,6 +254,8 @@ export async function footerPressed(item: string, value: unknown, acts: FooterAc
     if (typeof value !== 'boolean') return 'Say whether to copy with the stack: true or false.'
     return void acts.setStack(value)
   }
+  if (item === FOOTER.troubleRetry) return void acts.retry?.()
+  if (item === FOOTER.troubleClose) return void acts.closeTroubles?.()
   if (item === FOOTER.clear) return void acts.clear()
   if (item === FOOTER.epics) {
     if (typeof value !== 'string') return 'Pick an epic to go to.'
