@@ -114,7 +114,7 @@ export interface Reference {
   assignedFaces: Face[]
   /**
    * A change's reviewers and where each stands (protocol 2.7.0), with when they reviewed, last
-   * acted and the threads they opened where the host says (2.66.0). Absent when the host did not
+   * acted and the threads they opened where the host says (2.67.0). Absent when the host did not
    * say. Their standing is worked out from all of it in `activity.ts`.
    */
   reviewers?: ReviewerSignals[]

@@ -5,7 +5,7 @@ import { collect } from '@/live/collect.ts'
 import { row } from './fixtures.ts'
 
 /**
- * 3.26.0: what a host from protocol 2.66.0 says beyond the tracker's word — when each reviewer
+ * 3.26.0: what a host from protocol 2.67.0 says beyond the tracker's word — when each reviewer
  * reviewed and last acted, the threads they opened, and what the latest activity was — reaches the
  * standings and the sentence through `collect`.
  */

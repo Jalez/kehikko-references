@@ -15,7 +15,7 @@ import type { Pipeline } from './pipeline.ts'
  * "unreviewed" there, and a GitHub reviewer who commented on the conversation
  * is still a pending request. So the host's `state` is one signal among several:
  *
- * - `reviewedAt`, `activeAt` and `openThreads` on the reviewer (protocol 2.66.0),
+ * - `reviewedAt`, `activeAt` and `openThreads` on the reviewer (protocol 2.67.0),
  *   when the host says them;
  * - the row's `lastActivity` when it is theirs (protocol 2.8.0), which any host
  *   that reads activity says;
@@ -42,14 +42,14 @@ import type { Pipeline } from './pipeline.ts'
  * clears when the person selects the item or opens it from the bell.
  */
 
-/** A reviewer as a host from protocol 2.66.0 says one (`reviewedAt`, `activeAt`, `openThreads`); older hosts leave the three out. */
+/** A reviewer as a host from protocol 2.67.0 says one (`reviewedAt`, `activeAt`, `openThreads`); older hosts leave the three out. */
 export interface ReviewerSignals extends TrackerReviewer {
   reviewedAt?: string
   activeAt?: string
   openThreads?: number
 }
 
-/** The last activity as a host from protocol 2.66.0 says it, and the actor's display name from `people`. */
+/** The last activity as a host from protocol 2.67.0 says it, and the actor's display name from `people`. */
 export interface ActivitySignals extends TrackerActivity {
   commits?: number
   path?: string
