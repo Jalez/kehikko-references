@@ -169,7 +169,7 @@ of api.ts · 5 min ago`, `Ali pushed 2 commits · 1 h ago`, `Jo approved ·
 yesterday`, `CI failed · 10 min ago` — in its own column from 28rem of the
 row's middle (truncated, the whole sentence its tooltip), on the one-up card,
 and in the row's tooltip at every width. The file, line, commit count and
-verdict come from hosts that say them (protocol 2.66.0); an older host's
+verdict come from hosts that say them (protocol 2.67.0); an older host's
 sentence says only who did what kind of thing.
 
 Every marker is its own focusable element with an `aria-label` saying the
