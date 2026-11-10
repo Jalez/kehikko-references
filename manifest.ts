@@ -4,6 +4,48 @@ import pkg from './package.json'
    read as a file from the repository, so a person can watch it before the module runs or is installed. */
 import intro from './intro.json'
 
+/** "How to use" (protocol 2.52.0). Each string one line of plain text. */
+export const HELP = {
+  summary: 'Every issue, merge request and pull request of the open project, narrowed to the epic and parts you are on. Pick one and the modules beside it follow.',
+  sections: [
+    {
+      title: 'What it shows',
+      points: [
+        'The issues and changes of the open project, from its GitHub and GitLab trackers, as Kehikot read them: state, title, labels, people, and when each last moved.',
+        'By default only the epic’s own: the refs its steps name, and the changes that close or are part of them. With parts picked in the bar, only those parts’.',
+        'Markers beside each row: where a change sits in a stack of changes, who holds it, and activity by somebody else. My role says what you are on it, such as Reviewer (asked) or Author.',
+        'In a tiny container, one card at a time, unseen ones first; the footer says where you are, such as 3 / 12.',
+      ],
+    },
+    {
+      title: 'How to use it',
+      points: [
+        'Click a row to pick it, and the modules beside it follow: its checklist, its diff, a session about it. The checkbox adds or removes more; clicking the one picked row again clears it.',
+        'Scope, in the header: This epic, Everything, Asked to review, or Mine, any role. Hide toggles open or closed issues and changes, and the query finds by words.',
+        'Sort by, in the View menu: Recent, Oldest, Number, State or Kind. The order is kept.',
+        'The icon at the end of a row opens it on its tracker. The copy button copies its reference, linked, with its title; With stack adds the stack it is in.',
+        'Right-click a row, or hold it, for the item menu: copy it, everything filtered, or everything related.',
+        'The box in the header makes this container a target, so other modules follow what it shows.',
+      ],
+    },
+    {
+      title: 'What agents can do',
+      points: [
+        'References has no tools of its own. An agent reads the same issues and changes through Kehikot, and sees what is picked on the kehikko.',
+        'An agent may press Sort by in the header; it changes only the order.',
+      ],
+    },
+    {
+      title: 'Rules',
+      points: [
+        'It holds no token and reads no tracker itself: Kehikot reads them, once, for every module.',
+        'Why a closed issue closed comes from your mark when there is one, and otherwise from the tracker. A closed ref with neither is reason unknown, never counted as done.',
+        'The only thing it keeps is the order, and what you have seen, per kehikko.',
+      ],
+    },
+  ],
+}
+
 /**
  * What this app says about itself when a host asks.
  *
@@ -362,6 +404,8 @@ export const MANIFEST: Manifest = manifestSchema.parse({
     'and other modules react to it, so select the reference you are working on and leave it selected ' +
     'while you work.',
   intro,
+  /* "How to use" (protocol 2.52.0). */
+  help: HELP,
   entry: '/',
   /* What its content belongs to (protocol 2.29.0): one mode per scope, the default first. */
   modes: [
