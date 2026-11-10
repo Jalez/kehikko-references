@@ -111,10 +111,11 @@ describe('what a row may never stop showing: the identifier, the state and the t
     const rows = collect([
       row('gh#131', { kind: 'change', assignees: ['ada'], reviewers: [{ login: 'mona', state: 'requested' }], lastActivity: { login: 'mona', at: '2026-08-27T08:00:00Z', kind: 'comment', mine: false } }),
     ])
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
+    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} fresh={new Set(['gh#131'])} />)
     const cluster = container.querySelector('[data-markers]') as HTMLElement
     const marks = [...cluster.querySelectorAll('[data-marker]')] as HTMLElement[]
-    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-asked', 'state-change-open', 'unaddressed'])
+    /* Mona was asked and has commented: she has started (3.23.0). */
+    expect(marks.map((m) => m.dataset.marker)).toEqual(['assigned', 'review-reviewing', 'state-change-open', 'new-activity'])
     for (const m of [cluster, ...marks]) expect(m.className).not.toMatch(/(^|\s|:)hidden(\s|$)/)
   })
 

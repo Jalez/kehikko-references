@@ -20,7 +20,9 @@
  *   somebody came here to check.
  */
 
-import type { MyRole, TrackerActivity, TrackerReviewer } from 'kehikot-module-protocol'
+import type { MyRole, TrackerDiscussions } from 'kehikot-module-protocol'
+
+import type { ActivitySignals, ReviewerSignals } from './activity.ts'
 
 import type { Face, ReviewerFace } from './faces.ts'
 import type { StackPlace } from './markers.ts'
@@ -110,15 +112,25 @@ export interface Reference {
    * forge's own avatar hosts (protocol 2.10.0 `people`; see `faces.ts`). Initials where there is none.
    */
   assignedFaces: Face[]
-  /** A change's reviewers and where each stands (protocol 2.7.0). Absent when the host did not say. */
-  reviewers?: TrackerReviewer[]
+  /**
+   * A change's reviewers and where each stands (protocol 2.7.0), with when they reviewed, last
+   * acted and the threads they opened where the host says (2.66.0). Absent when the host did not
+   * say. Their standing is worked out from all of it in `activity.ts`.
+   */
+  reviewers?: ReviewerSignals[]
   /** The same reviewers as faces with their state, for the review marker. Absent with `reviewers`. */
   reviewerFaces?: ReviewerFace[]
   /**
    * The last thing done on it, by whom, and whether that was the person (protocol 2.8.0). `mine` is
    * the host's word; absent when the host does not know who the person is. See `markers.ts`.
    */
-  lastActivity?: TrackerActivity
+  lastActivity?: ActivitySignals
+  /** On a change: when its head was last pushed (protocol 2.7.0). A review older than this is of an older head. */
+  lastPushAt?: string
+  /** When it was opened, as the tracker wrote it: tells an opening from a reopening. */
+  createdAt?: string
+  /** On a change: its resolvable review threads, resolved and not (protocol 2.7.0). */
+  discussions?: TrackerDiscussions
   /** Where it sits in a stack of open changes, from the host's `stack` links across the reading (2.8.0). */
   stack?: StackPlace
   /**

@@ -1,4 +1,4 @@
-import type { LastActivityKind, TrackerActivity, TrackerReviewer, TrackerRow } from 'kehikot-module-protocol'
+import type { TrackerRow } from 'kehikot-module-protocol'
 
 import type { Reference } from './reference.ts'
 import { isForked, stackTree } from './stack.ts'
@@ -15,12 +15,12 @@ import { isForked, stackTree } from './stack.ts'
  *   whole stack bottom first.
  * - **Assigned** (#25): somebody is assigned. Nothing when nobody is: the
  *   row's tooltip says "nobody", and a marker on most rows would be noise.
- * - **Review** (#25): on a change somebody was asked to review: asked,
- *   reviewing, changes requested or approved, with each reviewer named.
- * - **Unaddressed activity** (#25): the last thing done on an open reference
- *   was done by somebody else. Only where the host says whose it was against
- *   who the person is (`lastActivity.mine`); when it does not know who the
- *   person is, there is no marker — never a guess.
+ * - **Review** (#25): on a change somebody was asked to review: each
+ *   reviewer's standing from all they did (`activity.ts`, 3.23.0).
+ * - **New activity** (#25, 3.23.0): the last thing done was done by somebody
+ *   else since this kehikko last saw the item (`activity.ts`). Only where the
+ *   host says whose it was against who the person is (`lastActivity.mine`);
+ *   when it does not know who the person is, there is no marker — never a guess.
  */
 
 /* ------------------------------------------------------------------------ *
@@ -122,49 +122,9 @@ export function assignedSaid(row: Pick<Reference, 'assignees' | 'myRoles'>): str
   return `Assigned to ${row.assignees.join(', ')}${you}`
 }
 
-/** Where a change's review stands, in one word, for the marker's icon. */
-export type ReviewWord = 'asked' | 'reviewing' | 'changes' | 'approved'
-
-/** Each reviewer's state, as the tooltip says it. */
-const REVIEWER_SAID: Record<TrackerReviewer['state'], string> = {
-  requested: 'asked',
-  commented: 'reviewing',
-  changes: 'changes requested',
-  approved: 'approved',
-}
-
-/** What the marker's one word means, at the head of its tooltip. */
-export const REVIEW_SAID: Record<ReviewWord, string> = {
-  asked: 'Review asked, not started',
-  reviewing: 'Being reviewed',
-  changes: 'Changes requested',
-  approved: 'Approved',
-}
-
-/**
- * The review marker: the strongest word any reviewer's state gives — changes
- * requested, then approved, then reviewing, then only asked — and every
- * reviewer named with theirs. Null when nobody was asked and nobody reviewed,
- * or the host did not say.
- */
-export function reviewOf(reviewers: readonly TrackerReviewer[] | undefined): { word: ReviewWord; said: string } | null {
-  if (!reviewers?.length) return null
-  const has = (state: TrackerReviewer['state']) => reviewers.some((r) => r.state === state)
-  const word: ReviewWord = has('changes') ? 'changes' : has('approved') ? 'approved' : has('commented') ? 'reviewing' : 'asked'
-  const names = reviewers.map((r) => `${r.name || r.login} (${REVIEWER_SAID[r.state]})`).join(', ')
-  return { word, said: `${REVIEW_SAID[word]}: ${names}` }
-}
-
 /* ------------------------------------------------------------------------ *
- * Unaddressed activity
+ * How long ago
  * ------------------------------------------------------------------------ */
-
-const KIND_SAID: Record<LastActivityKind, string> = {
-  comment: 'a comment',
-  review: 'a review',
-  commit: 'a commit',
-  state: 'a state change',
-}
 
 /** How long ago, in the heading's own short words. */
 export function agoSaid(at: string, now: number): string {
@@ -174,18 +134,7 @@ export function agoSaid(at: string, now: number): string {
   if (minutes < 1) return 'just now'
   if (minutes < 60) return `${minutes} min ago`
   const hours = Math.floor(minutes / 60)
-  if (hours < 48) return `${hours} h ago`
+  if (hours < 24) return `${hours} h ago`
+  if (hours < 48) return 'yesterday'
   return `${Math.floor(hours / 24)} d ago`
-}
-
-/**
- * The unaddressed-activity sentence — `Last activity: mona, a review, 3 h ago`
- * — or null when there is no marker to draw: not open, no last activity read,
- * the last activity was the person's own, or the host does not know who the
- * person is (`mine` absent). Never a guess from a name.
- */
-export function unaddressed(row: { state: Reference['state']; lastActivity?: TrackerActivity }, now: number): string | null {
-  const last = row.lastActivity
-  if (row.state !== 'open' || !last || last.mine !== false) return null
-  return `Last activity: ${last.login}, ${KIND_SAID[last.kind]}, ${agoSaid(last.at, now)}`
 }

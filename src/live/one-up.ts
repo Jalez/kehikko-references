@@ -85,6 +85,15 @@ export function isUnseen(row: Pick<Reference, 'ref' | 'at' | 'lastActivity'>, se
 }
 
 /**
+ * New activity, for the bell (3.23.0): the last thing done on it was somebody
+ * else's — the host's word, `mine === false`; never a guess when it does not
+ * know who the person is — and came after this kehikko last saw it.
+ */
+export function hasNewActivity(row: Pick<Reference, 'ref' | 'at' | 'lastActivity'>, seen: Seen): boolean {
+  return row.lastActivity?.mine === false && isUnseen(row, seen)
+}
+
+/**
  * The book with this row seen on this kehikko: its activity recorded, entries
  * the watermark already covers dropped, and this kehikko moved to the end
  * (most recently touched). The same book when nothing changes.

@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { trackerRowSchema, type TrackerRow } from 'kehikot-module-protocol'
 
 import { collect } from '@/live/collect.ts'
-import { agoSaid, assignedSaid, reviewOf, stackPlaces, stackSaid, unaddressed } from '@/live/markers.ts'
+import { reviewOf } from '@/live/activity.ts'
+import { agoSaid, assignedSaid, stackPlaces, stackSaid } from '@/live/markers.ts'
 import { ReferenceList } from '@/view/reference-list.tsx'
 import { row } from './fixtures.ts'
 
@@ -99,16 +100,17 @@ describe('who holds it (issue #25)', () => {
     expect(assignedSaid({ assignees: ['Ada'], myRoles: ['assignee'] })).toBe('Assigned to Ada (you among them)')
   })
 
-  test('the review word is the strongest state, and every reviewer is named with theirs', () => {
-    expect(reviewOf(undefined)).toBeNull()
-    expect(reviewOf([])).toBeNull()
-    expect(reviewOf([{ login: 'mona', state: 'requested' }])).toEqual({ word: 'asked', said: 'Review asked, not started: mona (asked)' })
-    expect(reviewOf([{ login: 'mona', state: 'requested' }, { login: 'hubot', state: 'commented' }])!.word).toBe('reviewing')
-    expect(reviewOf([{ login: 'mona', name: 'Mona Lisa', state: 'approved' }, { login: 'hubot', state: 'commented' }])).toEqual({
+  test('the review word is the strongest standing, and every reviewer is named with theirs', () => {
+    const of = (reviewers: unknown[]) => reviewOf({ reviewers: reviewers as never }, NOW)
+    expect(reviewOf({}, NOW)).toBeNull()
+    expect(of([])).toBeNull()
+    expect(of([{ login: 'mona', state: 'requested' }])).toMatchObject({ word: 'asked', said: 'Review asked, not started\nmona: Asked, not started' })
+    expect(of([{ login: 'mona', state: 'requested' }, { login: 'hubot', state: 'commented' }])!.word).toBe('reviewing')
+    expect(of([{ login: 'mona', name: 'Mona Lisa', state: 'approved' }, { login: 'hubot', state: 'commented' }])).toMatchObject({
       word: 'approved',
-      said: 'Approved: Mona Lisa (approved), hubot (reviewing)',
+      said: 'Approved\nMona Lisa: Approved\nhubot: Reviewing: reviewed',
     })
-    expect(reviewOf([{ login: 'mona', state: 'approved' }, { login: 'hubot', state: 'changes' }])!.word).toBe('changes')
+    expect(of([{ login: 'mona', state: 'approved' }, { login: 'hubot', state: 'changes' }])!.word).toBe('changes')
   })
 
   test('the markers are drawn as labelled, focusable icons: a different shape for each review word', () => {
@@ -121,7 +123,7 @@ describe('who holds it (issue #25)', () => {
     const marks = (ref: string) => [...container.querySelectorAll(`li[data-ref="${ref}"] [data-marker]:not([data-marker^="state-"])`)] as HTMLElement[]
     expect(marks('gh#1').map((m) => m.dataset.marker)).toEqual(['assigned', 'review-approved'])
     expect(marks('gh#1')[0]!.getAttribute('aria-label')).toBe('Assigned to Ada')
-    expect(marks('gh#1')[1]!.getAttribute('aria-label')).toBe('Approved: mona (approved)')
+    expect(marks('gh#1')[1]!.getAttribute('aria-label')).toBe('Approved\nmona: Approved')
     for (const m of marks('gh#1')) expect(m.getAttribute('tabindex')).toBe('0')
     expect(marks('gh#2').map((m) => m.dataset.marker)).toEqual(['review-asked'])
     /* Not colour alone: the two review words are two different icons. */
@@ -136,78 +138,16 @@ describe('who holds it (issue #25)', () => {
     const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
     const said = container.querySelector('li[data-ref]')!.getAttribute('title') ?? ''
     expect(said).toContain('Assigned to Ada')
-    expect(said).toContain('Approved: mona (approved)')
+    expect(said).toContain('Approved: mona: Approved')
   })
 })
 
-describe('unaddressed activity (issue #25)', () => {
-  const at = '2026-10-21T09:00:00Z'
-  const open = (lastActivity: Record<string, unknown> | undefined, state: 'open' | 'closed' | 'merged' = 'open') =>
-    ({ state, ...(lastActivity ? { lastActivity: lastActivity as never } : {}) }) as Parameters<typeof unaddressed>[0]
-
-  test('somebody else: the marker, with who, what and how long ago', () => {
-    expect(unaddressed(open({ login: 'mona', at, kind: 'review', mine: false }), NOW)).toBe('Last activity: mona, a review, 3 h ago')
-  })
-  test('the person themselves: no marker', () => {
-    expect(unaddressed(open({ login: 'jalez', at, kind: 'comment', mine: true }), NOW)).toBeNull()
-  })
-  test('who the person is not known: no marker, never a guess', () => {
-    expect(unaddressed(open({ login: 'mona', at, kind: 'comment' }), NOW)).toBeNull()
-  })
-  test('no last activity read, or not open: no marker', () => {
-    expect(unaddressed(open(undefined), NOW)).toBeNull()
-    expect(unaddressed(open({ login: 'mona', at, kind: 'state', mine: false }, 'merged'), NOW)).toBeNull()
-  })
-  test('how long ago, in short words', () => {
+describe('how long ago', () => {
+  test('in short words', () => {
     expect(agoSaid('2026-10-21T11:59:40Z', NOW)).toBe('just now')
     expect(agoSaid('2026-10-21T11:15:00Z', NOW)).toBe('45 min ago')
+    expect(agoSaid('2026-10-21T09:00:00Z', NOW)).toBe('3 h ago')
+    expect(agoSaid('2026-10-20T10:00:00Z', NOW)).toBe('yesterday')
     expect(agoSaid('2026-10-18T12:00:00Z', NOW)).toBe('3 d ago')
-  })
-
-  test('only for somebody else: a bell on the row with the sentence, that opens the page in your browser', () => {
-    const rows = collect([
-      row('#1', { lastActivity: { login: 'mona', at, kind: 'comment', mine: false } }),
-      row('#2', { lastActivity: { login: 'jalez', at, kind: 'comment', mine: true } }),
-      row('#3', { lastActivity: { login: 'mona', at, kind: 'comment' } }),
-    ])
-    const { container } = render(<ReferenceList rows={rows} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} />)
-    const mark = (ref: string) => container.querySelector(`li[data-ref="${ref}"] [data-marker="unaddressed"]`) as HTMLElement | null
-    expect(mark('#1')!.tagName).toBe('BUTTON')
-    expect(mark('#1')!.getAttribute('aria-label')).toStartWith('Unaddressed activity. Last activity: mona, a comment, ')
-    expect(mark('#1')!.querySelector('svg.lucide-bell-dot')).not.toBeNull()
-    expect(mark('#2')).toBeNull()
-    expect(mark('#3')).toBeNull()
-    expect(container.querySelector('[data-row-menu]')).toBeNull()
-  })
-
-  test('pressing the bell opens the reference outside, never through the canvas, and does not pick the row', () => {
-    const opened: unknown[][] = []
-    const g = globalThis as unknown as { window: { open: unknown } }
-    const had = g.window.open
-    g.window.open = (...args: unknown[]) => void opened.push(args)
-    const asked: string[] = []
-    const picked: string[] = []
-    try {
-      const rows = collect([row('gh#7', { lastActivity: { login: 'mona', at, kind: 'review', mine: false } })])
-      const { container } = render(
-        <ReferenceList
-          rows={rows}
-          landedOn={null}
-          selection={[]}
-          onPick={(ref) => picked.push(ref)}
-          onToggle={() => {}}
-          onOpenLink={(url) => {
-            asked.push(url)
-            return Promise.resolve({ outcome: 'shown', why: '' })
-          }}
-        />,
-      )
-      fireEvent.click(container.querySelector('[data-marker="unaddressed"]')!)
-      expect(opened).toEqual([['https://github.com/example/repo/issues/7', '_blank', 'noopener,noreferrer']])
-      expect(asked).toEqual([])
-      expect(picked).toEqual([])
-    } finally {
-      g.window.open = had
-    }
   })
 })

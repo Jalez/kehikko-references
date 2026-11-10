@@ -394,7 +394,7 @@ describe('the one-up cards', () => {
 
   test('CI and the review are said on a change', () => {
     const change = { ...by('#22'), pipeline: { state: 'failed' as const }, reviewers: [{ login: 'mona', name: 'Mona', state: 'approved' as const }] }
-    expect(cardFacts(change, NOW)).toEqual(['Stack 2/3', 'CI failed', 'Approved', '34 h ago'])
+    expect(cardFacts(change, NOW)).toEqual(['Stack 2/3', 'CI failed', 'Approved', 'yesterday'])
   })
 
   test('the arrow keys move one card and say where', () => {

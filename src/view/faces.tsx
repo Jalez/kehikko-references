@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react'
-import { CircleAlert, CircleCheck, Eye, Hourglass } from 'lucide-react'
+import { CircleAlert, CircleCheck, Eye, GitCommitHorizontal, Hourglass } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import type { ReviewerWord } from '@/live/activity.ts'
 import { facesShown, imageLoadable, initialsOf, type Face, type ReviewerFace } from '@/live/faces.ts'
 
 /**
@@ -13,22 +14,27 @@ import { facesShown, imageLoadable, initialsOf, type Face, type ReviewerFace } f
  * that fails to load is the person's initials on a plain disc: the marker
  * keeps its shape and still says who.
  *
- * A reviewer's face carries a badge at its lower right: the same shapes the
- * review marker has always used — an hourglass for asked, an eye for
- * reviewing, a ring with a bang for changes requested, a ring with a tick for
- * approved — so their state is never told by colour alone. The first face is
+ * A reviewer's face carries a badge at its lower right: their standing from
+ * everything they did (`live/activity.ts`) — an hourglass for asked and not
+ * started, an eye for reviewing (a comment is enough), a ring with a bang for
+ * changes requested, a ring with a tick for approved, a commit for new commits
+ * since their review — so their standing is never told by colour alone. The first face is
  * drawn on top, so each badge sits over the next face rather than under it.
  */
 
-const STATE_BADGE: Record<ReviewerFace['state'], { icon: ReactNode; tone?: string }> = {
-  requested: { icon: <Hourglass className="size-2" aria-hidden="true" strokeWidth={3} /> },
-  commented: { icon: <Eye className="size-2" aria-hidden="true" strokeWidth={3} /> },
+const STATE_BADGE: Record<ReviewerWord, { icon: ReactNode; tone?: string }> = {
+  asked: { icon: <Hourglass className="size-2" aria-hidden="true" strokeWidth={3} /> },
+  reviewing: { icon: <Eye className="size-2" aria-hidden="true" strokeWidth={3} /> },
   changes: { icon: <CircleAlert className="size-2" aria-hidden="true" strokeWidth={3} />, tone: 'text-amber-700 dark:text-amber-400' },
   approved: { icon: <CircleCheck className="size-2" aria-hidden="true" strokeWidth={3} />, tone: 'text-emerald-700 dark:text-emerald-400' },
+  stale: { icon: <GitCommitHorizontal className="size-2" aria-hidden="true" strokeWidth={3} />, tone: 'text-sky-700 dark:text-sky-400' },
 }
 
+/** The tracker's own word, for a face whose standing was not worked out. */
+const FROM_STATE: Record<ReviewerFace['state'], ReviewerWord> = { requested: 'asked', commented: 'reviewing', changes: 'changes', approved: 'approved' }
+
 /** One face: the picture when it may be loaded and has not failed, else initials. */
-function Avatar({ face, badge, z, tight }: { face: Face; badge?: ReviewerFace['state']; z: number; tight: boolean }) {
+function Avatar({ face, badge, z, tight }: { face: Face; badge?: ReviewerWord; z: number; tight: boolean }) {
   const [failed, setFailed] = useState(false)
   const src = face.avatarUrl && !failed && imageLoadable(face.avatarUrl) ? face.avatarUrl : null
   return (
@@ -82,7 +88,7 @@ export function Faces({ faces, max, tight = false }: { faces: readonly (Face | R
   return (
     <span data-faces data-shown={shown.length} className="inline-flex items-center">
       {shown.map((face, i) => (
-        <Avatar key={`${face.login ?? face.name}:${i}`} face={face} badge={'state' in face ? face.state : undefined} z={shown.length - i + 1} tight={tight} />
+        <Avatar key={`${face.login ?? face.name}:${i}`} face={face} badge={'state' in face ? (face.word ?? FROM_STATE[face.state]) : undefined} z={shown.length - i + 1} tight={tight} />
       ))}
       {more > 0 && (
         <span

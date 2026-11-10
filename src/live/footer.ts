@@ -65,6 +65,7 @@ export const OPEN_ONE = 'The footer opens one reference at a time: select just o
 export const FOOTER = {
   count: 'count',
   scope: 'scope',
+  news: 'news',
   age: 'age',
   unread: 'unread',
   selected: 'selected',
@@ -103,6 +104,7 @@ export function footerItems(facts: HeadingFacts, selection: FooterSelection | nu
   items.push({ kind: 'text', id: FOOTER.count, text: said.count, tooltip: tip(said.title), ...(now.position ? { optional: true } : {}) })
   if (now.menu) items.push({ kind: 'text', id: FOOTER.menuCopied, text: now.menu.said, align: 'end', ...(now.menu.tooltip ? { tooltip: tip(now.menu.tooltip) } : {}) })
   if (said.within) items.push({ kind: 'text', id: FOOTER.scope, text: said.within, optional: true, tooltip: tip(`What the count is of: ${said.within}.`) })
+  if (said.news) items.push({ kind: 'text', id: FOOTER.news, text: said.news, tooltip: tip('Somebody else acted on these since you last looked at them on this kehikko. Select one to mark it seen.') })
   if (said.age) items.push({ kind: 'text', id: FOOTER.age, text: said.age, optional: true })
   if (said.gaps) items.push({ kind: 'text', id: FOOTER.unread, text: said.gaps, optional: true, tooltip: tip(said.why.join('\n')) })
   if (!selection || selection.count < 1) return items

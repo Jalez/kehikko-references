@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 import { cn } from '@/lib/utils'
-import { REVIEW_SAID, agoSaid, reviewOf } from '@/live/markers.ts'
+import { REVIEW_SAID, activitySaid, reviewOf } from '@/live/activity.ts'
+import { agoSaid } from '@/live/markers.ts'
 import { PIPELINE_WORD } from '@/live/pipeline.ts'
 import type { Reference } from '@/live/reference.ts'
 import { stackPath } from '@/live/stack.ts'
@@ -37,11 +38,12 @@ export function cardFacts(row: Reference, now: number): string[] {
   const facts: string[] = []
   const stack = stackWord(row)
   if (stack) facts.push(stack)
-  if (row.kind === 'change' && row.pipeline) facts.push(`CI ${PIPELINE_WORD[row.pipeline.state]}`)
-  const review = row.kind === 'change' ? reviewOf(row.reviewers) : null
+  const last = activitySaid(row, now)
+  /* A finished pipeline that is the last activity is said once, as the activity. */
+  if (row.kind === 'change' && row.pipeline && last?.by !== 'ci') facts.push(`CI ${PIPELINE_WORD[row.pipeline.state]}`)
+  const review = row.kind === 'change' ? reviewOf(row, now) : null
   if (review) facts.push(REVIEW_SAID[review.word])
-  const last = row.lastActivity
-  if (last) facts.push(`${last.mine ? 'you' : last.login}, ${agoSaid(last.at, now)}`)
+  if (last) facts.push(last.short)
   else if (row.at) facts.push(agoSaid(row.at, now))
   return facts
 }

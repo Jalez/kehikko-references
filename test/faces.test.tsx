@@ -195,7 +195,7 @@ describe('several people', () => {
     const { container } = list([crowded])
     expect(container.querySelector('[data-marker="assigned"]')!.getAttribute('aria-label')).toBe('Assigned to ann, bob, cat, dan, eve')
     expect(container.querySelector('[data-marker="review-asked"]')!.getAttribute('aria-label')).toBe(
-      'Review asked, not started: ann (asked), bob (asked), cat (asked), dan (asked), eve (asked)',
+      'Review asked, not started\nann: Asked, not started\nbob: Asked, not started\ncat: Asked, not started\ndan: Asked, not started\neve: Asked, not started',
     )
   })
 
@@ -222,7 +222,7 @@ describe('a reviewer’s state on their face', () => {
     pinGitHub()
     const { container } = list([reviewed, row('gh#31', { kind: 'change', reviewers: [{ login: 'dan', state: 'approved' }] })])
     const badges = [...container.querySelectorAll('[data-badge]')] as HTMLElement[]
-    expect(badges.map((b) => b.dataset.badge)).toEqual(['requested', 'commented', 'changes', 'approved'])
+    expect(badges.map((b) => b.dataset.badge)).toEqual(['asked', 'reviewing', 'changes', 'approved'])
     /* Not colour alone: four states, four different shapes. */
     expect(new Set(badges.map((b) => b.innerHTML)).size).toBe(4)
     expect(container.querySelector('[data-face="cat"] [data-initials]')!.textContent).toBe('CS')
@@ -233,7 +233,7 @@ describe('a reviewer’s state on their face', () => {
     pinGitHub()
     const { container } = list([reviewed])
     expect(container.querySelector('[data-marker^="review-"]')!.getAttribute('aria-label')).toBe(
-      'Changes requested: Ann Arbor (asked), bob (reviewing), Cat Stevens (changes requested)',
+      'Changes requested\nAnn Arbor: Asked, not started\nbob: Reviewing: reviewed\nCat Stevens: Requested changes',
     )
   })
 

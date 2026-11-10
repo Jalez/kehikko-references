@@ -29,7 +29,13 @@ export function ReferenceList({
   onToggle,
   onOpenLink,
   width,
+  fresh,
+  onSeen,
 }: {
+  /** The refs somebody else acted on since this kehikko last saw them (`live/activity.ts`). */
+  fresh?: ReadonlySet<string>
+  /** A row's bell was pressed: its activity is seen. */
+  onSeen?: (ref: string) => void
   rows: readonly Reference[]
   /** The list's width in CSS pixels, when the caller knows it (a test); otherwise measured here. */
   width?: number
@@ -90,6 +96,8 @@ export function ReferenceList({
           onToggle={onToggle}
           onOpenLink={onOpenLink ?? null}
           fit={fit}
+          fresh={fresh?.has(row.ref) ?? false}
+          onSeen={onSeen}
         />
       ))}
     </ul>
