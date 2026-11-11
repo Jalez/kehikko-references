@@ -346,6 +346,11 @@ export interface Kehikot {
    * opened for is on screen; never gated on visibility, since the host keeps a covered page hidden.
    */
   ready: () => void
+  /**
+   * Say the page is reading what a new context asks for (protocol 2.84.0): the host covers it with
+   * this module's icon and `label` if it is not drawn within a moment. `ready()` ends it.
+   */
+  loading: (label?: string | null) => void
 }
 
 /**
@@ -899,6 +904,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       parts,
       wholeProject,
       ready: host.ready,
+      loading: host.loading,
     }),
     [
       sight,
@@ -932,6 +938,7 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       parts,
       wholeProject,
       host.ready,
+      host.loading,
     ],
   )
 }
