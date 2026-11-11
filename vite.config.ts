@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { doors, serves } from 'kehikot-module-protocol/serve'
 
-import { BUILD, MANIFEST, STUB_HOST, TICKET, answer, ours } from './doors.ts'
+import { BUILD, MANIFEST, STUB_HOST, answer, ours } from './doors.ts'
+import { forgetToldEverywhere } from './forget-told.ts'
 import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
@@ -76,9 +77,11 @@ export default defineConfig({
   base: './',
   plugins: [
     serves({ id: ID, prefer: PREFERRED_PORT }),
-    doors({ manifest: MANIFEST, answer, build: BUILD, ours, ancestors: [STUB_HOST], page: { title: 'References', ticket: TICKET } }),
+    doors({ manifest: MANIFEST, answer, build: BUILD, ours, ancestors: [STUB_HOST], page: { title: 'References' } }),
     react(),
     tailwindcss(),
+    /* 3.29.0: the record 3.28.0 kept of what it told agents, removed once the host says where it is. */
+    { name: 'forget-told', configureServer: () => void forgetToldEverywhere() },
   ],
   resolve: { alias: { '@': resolve(import.meta.dirname, 'src') } },
   server: { cors: false },

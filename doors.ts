@@ -1,7 +1,6 @@
 import { establishBuild, type Reply } from 'kehikot-module-protocol/serve'
 
 import { ID, MANIFEST, VERSION } from './manifest.ts'
-import { TELL_PATH, TICKET, tellDoor } from './tell.ts'
 
 /**
  * Every door this app answers on that is not the page itself.
@@ -23,12 +22,10 @@ import { TELL_PATH, TICKET, tellDoor } from './tell.ts'
  * `vite.config.ts` — is what adapts a node request to it. See
  * `test/doors.test.ts`.
  *
- * ## The one write, and its ticket
+ * ## No ticket
  *
- * A ticket fences writes. The one door that writes is `POST /api/tell`
- * (`tell.ts`, 3.28.0): the page hands it the open epic's rows, and it keeps what
- * was told at each place and tells the agents there about new activity. So the
- * page is printed with this process's `TICKET`, and that door checks it.
+ * A ticket fences writes, and this app has no door that writes: the only thing
+ * `answer()` answers is the health check. So the page is printed without one.
  *
  * ## The door that is gone
  *
@@ -95,16 +92,7 @@ export type { Reply }
  * which is how the page, its modules and the hot-reload socket all keep working
  * through the same middleware stack.
  */
-const tell = tellDoor({ module: ID })
-
-export async function answer(
-  method: string,
-  path: string,
-  _query: URLSearchParams,
-  body: Record<string, unknown> | null = null,
-  ticket: string | null = null,
-): Promise<Reply | null> {
-  if (path === TELL_PATH) return tell(method, body, ticket)
+export async function answer(method: string, path: string, _query: URLSearchParams): Promise<Reply | null> {
   /* `/health` is kept beside `/healthz` because this app answered on it for its
      whole life and something on somebody's machine is watching it. Two
      spellings of a liveness check cost nothing; a monitor that starts reporting
@@ -117,4 +105,4 @@ export async function answer(
 }
 
 /** Re-exported so `vite.config.ts` imports its doors from one place. */
-export { MANIFEST, TICKET }
+export { MANIFEST }

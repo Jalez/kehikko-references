@@ -5,7 +5,6 @@ import { askEpics, type EpicsReading } from '@/live/epics.ts'
 import type { Sight } from '@/live/sight.ts'
 import { kehikkoKey } from '@/live/one-up.ts'
 import { ORDER_ITEM } from '@/live/order.ts'
-import { TELL_ITEM } from '@/live/tell.ts'
 import {
   contentStamp,
   filterChoiceSchema,
@@ -306,8 +305,6 @@ export interface Kehikot {
    * the host's, both — were never touched.
    */
   epicRefs: string[] | null
-  /** The epic `epicRefs` was read for: its slug, or `null` exactly when `epicRefs` is. */
-  epicOf: string | null
   /**
    * What the containers picked out on this kehikko say they are showing, as
    * one list of refs, or `null` when no container is picked out.
@@ -372,7 +369,6 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
   const [refreshNote, setRefreshNote] = useState<string | null>(null)
   const [selectionRefused, setSelectionRefused] = useState<Refusal | null>(null)
   const [epicRefs, setEpicRefs] = useState<string[] | null>(null)
-  const [epicOf, setEpicOf] = useState<string | null>(null)
   const [aimed, setAimed] = useState<string[] | null>(null)
   const [kehikko, setKehikko] = useState('')
   const [marks, setMarks] = useState<Disposition[]>([])
@@ -499,7 +495,6 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
     if (!epic || !current) {
       epicOut.current = false
       setEpicRefs(null)
-      setEpicOf(null)
       return
     }
     epicOut.current = true
@@ -525,16 +520,13 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
         how === 'again' && ((epicHeard.current.steps && !heard.steps) || (epicHeard.current.whole && !heard.whole))
       if (!lost) {
         epicHeard.current = heard
-        if (!heard.steps && !heard.whole) {
-          setEpicRefs(null)
-          setEpicOf(null)
-        } else {
+        if (!heard.steps && !heard.whole) setEpicRefs(null)
+        else {
           const named = namedBy(
             steps.status === 'fulfilled' ? steps.value : null,
             whole.status === 'fulfilled' ? whole.value : null,
           )
           setEpicRefs((was) => (was && same(was, named) ? was : named))
-          setEpicOf(epic)
         }
       }
       if (epicStale.current) ask('again')
@@ -734,9 +726,8 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
     {
       kept: AS_KEPT,
       /* The kept view (protocol 2.70.0): the list's scroll comes back per container. Not "Sort by":
-         the order is already in this page's own kept string (`live/keep.ts`), one mechanism for it.
-         Nor "Tell agents about new activity", kept there the same way: restored without a press. */
-      keepView: { except: [ORDER_ITEM, TELL_ITEM] },
+         the order is already in this page's own kept string (`live/keep.ts`), one mechanism for it. */
+      keepView: { except: [ORDER_ITEM] },
     },
   )
   live.current = host.connection
@@ -902,7 +893,6 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       kept,
       keep,
       epicRefs,
-      epicOf,
       aimed,
       kehikko,
       marks,
@@ -936,7 +926,6 @@ export function useKehikot(id: string, onGoto: GotoHandler, onPress?: PressHandl
       kept,
       keep,
       epicRefs,
-      epicOf,
       aimed,
       kehikko,
       marks,

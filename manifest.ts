@@ -467,11 +467,10 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    * `view:navigate`: the selection menu's "In epics" section goes to the epic a person
    * picks (`view.goto { epic }`), on their press and for nothing else. `epics:read` and
    * `steps:read` also answer which epics name the selected references.
- 
    *
-   * `agents:message`: this module's SERVER tells the agent sessions at an epic about new
-   * activity on its items (`messages.tell`, protocol 2.75.0; `tell.ts`). A host before 2.75.0
-   * answers `host-too-old`, and nothing is said.
+   * `agents:message`: only for `projects.mine` (protocol 2.77.0), asked once at start so the
+   * server can remove the record 3.28.0 kept of what it told agents (`forget-told.ts`). This
+   * module sends agents nothing: Kehikot itself tells the sessions at an epic about new activity.
    */
   declares: {
     protocol: `>=${PROTOCOL} <${PROTOCOL + 1}`,

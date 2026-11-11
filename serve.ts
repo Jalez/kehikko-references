@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 import { run } from 'kehikot-module-protocol/run'
 
-import { answer, BUILD, MANIFEST, STUB_HOST, TICKET, ours } from './doors.ts'
+import { answer, BUILD, MANIFEST, STUB_HOST, ours } from './doors.ts'
+import { forgetToldEverywhere } from './forget-told.ts'
 import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
@@ -21,7 +22,8 @@ await run({
   manifest: MANIFEST,
   answer,
   build: BUILD,
-  ticket: TICKET,
   ours,
   ancestors: [STUB_HOST],
 })
+/* 3.29.0: the record 3.28.0 kept of what it told agents, removed once the host says where it is. */
+void forgetToldEverywhere()
