@@ -17,6 +17,7 @@ import { withContributions } from '@/live/ties.ts'
 import { drawnOf } from '@/live/drawn.ts'
 import { declaresFooter, footerItems, footerPressed } from '@/live/footer.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
+import { tellItem, tellPressed } from '@/live/tell.ts'
 import {
   KEHIKKO,
   SHOW_ALL,
@@ -31,6 +32,7 @@ import {
   siftingOf,
 } from '@/live/sift.ts'
 import { useKehikot, type GotoHandler, type Settled } from '@/wire/use-kehikot.ts'
+import { useTellAgents } from '@/wire/use-tell.ts'
 import {
   Asking,
   NothingFound,
@@ -122,6 +124,11 @@ export function App() {
    * is asked again.
    */
   const [filterRefused, setFilterRefused] = useState<string | null>(null)
+  /* "Tell agents about new activity" (3.28.0): on unless turned off, kept per kehikko with the order. */
+  const [tellAgents, setTellAgents] = useState(true)
+  /* The kept string the toggle was last restored from: nothing is told before it is, so a page never
+     tells on the default while the host is handing back "off". */
+  const [tellFrom, setTellFrom] = useState<string | null | undefined>(undefined)
   const frame = useRef<HTMLDivElement>(null)
   const server = useServerStanding()
 
@@ -168,6 +175,7 @@ export function App() {
     kept,
     keep,
     epicRefs,
+    epicOf,
     aimed,
     kehikko,
     marks,
@@ -179,6 +187,11 @@ export function App() {
     ready,
   } = useKehikot(ID, onGoto, ({ item, value, place, carried }) => {
     if (place === 'footer') return footerPress.current(item, value, carried)
+    const telling = tellPressed(item, value)
+    if (telling !== null) {
+      setTellAgents(telling)
+      return
+    }
     const asked = orderPressed(item, value)
     if (!asked) return `Nothing here sorts by ${String(value)}.`
     setOrdering(asked)
@@ -279,8 +292,20 @@ export function App() {
    * also the one thing written back to be remembered.
    */
   useEffect(() => {
-    header([orderItem(ordering)])
-  }, [ordering, header])
+    header([orderItem(ordering), tellItem(tellAgents)])
+  }, [ordering, tellAgents, header])
+
+  /* New activity on the epic's items, told to the agents at the epic (`wire/use-tell.ts`). */
+  useTellAgents({
+    hosted: where === 'hosted' && kept !== undefined && tellFrom === kept,
+    project: projectPath,
+    epic: epicOf,
+    epicRefs,
+    kehikko,
+    rows,
+    read: sight.at === 'read',
+    on: tellAgents,
+  })
 
   /**
    * What this page says about being read again, which is the whole of the
@@ -511,6 +536,8 @@ export function App() {
     setSeenBook(remembered.seen ?? {})
     setWithStack(remembered.stack === true)
     setQuietBook(remembered.quiet ?? {})
+    setTellAgents(remembered.tell !== false)
+    setTellFrom(kept)
   }, [kept])
 
   /**
@@ -531,7 +558,7 @@ export function App() {
    */
   useEffect(() => {
     if (restored.current === undefined) return
-    const now = writing({ ordering, seen: seenBook, stack: withStack, quiet: quietBook })
+    const now = writing({ ordering, seen: seenBook, stack: withStack, quiet: quietBook, tell: tellAgents })
     /* Nothing is sent when the settings are still exactly what the host handed
        back. Restoring them sets state, which runs this effect, which would
        otherwise write the same string back on every single load — a call whose
@@ -540,7 +567,7 @@ export function App() {
     if (now === restored.current) return
     restored.current = now
     keep(now, 400)
-  }, [ordering, seenBook, withStack, quietBook, keep])
+  }, [ordering, seenBook, withStack, quietBook, tellAgents, keep])
 
   /**
    * The plain click: this row becomes the whole selection.

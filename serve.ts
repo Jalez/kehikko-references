@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { run } from 'kehikot-module-protocol/run'
 
-import { answer, BUILD, MANIFEST, STUB_HOST, ours } from './doors.ts'
+import { answer, BUILD, MANIFEST, STUB_HOST, TICKET, ours } from './doors.ts'
 import { ID, PREFERRED_PORT } from './manifest.ts'
 
 /**
@@ -21,6 +21,7 @@ await run({
   manifest: MANIFEST,
   answer,
   build: BUILD,
+  ticket: TICKET,
   ours,
   ancestors: [STUB_HOST],
 })
