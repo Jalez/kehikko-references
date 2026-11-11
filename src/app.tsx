@@ -14,7 +14,7 @@ import { failingRefs } from '@/live/pipeline.ts'
 import { roleRefs } from '@/live/roles.ts'
 import { epicsFor, type EpicsReading, type EpicsState } from '@/live/epics.ts'
 import { withContributions } from '@/live/ties.ts'
-import { drawnOf } from '@/live/drawn.ts'
+import { LOADING_REFERENCES, drawnOf } from '@/live/drawn.ts'
 import { declaresFooter, footerItems, footerPressed } from '@/live/footer.ts'
 import { DEFAULT_ORDER, order, orderItem, orderPressed, type Ordering } from '@/live/order.ts'
 import {
@@ -177,6 +177,7 @@ export function App() {
     readEpics,
     goToEpic,
     ready,
+    loading,
   } = useKehikot(ID, onGoto, ({ item, value, place, carried }) => {
     if (place === 'footer') return footerPress.current(item, value, carried)
     const asked = orderPressed(item, value)
@@ -868,9 +869,11 @@ export function App() {
   const waiting =
     sight.at === 'read' && rows.length === 0 && !sight.trouble && sight.reading.at === null && (sight.reading.refreshing || busy)
   const drawn = drawnOf(cover, sight, waiting)
+  /* While another project's references are read, the host's cover in this module's words (2.84.0). */
   useEffect(() => {
     if (drawn) ready()
-  }, [drawn, ready])
+    else loading(LOADING_REFERENCES)
+  }, [drawn, ready, loading])
 
   /**
    * The states every module has, drawn by the cover every module shares:
