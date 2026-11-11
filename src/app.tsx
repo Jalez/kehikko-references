@@ -910,7 +910,7 @@ export function App() {
        part company at any width. It is named `frame` so that a row's title
        can ask it directly, past the row's own container (`reference-row.tsx`). */
     <StackChoice.Provider value={withStack}>
-    <div ref={frame} className="@container/frame flex h-full flex-col">
+    <div data-kehikot-page ref={frame} className="@container/frame flex h-full flex-col">
       {/*
         A source that could not be read, over the rows it gave before.
 
