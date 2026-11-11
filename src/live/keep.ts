@@ -96,6 +96,11 @@ export interface Kept {
    * is forgotten shows again, which is a fresh start rather than a broken one.
    */
   quiet?: QuietBook
+  /**
+   * "Tell agents about new activity" (3.28.0): on unless the person turned it off, and written only
+   * then (`n: 0`), so a string that never had it reads as on. Additive under the same version.
+   */
+  tell?: boolean
 }
 
 /** Closed notices by kehikko. */
@@ -142,10 +147,10 @@ function seenRead(raw: unknown): SeenBook | undefined {
  * kehikko goes first, then, in the last one left, the refs seen longest ago
  * (each then counts as unseen again only if it moved after the watermark).
  */
-function trimmed(ordering: Ordering, book: SeenBook, stack: boolean, quiet: QuietBook | undefined): string {
+function trimmed(ordering: Ordering, book: SeenBook, stack: boolean, quiet: QuietBook | undefined, silent = false): string {
   const kept: SeenBook = { ...book }
   for (;;) {
-    const text = JSON.stringify({ v: VERSION, o: ordering, ...(stack ? { k: 1 } : {}), ...(quiet ? { q: quiet } : {}), ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
+    const text = JSON.stringify({ v: VERSION, o: ordering, ...(stack ? { k: 1 } : {}), ...(silent ? { n: 0 } : {}), ...(quiet ? { q: quiet } : {}), ...(Object.keys(kept).length ? { s: seenWritten(kept) } : {}) })
     if (text.length <= LIMITS.MODULE_STATE) return text
     const keys = Object.keys(kept)
     if (keys.length > 1) {
@@ -194,15 +199,16 @@ function quietRead(raw: unknown): QuietBook | undefined {
  */
 export function writing(kept: Kept): string {
   const stack = kept.stack === true
+  const silent = kept.tell === false
   const quiet = quietWritten(kept.quiet)
-  const plain = (q: QuietBook | undefined) => JSON.stringify({ v: VERSION, o: kept.ordering, ...(stack ? { k: 1 } : {}), ...(q ? { q } : {}) })
+  const plain = (q: QuietBook | undefined) => JSON.stringify({ v: VERSION, o: kept.ordering, ...(stack ? { k: 1 } : {}), ...(silent ? { n: 0 } : {}), ...(q ? { q } : {}) })
   if (!kept.seen || Object.keys(kept.seen).length === 0) {
     const text = plain(quiet)
     return text.length <= LIMITS.MODULE_STATE ? text : plain(undefined)
   }
   /* The closed notices go before any of what was seen does. */
-  if (quiet && trimmed(kept.ordering, kept.seen, stack, quiet).length > LIMITS.MODULE_STATE) return trimmed(kept.ordering, kept.seen, stack, undefined)
-  return trimmed(kept.ordering, kept.seen, stack, quiet)
+  if (quiet && trimmed(kept.ordering, kept.seen, stack, quiet, silent).length > LIMITS.MODULE_STATE) return trimmed(kept.ordering, kept.seen, stack, undefined, silent)
+  return trimmed(kept.ordering, kept.seen, stack, quiet, silent)
 }
 
 /**
@@ -232,5 +238,6 @@ export function reading(state: string | null | undefined): Kept | null {
   const seen = seenRead(held.s)
   const stack = held.k === 1
   const quiet = quietRead(held.q)
-  return { ordering, ...(seen ? { seen } : {}), ...(stack ? { stack } : {}), ...(quiet ? { quiet } : {}) }
+  const silent = held.n === 0
+  return { ordering, ...(seen ? { seen } : {}), ...(stack ? { stack } : {}), ...(quiet ? { quiet } : {}), ...(silent ? { tell: false } : {}) }
 }
