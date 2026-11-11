@@ -1179,8 +1179,8 @@ describe('narrowed to the open epic', () => {
     act(() =>
       host.context(PROJECT, [], 'an-epic', {}, {
         containers: [
-          { module: 'kehikot.journeys', selected: true, showing: { refs: ['gh#7', 'gh#8'] } },
-          { module: 'kehikot.paper', selected: false, showing: { refs: ['gh#1'] } },
+          { module: 'kehikot.example', selected: true, showing: { refs: ['gh#7', 'gh#8'] } },
+          { module: 'kehikot.other', selected: false, showing: { refs: ['gh#1'] } },
           /* Its own ticks would narrow it to its own clicks. */
           { module: 'kehikot.references', selected: true, showing: { refs: ['gh#6'] } },
         ],

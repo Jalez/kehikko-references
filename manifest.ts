@@ -136,7 +136,7 @@ export const HELP = {
  * is the same reading under its own door. Leaving the declaration in would be this module telling
  * every person who reads its manifest that it intends to ask a question it will
  * never ask — permission described to a program that will never exercise it —
- * and Paper removed `epics:read` for exactly that reason.
+ * and another module removed `epics:read` for exactly that reason.
  *
  * `epics:read` came out with it once, because the picker it served had gone,
  * and it is back with `steps:read` beside it for a different job. The list is
@@ -483,5 +483,17 @@ export const MANIFEST: Manifest = manifestSchema.parse({
      * is picked again, without writing the stored choice. See `restsOnEverything` in `src/live/sift.ts`.
      */
     scopes: ['epic', 'project'],
+  },
+  /*
+   * What this module provides to others (protocol 2.85.0), found through `services.find`, never by id.
+   * `.kehikot/references/` holds only what earlier versions cached from the trackers (`tracker.json`)
+   * and kept for themselves; nothing in it is authored, and the rows come from the host's reading,
+   * so it is DERIVED: a data history leaves it out. It is git-ignored (`*`).
+   */
+  services: {
+    'module.folders': {
+      name: 'References',
+      folders: [{ folder: 'references', says: 'Tracker readings cached by earlier versions; nothing authored, rebuilt from the trackers.', derived: true }],
+    },
   },
 })
