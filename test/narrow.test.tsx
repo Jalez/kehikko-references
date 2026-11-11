@@ -39,7 +39,7 @@ afterEach(cleanup)
 
 const READING = [
   row('gh#131', {
-    title: 'Until Journeys can be read from a module, a container is a picture of one',
+    title: 'Until steps can be read from a module, a container is a picture of one',
     updatedAt: '2026-08-26T20:44:00Z',
     url: 'https://github.com/example/repo/issues/131',
     labels: ['area::modules', 'importance::P1'],
@@ -99,10 +99,10 @@ describe('what a row may never stop showing: the identifier, the state and the t
   test.each([200, 280, 380, 600])('the title is drawn at %ipx, truncated, its whole in the row’s tooltip', (width) => {
     const { container } = render(<ReferenceList rows={collect(READING)} landedOn={null} selection={[]} onPick={() => {}} onToggle={() => {}} width={width} />)
     const title = rowLine(container).querySelector('[data-title]') as HTMLElement
-    expect(title.textContent).toStartWith('Until Journeys')
+    expect(title.textContent).toStartWith('Until steps')
     for (const rule of rulesUp(title, rowLine(container))) expect(rule).not.toMatch(/(^|:)(hidden|sr-only)$/)
     expect(title.className.split(/\s+/)).toContain('truncate')
-    expect(rowBox(container).getAttribute('title')).toContain('Until Journeys can be read from a module, a container is a picture of one')
+    expect(rowBox(container).getAttribute('title')).toContain('Until steps can be read from a module, a container is a picture of one')
     /* No second, spoken-only copy: the drawn title is the accessible name at every width. */
     expect(container.querySelector('[data-title-spoken]')).toBeNull()
   })
@@ -158,7 +158,7 @@ describe('what a narrow container hides is still reachable', () => {
        know the word to type into the filter. */
     expect(overview).toContain('gh#131')
     expect(overview).toContain('open')
-    expect(overview).toContain('Until Journeys')
+    expect(overview).toContain('Until steps')
     expect(overview).toContain('area::modules')
     expect(overview).toContain('2026-08-26')
     expect(overview).toContain('ada lovelace')

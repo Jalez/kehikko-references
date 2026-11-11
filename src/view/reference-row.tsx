@@ -110,7 +110,7 @@ import { CopyButton } from './copy-button.tsx'
  *
  * Never dropped since 3.17.0: **the title**, truncated, its whole in the row's
  * tooltip. Under 24rem of the frame it used to be dropped (issue #24), on the
- * argument that a narrow list beside Journeys is for finding the row to press.
+ * argument that a narrow list beside a journey is for finding the row to press.
  * In practice a column of bare numbers had to be hovered row by row to be
  * read, so the width now comes from the slack instead (`live/fit.ts`): gaps and
  * padding first, then faces overlap and fold into `+N`, and the title keeps

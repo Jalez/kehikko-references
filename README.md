@@ -565,7 +565,7 @@ not, so hovering a row says everything the row would say at full width.
 ### Compact rows: the title stays, the slack goes
 
 From 3.4.0 the title was dropped under 24rem of the frame, on the argument
-that a narrow list beside Journeys is for finding the row to press. It left a
+that a narrow list beside a journey is for finding the row to press. It left a
 narrow list a column of bare numbers to hover one by one, so since 3.17.0 the
 title is drawn at every width, truncated, its whole in the row's tooltip, and
 the room for it comes from the slack instead (`live/fit.ts`). The fit is

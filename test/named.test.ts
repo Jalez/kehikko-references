@@ -8,7 +8,7 @@ describe('the refs an epic names, from every provider’s steps', () => {
   const journey = { slug: 'e', title: 'E', steps: [{ title: 'A', refs: ['#1', '#9'], roles: { '#9': 'prior-art' } }, { title: 'B', refs: ['#2'] }] }
 
   test('a step’s refs and its related ones, as a journey step’s refs were', () => {
-    const union = stepsListResult.parse(plansUnion([{ module: 'kehikot.journeys', plan: planOfJourney(journey)! }]))
+    const union = stepsListResult.parse(plansUnion([{ module: 'kehikot.example', plan: planOfJourney(journey)! }]))
     expect(union.steps?.[0]).toMatchObject({ refs: ['#1'], related: ['#9'] })
     /* The same refs as the record's own steps named before 2.21.0, in the same order. */
     expect(namedBy(union, null)).toEqual(namedBy({ steps: journey.steps }, null))
@@ -17,7 +17,7 @@ describe('the refs an epic names, from every provider’s steps', () => {
 
   test('two providers’ steps are both read', () => {
     const union = plansUnion([
-      { module: 'kehikot.journeys', plan: planOfJourney(journey)! },
+      { module: 'kehikot.example', plan: planOfJourney(journey)! },
       { module: 'kehikot.planner', plan: { phases: [], steps: [{ id: 'x', title: 'X', body: '', refs: ['#7'], related: [], after: [], gates: [] }] } },
     ])
     expect(namedBy(union, null)).toEqual(['#1', '#9', '#2', '#7'])
