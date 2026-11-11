@@ -16,3 +16,6 @@ export function drawnOf(cover: CoverState | null, sight: Sight, waiting: boolean
   if (sight.at === 'read') return !waiting
   return sight.at === 'trouble'
 }
+
+/** What the host's cover says while this page reads the references it shows (protocol 2.84.0). */
+export const LOADING_REFERENCES = 'Loading references…'
