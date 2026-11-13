@@ -105,31 +105,37 @@ export function tieSaid(row: {
   contributions?: readonly string[]
   closes?: readonly string[]
   closedBy?: readonly string[]
+  closingIn?: readonly { ref: string; draft: boolean }[]
 }): string {
   const said: string[] = []
   if (row.closes?.length) said.push(`closes ${row.closes.join(', ')}`)
   if (row.closedBy?.length) said.push(`closed by ${row.closedBy.join(', ')}`)
+  if (row.closingIn?.length) said.push(`closing in ${row.closingIn.map(closingText).join(', ')}`)
   if (row.partOf?.length) said.push(`part of ${row.partOf.join(', ')}`)
   if (row.contributions?.length) said.push(`has contributions from ${row.contributions.join(', ')}`)
   return said.join('; ')
 }
 
+/** A change an open issue is waiting on, with its state: `!56 (open)`, `!56 (draft)`. */
+const closingText = (one: { ref: string; draft: boolean }) => `${one.ref} (${one.draft ? 'draft' : 'open'})`
+
 /** One relation a row has to another reference, in words: "Closes #34", "Part of #12". */
 export interface Relation {
-  /** `closes` first, then `closed-by`, `part-of`, `contributions`: the order the cell ranks them in. */
-  kind: 'closes' | 'closed-by' | 'part-of' | 'contributions'
+  /** `closes` first, then `closed-by`, `closing-in`, `part-of`, `contributions`: the order the cell ranks them in. */
+  kind: 'closes' | 'closed-by' | 'closing-in' | 'part-of' | 'contributions'
   ref: string
   text: string
 }
 
 /**
  * Every relation a row has, most important first: what it closes, what closed
- * it, what it is part of, what is part of it. One entry per ref, so the cell
+ * it, what is closing it, what it is part of, what is part of it. One entry per ref, so the cell
  * can say the first and count the rest. Plain text, never markup.
  */
 export function relationsOf(row: {
   closes?: readonly string[]
   closedBy?: readonly string[]
+  closingIn?: readonly { ref: string; draft: boolean }[]
   partOf?: readonly string[]
   contributions?: readonly string[]
 }): Relation[] {
@@ -139,6 +145,7 @@ export function relationsOf(row: {
   }
   add('closes', 'Closes', row.closes)
   add('closed-by', 'Closed by', row.closedBy)
+  for (const one of row.closingIn ?? []) out.push({ kind: 'closing-in', ref: one.ref, text: `Closing in ${closingText(one)}` })
   add('part-of', 'Part of', row.partOf)
   add('contributions', 'Has contributions from', row.contributions)
   return out

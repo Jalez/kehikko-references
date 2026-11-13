@@ -49,6 +49,12 @@ export type Kind = 'issue' | 'change'
  */
 export type State = 'open' | 'closed' | 'merged'
 
+/** One change an open issue is waiting on. */
+export interface ClosingIn {
+  ref: string
+  draft: boolean
+}
+
 export interface Reference {
   /**
    * A stable key for this row, distinct from `ref`.
@@ -82,6 +88,12 @@ export interface Reference {
   closedByMerge: boolean
   /** On an issue: the merged changes in this reading its `closed-by` links name, for "closed by !4019". Absent when none. */
   closedBy?: string[]
+  /**
+   * On an open issue: the changes that say they close it and have not merged (protocol 2.100.0, a
+   * `closed-by` link's `state`), each with whether it is a draft — "Closing in !56 (open)". When one
+   * merges it moves to `closedBy`. Absent when none.
+   */
+  closingIn?: ClosingIn[]
   /** A change the tracker says is not finished being written. Never inferred. */
   draft: boolean
   title: string

@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
 import { EVERYTHING, facetsOfRow, offer, sift, siftingOf, IN_SCOPE, SCOPE } from '@/live/sift.ts'
-import { tieSaid, withContributions } from '@/live/ties.ts'
+import { relationsOf, tieSaid, withContributions } from '@/live/ties.ts'
 import { ReferenceRow, overview } from '@/view/reference-row.tsx'
 import { row } from './fixtures.ts'
 
@@ -215,6 +215,80 @@ describe('"This epic" reaches the changes that close its issues', () => {
   test('a picked part that lists #3913 shows the closing change', () => {
     const parts = [{ id: 'p', heading: 'P', refs: ['#3913'], picked: true }]
     expect(sift(rows, { ...EVERYTHING, parts }).map((one) => one.ref).sort()).toEqual(['!4019', '#3913'])
+  })
+})
+
+describe('closing in: an open issue whose closing change has not merged', () => {
+  const open = (ref: string, links: unknown[], more: Record<string, unknown> = {}) => row(ref, { state: 'open', links, ...more })
+  const said = (rows: unknown[], ref: string) => {
+    const { container } = render(
+      <ReferenceRow row={byRef(collect(rows)).get(ref)!} landed={false} selected={false} onPick={() => {}} onToggle={() => {}} />,
+    )
+    const cell = container.querySelector('[data-relation]') as HTMLElement
+    return { cell, text: cell.textContent }
+  }
+
+  test('says "Closing in !56 (open)" from the link\'s own state, with no row for the change', () => {
+    expect(said([open('#7', [{ ref: '!56', relation: 'closed-by', state: 'open' }])], '#7').text).toBe('Closing in !56 (open)')
+  })
+
+  test('says it from the change\'s row when an older host\'s link has no state', () => {
+    const rows = [open('#7', [{ ref: '!56', relation: 'closed-by' }]), row('!56', { state: 'open', links: [{ ref: '#7', relation: 'closes' }] })]
+    expect(said(rows, '#7').text).toBe('Closing in !56 (open)')
+  })
+
+  test('a draft says draft', () => {
+    expect(said([open('#7', [{ ref: '!56', relation: 'closed-by', state: 'open', draft: true }])], '#7').text).toBe('Closing in !56 (draft)')
+    const rows = [open('#7', [{ ref: '!56', relation: 'closed-by' }]), row('!56', { state: 'open', draft: true })]
+    expect(said(rows, '#7').text).toBe('Closing in !56 (draft)')
+  })
+
+  test('several open closers: the first and +N, every one in the tooltip', () => {
+    const links = [
+      { ref: '!56', relation: 'closed-by', state: 'open' },
+      { ref: '!57', relation: 'closed-by', state: 'open', draft: true },
+      { ref: '!58', relation: 'closed-by', state: 'open' },
+    ]
+    const { cell } = said([open('#7', links)], '#7')
+    expect(cell.querySelector('.truncate')?.textContent).toBe('Closing in !56 (open)')
+    expect(cell.querySelector('[data-relation-more]')?.textContent).toBe('+2')
+    expect(cell.title).toBe('Closing in !56 (open); Closing in !57 (draft); Closing in !58 (open)')
+  })
+
+  test('once it merges it is "Closed by", not "Closing in"', () => {
+    const rows = [
+      row('#7', { state: 'closed', closedByMerge: true, links: [{ ref: '!56', relation: 'closed-by', state: 'merged' }] }),
+      row('!56', { state: 'merged', mergedAt: '2026-09-01T10:00:00Z' }),
+    ]
+    expect(said(rows, '#7').text).toBe('Closed by !56')
+    /* The link was read while the change was open; the change's row says merged now. */
+    const stale = [open('#7', [{ ref: '!56', relation: 'closed-by', state: 'open' }]), row('!56', { state: 'merged', mergedAt: '2026-09-01T10:00:00Z' })]
+    expect(byRef(collect(stale)).get('#7')?.closingIn).toBeUndefined()
+  })
+
+  test('a change closed without merging, or one nobody read, is not claimed', () => {
+    expect(said([open('#7', [{ ref: '!56', relation: 'closed-by', state: 'closed' }])], '#7').text).toBe('')
+    expect(said([open('#7', [{ ref: '!56', relation: 'closed-by' }])], '#7').text).toBe('')
+  })
+
+  test('the order is Closes, Closed by, Closing in, Part of, Has contributions from', () => {
+    const rows = collect([
+      open('#7', [{ ref: '!56', relation: 'closed-by', state: 'open' }], { contributedBy: ['!60'] }),
+      row('!60', { contributes: ['#7'] }),
+    ])
+    const issue = byRef(rows).get('#7')!
+    expect(relationsOf(issue).map((one) => one.text)).toEqual(['Closing in !56 (open)', 'Has contributions from !60'])
+    expect(relationsOf({ closes: ['#1'], closedBy: ['!2'], closingIn: [{ ref: '!3', draft: false }], partOf: ['#4'], contributions: ['!5'] }).map((one) => one.text)).toEqual([
+      'Closes #1',
+      'Closed by !2',
+      'Closing in !3 (open)',
+      'Part of #4',
+      'Has contributions from !5',
+    ])
+  })
+
+  test('the row\'s sentence, and a link read before the change merged', () => {
+    expect(tieSaid({ closingIn: [{ ref: '!56', draft: true }] })).toBe('closing in !56 (draft)')
   })
 })
 
