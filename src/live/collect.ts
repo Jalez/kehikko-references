@@ -4,7 +4,7 @@ import { reviewerStanding, type ActivitySignals } from './activity.ts'
 import { assignedFaces, faceOf, reviewerFaces } from './faces.ts'
 import { stackPlaces, type StackPlace } from './markers.ts'
 import type { Pipeline } from './pipeline.ts'
-import type { Reference } from './reference.ts'
+import type { ClosingIn, Reference } from './reference.ts'
 import { tiesOf, type Ties } from './ties.ts'
 
 /** The last activity with its actor's display name, when `people` gives one that is not just the login. */
@@ -77,10 +77,31 @@ function closersOf(row: TrackerRow, merged: ReadonlySet<string>): { closedBy?: s
   return refs.length ? { closedBy: refs } : {}
 }
 
+/**
+ * The changes an OPEN issue is waiting on: its `closed-by` links to a change that has not merged and
+ * has not been dropped. The change's row in this reading first, then the link's own word on where it
+ * stands (protocol 2.100.0), so a change the reading does not hold is still said when the host knew.
+ * A change that stands nowhere we can read is not claimed. Closed ones are `closedBy`, above.
+ */
+function closingIn(row: TrackerRow, standing: ReadonlyMap<string, { state: string; draft: boolean }>): { closingIn?: ClosingIn[] } {
+  if (row.kind !== 'issue' || row.state !== 'open') return {}
+  const out = new Map<string, ClosingIn>()
+  for (const one of row.links) {
+    if (one.relation !== 'closed-by' || out.has(one.ref)) continue
+    const held = standing.get(one.ref)
+    /* The change's own row, when this reading holds it, is the freshest word. */
+    const state = held?.state ?? one.state
+    if (state !== 'open') continue
+    out.set(one.ref, { ref: one.ref, draft: held ? held.draft : (one.draft ?? false) })
+  }
+  return out.size ? { closingIn: [...out.values()] } : {}
+}
+
 /** One row of the reading, as this app draws one. */
 function fromRow(
   row: TrackerRow,
   merged: ReadonlySet<string>,
+  standing: ReadonlyMap<string, { state: string; draft: boolean }>,
   stack: StackPlace | undefined,
   ties: Ties | undefined,
 ): Reference {
@@ -107,6 +128,7 @@ function fromRow(
         (row.closedByMerge === undefined &&
           row.links.some((one) => one.relation === 'closed-by' && merged.has(one.ref)))),
     ...(row.kind === 'issue' && row.state === 'closed' ? closersOf(row, merged) : {}),
+    ...closingIn(row, standing),
     draft: row.draft === true,
     title: row.title,
     /* When it last moved, preferring the thing that ended it — merged, then
@@ -188,6 +210,11 @@ function unreadableRow(ref: string, raw: Record<string, unknown>): Reference {
 export function collect(rows: unknown): Reference[] {
   if (!Array.isArray(rows)) return []
   const parsed = rows.map((raw: unknown) => ({ raw, row: trackerRowSchema.safeParse(raw) }))
+  const standing = new Map(
+    parsed.flatMap(({ row }) =>
+      row.success && row.data.kind === 'change' ? [[row.data.ref, { state: row.data.state, draft: row.data.draft === true }] as const] : [],
+    ),
+  )
   const merged = new Set(
     parsed.flatMap(({ row }) =>
       row.success && row.data.kind === 'change' && row.data.state === 'merged' ? [row.data.ref] : [],
@@ -207,7 +234,7 @@ export function collect(rows: unknown): Reference[] {
     const ref = row.success ? row.data.ref : isObject(raw) ? str(raw.ref) : ''
     if (!ref || seen.has(ref)) continue
     seen.add(ref)
-    out.push(row.success ? fromRow(row.data, merged, stacks.get(row.data.ref), ties.get(row.data.ref)) : unreadableRow(ref, raw as Record<string, unknown>))
+    out.push(row.success ? fromRow(row.data, merged, standing, stacks.get(row.data.ref), ties.get(row.data.ref)) : unreadableRow(ref, raw as Record<string, unknown>))
   }
 
   return out.sort((a, b) => {

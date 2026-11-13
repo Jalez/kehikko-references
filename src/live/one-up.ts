@@ -171,6 +171,7 @@ export function relatedOf<Row extends Reference>(row: Row, rows: readonly Row[])
     ...(row.closes ?? []),
     ...(row.contributions ?? []),
     ...(row.closedBy ?? []),
+    ...(row.closingIn?.map((one) => one.ref) ?? []),
     ...rows.filter((one) => one.closes?.includes(row.ref) || one.partOf?.includes(row.ref)).map((one) => one.ref),
   ]
   const out: Row[] = []
