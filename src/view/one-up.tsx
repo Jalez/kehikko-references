@@ -134,7 +134,7 @@ export function OneUp({
       ref={scroller}
       data-one-up
       role="list"
-      aria-label="References, one at a time"
+      aria-label="Issues & PRs, one at a time"
       onKeyDown={onKeyDown}
       className="absolute inset-0 snap-y snap-mandatory overflow-y-auto overscroll-contain"
       style={{ scrollSnapType: 'y mandatory' }}

@@ -40,7 +40,7 @@ describe('the doors themselves', () => {
  */
 describe('through the doors', () => {
   const ours = (path: string) => path === '/healthz' || path === '/health'
-  const through = doorsFetch({ manifest: MANIFEST, answer, build: BUILD, ours, page: { title: 'References' } })
+  const through = doorsFetch({ manifest: MANIFEST, answer, build: BUILD, ours, page: { title: 'Issues & PRs' } })
   const get = async (path: string) => (await through(new Request(`http://127.0.0.1${path}`)))!
 
   test('the manifest says which build is answering', async () => {
@@ -63,7 +63,7 @@ describe('through the doors', () => {
     const html = await got.text()
     expect(got.headers.get('cache-control')).toBe('no-store')
     expect(got.headers.get('content-security-policy')).toContain("frame-ancestors 'self'")
-    expect(html).toContain('<title>References</title>')
+    expect(html).toContain('<title>Issues &amp; PRs</title>')
     expect(html).toContain('id="build"')
     /* Nothing here writes, so there is nothing for a ticket to fence. */
     expect(html).not.toContain('id="ticket"')

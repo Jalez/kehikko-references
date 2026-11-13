@@ -887,7 +887,7 @@ export function App() {
    * answered for.
    */
   if (cover || sight.at === 'listening' || sight.at === 'unhosted' || sight.at === 'no-project') {
-    return <Cover state={cover ?? 'waiting'} name="References" onRetry={knock} />
+    return <Cover state={cover ?? 'waiting'} name="Issues & PRs" onRetry={knock} />
   }
   if (sight.at === 'asking') return <Asking project={sight.project} />
   if (sight.at === 'trouble') return <Troubled project={sight.project} trouble={sight.trouble} again={again} />
