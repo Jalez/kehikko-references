@@ -58,7 +58,7 @@ const READING = [
  * tell them apart.
  */
 function rowLine(container: HTMLElement): HTMLElement {
-  const line = container.querySelector('li[data-ref] > button')
+  const line = container.querySelector('li[data-ref] button:not([role="checkbox"])')
   if (!(line instanceof HTMLElement)) throw new Error('the row drew nothing pressable inside its <li>')
   return line
 }

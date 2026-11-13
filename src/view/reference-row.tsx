@@ -6,7 +6,7 @@ import type { Reference } from '@/live/reference.ts'
 import type { AddressOpenResult } from 'kehikot-module-protocol'
 import { pipelineSaid } from '@/live/pipeline.ts'
 import { roleSaid } from '@/live/roles.ts'
-import { tieSaid } from '@/live/ties.ts'
+import { relationCell, tieSaid } from '@/live/ties.ts'
 import { stackSentence } from '@/live/stack.ts'
 import { Markers } from './markers.tsx'
 import { fitLook, type RowFit } from '@/live/fit.ts'
@@ -212,6 +212,31 @@ export function overview(row: Reference, now: number = Date.now()): string {
   return parts.join(' · ')
 }
 
+/** The relation column's cell: always present, the first relation and "+N". */
+function RelationCell({ row }: { row: Reference }) {
+  const cell = relationCell(row)
+  return (
+    <span
+      role="cell"
+      data-tie
+      data-relation
+      data-cell="relation"
+      title={cell.all || undefined}
+      className="flex w-44 shrink-0 items-center gap-1 self-center text-xs text-muted-foreground max-sm:sr-only @sm/frame:not-sr-only"
+    >
+      <span className="truncate">{cell.first}</span>
+      {cell.more > 0 && (
+        <>
+          <span data-relation-more aria-hidden="true" className="shrink-0 rounded bg-muted px-1 tabular-nums">
+            +{cell.more}
+          </span>
+          <span className="sr-only">{`, and ${cell.more} more: ${cell.all}`}</span>
+        </>
+      )}
+    </span>
+  )
+}
+
 export function ReferenceRow({
   row,
   landed,
@@ -248,6 +273,7 @@ export function ReferenceRow({
   const last = activitySaid(row, at)
   return (
     <li
+      role="row"
       data-ref={row.ref}
       data-fresh={fresh ? 'true' : undefined}
       data-fit={fit}
@@ -293,7 +319,7 @@ export function ReferenceRow({
           220 pixels a 16-pixel target with 3 pixels of slack either side is a
           thing people miss, and the misses land on the row and replace their
           selection. */}
-      <span className={cn('flex shrink-0 items-center', look.compactRow ? 'pr-0.5 pl-1.5' : 'pr-1 pl-2')}>
+      <span role="cell" className={cn('flex shrink-0 items-center', look.compactRow ? 'pr-0.5 pl-1.5' : 'pr-1 pl-2')}>
         <Checkbox
           checked={selected}
           onCheckedChange={() => onToggle(row.ref)}
@@ -308,6 +334,7 @@ export function ReferenceRow({
           free because the row was a link. Replacing a link with something that
           only responds to a mouse would have been a regression dressed as a
           feature. */}
+      <span role="cell" className="flex min-w-0 flex-1">
       <button
         type="button"
         onClick={() => onPick(row.ref)}
@@ -336,47 +363,31 @@ export function ReferenceRow({
           {row.title || (row.unreadable ? 'this reference arrived with no reading at all' : 'no title in the reading')}
         </span>
 
-        {/* The tie to an issue — `part of #3912` on a change, `has contributions from !3907` on the
-            issue (protocol 2.26.0) — beside the title and kept while it truncates, so a merge request
-            that delivers a piece of an issue says which. Plain text, never a link. Under 24rem of the
-            frame it is not drawn, leaving the width to the title; it is still spoken, and the row's tooltip says it. */}
-        {tieSaid(row) && (
-          <span
-            data-tie
-            className="sr-only max-w-[45%] shrink-0 truncate text-xs text-muted-foreground @sm/frame:not-sr-only"
-          >
-            {tieSaid(row)}
-          </span>
-        )}
-
         {/* The last activity, truncated — "Mona commented on line 42 of api.ts · 5 min ago" — with
             the whole sentence (the path in full) as its own tooltip. From 28rem of the row's
             middle; narrower, the row's tooltip and the bell say it. */}
-        {last && (
-          <span
-            data-activity={last.by}
-            title={`Last activity: ${last.full}`}
-            className={cn('hidden w-44 shrink-0 truncate text-right text-xs @md:block', fresh ? 'text-foreground' : 'text-muted-foreground')}
-          >
-            {last.short}
-          </span>
-        )}
+        {/* Every cell below is drawn on every row, empty when the reading has nothing for it: a
+            cell that is only there when it has something shifts every column to its right. */}
+        <span
+          data-cell="activity"
+          data-activity={last?.by}
+          title={last ? `Last activity: ${last.full}` : undefined}
+          className={cn('hidden w-44 shrink-0 truncate text-right text-xs @md:block', fresh ? 'text-foreground' : 'text-muted-foreground')}
+        >
+          {last?.short}
+        </span>
 
-        {row.labels.length > 0 && (
-          <span className="hidden shrink-0 gap-1 @3xl:flex">
-            {row.labels.slice(0, 2).map((label) => (
-              <span key={label} className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {label}
-              </span>
-            ))}
-          </span>
-        )}
+        <span data-cell="labels" className="hidden w-36 shrink-0 gap-1 overflow-hidden @3xl:flex">
+          {row.labels.slice(0, 2).map((label) => (
+            <span key={label} className="truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {label}
+            </span>
+          ))}
+        </span>
 
-        {row.at && (
-          <span className="hidden w-[5.5rem] shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground @xl:block">
-            {day(row.at)}
-          </span>
-        )}
+        <span data-cell="day" className="hidden w-[5.5rem] shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground @xl:block">
+          {row.at ? day(row.at) : null}
+        </span>
 
         {/* My role: what the person is on this one — `Reviewer (asked) ·
             Author` — in a fixed column so it lines up down the list, empty on
@@ -386,6 +397,7 @@ export function ReferenceRow({
             the Scope group narrows to it. */}
         <span
           data-role
+          data-cell="role"
           className="hidden w-28 shrink-0 truncate text-right text-xs text-foreground @lg:block"
         >
           {roleSaid(row.myRoles)}
@@ -398,13 +410,22 @@ export function ReferenceRow({
           {row.people.length ? row.people.join(', ') : <span className="italic">nobody</span>}
         </span>
       </button>
+      </span>
+
+      {/* The relation column: what this row closes, what closed it, what it is part of (protocol
+          2.26.0) — the most important first, "+2" for the rest with all of them in the tooltip and
+          for a screen reader. A cell of its own, outside the button so it is a cell and not button
+          content, and ALWAYS drawn, empty when there is no relation, so a row without one cannot
+          shift the columns after it. Plain text, never a link. Under 24rem of the frame it is
+          visually dropped (the width goes to the title) but still read aloud. */}
+      <RelationCell row={row} />
 
       <Markers row={row} now={at} onPick={onPick} onOpenLink={onOpenLink ?? null} look={look} fresh={fresh} onSeen={onSeen} />
 
       {/* From 24rem of the frame the copy button ends the row; below that it is
           dropped, because there is no room for it beside the markers and the
           selection menu in the bar copies the selected rows (one or more). */}
-      <span className="hidden self-stretch @sm/frame:flex">
+      <span role="cell" className="hidden self-stretch @sm/frame:flex">
         <CopyButton row={row} />
       </span>
 

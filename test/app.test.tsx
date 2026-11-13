@@ -604,7 +604,7 @@ describe('picking references out', () => {
   }
 
   const rowButton = (ref: string) =>
-    document.querySelector(`li[data-ref="${ref}"] > button`) as HTMLButtonElement | null
+    document.querySelector(`li[data-ref="${ref}"] button:not([role="checkbox"])`) as HTMLButtonElement | null
 
   test('a plain click asks the host to select that row, and nothing is ticked until it answers', async () => {
     const host = await listed(5)
@@ -724,7 +724,7 @@ describe('the order lives in the View menu, not on a row of its own', () => {
 
   test('draws no sort buttons and no heading row of columns', async () => {
     await open()
-    expect(document.querySelectorAll('[data-heading] button')).toHaveLength(0)
+    expect(document.querySelectorAll('[data-heading] button:not([role="checkbox"])')).toHaveLength(0)
   })
 
   test('a press re-sorts the list, is answered, and the header declares the new value', async () => {
@@ -1718,8 +1718,8 @@ describe('work that is part of an issue the epic names', () => {
       '!3907',
       '#3912',
     ])
-    expect(document.querySelector('li[data-ref="!3907"] [data-tie]')?.textContent).toBe('part of #3912')
-    expect(document.querySelector('li[data-ref="#3912"] [data-tie]')?.textContent).toBe('has contributions from !3907')
+    expect(document.querySelector('li[data-ref="!3907"] [data-tie]')?.textContent).toBe('Part of #3912')
+    expect(document.querySelector('li[data-ref="#3912"] [data-tie]')?.textContent).toBe('Has contributions from !3907')
     const scope = (host.offered() as { options: { label: string }[] }[])[0]!
     expect(scope.options.map((option) => option.label)).toEqual(['This epic 2', 'Everything 4'])
   })
@@ -1762,7 +1762,7 @@ describe('the epics a selected reference is in', () => {
     return host
   }
   const open = async () => {
-    const trigger = document.querySelector('[data-selection-menu] button') as HTMLElement
+    const trigger = document.querySelector('[data-selection-menu] button:not([role="checkbox"])') as HTMLElement
     trigger.focus()
     act(() => {
       fireEvent.keyDown(trigger, { key: 'Enter' })
@@ -1952,7 +1952,7 @@ describe('copying the selected references', () => {
       await waitFor(() => expect(document.querySelector('[data-selection-ask]')).not.toBeNull())
       expect(document.querySelector('[data-selection-ask]')!.textContent).toContain('Open 8 pages in your browser?')
       expect(opened).toEqual([])
-      const cancel = [...document.querySelectorAll('[data-selection-ask] button')].find((b) => b.textContent === 'Cancel') as HTMLElement
+      const cancel = [...document.querySelectorAll('[data-selection-ask] button:not([role="checkbox"])')].find((b) => b.textContent === 'Cancel') as HTMLElement
       act(() => cancel.click())
       expect(opened).toEqual([])
       expect(bar()).not.toBeNull()
@@ -1960,7 +1960,7 @@ describe('copying the selected references', () => {
       const again = await menuItems()
       act(() => again[0]!.click())
       await waitFor(() => expect(document.querySelector('[data-selection-ask]')).not.toBeNull())
-      const open = [...document.querySelectorAll('[data-selection-ask] button')].find((b) => b.textContent === 'Open') as HTMLElement
+      const open = [...document.querySelectorAll('[data-selection-ask] button:not([role="checkbox"])')].find((b) => b.textContent === 'Open') as HTMLElement
       act(() => open.click())
       expect(opened).toHaveLength(8)
     } finally {
@@ -2006,7 +2006,7 @@ describe('copying the selected references', () => {
     await settled()
     expect(texts).toHaveLength(1)
     expect(texts[0]!.split('\n')).toHaveLength(2)
-    const inList = document.querySelector('li[data-ref="gh#1"] > button')!
+    const inList = document.querySelector('li[data-ref="gh#1"] button:not([role="checkbox"])')!
     cmdC(inList)
     await settled()
     expect(texts).toHaveLength(2)

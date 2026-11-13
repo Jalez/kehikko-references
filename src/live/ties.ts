@@ -100,9 +100,52 @@ export function withContributions(
 }
 
 /** The tie in words, for the row: `part of #3912` on a change, `has contributions from !3907` on an issue. */
-export function tieSaid(row: { partOf?: readonly string[]; contributions?: readonly string[] }): string {
+export function tieSaid(row: {
+  partOf?: readonly string[]
+  contributions?: readonly string[]
+  closes?: readonly string[]
+  closedBy?: readonly string[]
+}): string {
   const said: string[] = []
+  if (row.closes?.length) said.push(`closes ${row.closes.join(', ')}`)
+  if (row.closedBy?.length) said.push(`closed by ${row.closedBy.join(', ')}`)
   if (row.partOf?.length) said.push(`part of ${row.partOf.join(', ')}`)
   if (row.contributions?.length) said.push(`has contributions from ${row.contributions.join(', ')}`)
   return said.join('; ')
+}
+
+/** One relation a row has to another reference, in words: "Closes #34", "Part of #12". */
+export interface Relation {
+  /** `closes` first, then `closed-by`, `part-of`, `contributions`: the order the cell ranks them in. */
+  kind: 'closes' | 'closed-by' | 'part-of' | 'contributions'
+  ref: string
+  text: string
+}
+
+/**
+ * Every relation a row has, most important first: what it closes, what closed
+ * it, what it is part of, what is part of it. One entry per ref, so the cell
+ * can say the first and count the rest. Plain text, never markup.
+ */
+export function relationsOf(row: {
+  closes?: readonly string[]
+  closedBy?: readonly string[]
+  partOf?: readonly string[]
+  contributions?: readonly string[]
+}): Relation[] {
+  const out: Relation[] = []
+  const add = (kind: Relation['kind'], label: string, refs?: readonly string[]) => {
+    for (const ref of refs ?? []) out.push({ kind, ref, text: `${label} ${ref}` })
+  }
+  add('closes', 'Closes', row.closes)
+  add('closed-by', 'Closed by', row.closedBy)
+  add('part-of', 'Part of', row.partOf)
+  add('contributions', 'Has contributions from', row.contributions)
+  return out
+}
+
+/** What the relation cell shows: the first relation, and how many more there are. */
+export function relationCell(row: Parameters<typeof relationsOf>[0]): { first: string; more: number; all: string } {
+  const all = relationsOf(row)
+  return { first: all[0]?.text ?? '', more: Math.max(0, all.length - 1), all: all.map((one) => one.text).join('; ') }
 }

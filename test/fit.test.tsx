@@ -37,14 +37,14 @@ function drawn(width: number) {
   return {
     li,
     fit: li.dataset.fit,
-    ref: li.querySelector('li > button span.font-mono')?.textContent,
+    ref: li.querySelector('li button:not([role="checkbox"]) span.font-mono')?.textContent,
     title: li.querySelector('[data-title]') as HTMLElement,
     state: li.querySelector('[data-marker^="state-"]') as HTMLElement,
     pipeline: li.querySelector('[data-marker^="pipeline-"]') as HTMLElement,
     cluster: li.querySelector('[data-markers]') as HTMLElement,
     assigned: { shown: Number(faces('assigned').dataset.shown), more: faces('assigned').querySelector('[data-more]')?.textContent },
     review: { shown: Number(faces('review').dataset.shown), more: faces('review').querySelector('[data-more]')?.textContent },
-    button: li.querySelector('li > button') as HTMLElement,
+    button: li.querySelector('li button:not([role="checkbox"])') as HTMLElement,
     check: li.querySelector('li > span') as HTMLElement,
   }
 }

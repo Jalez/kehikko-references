@@ -346,7 +346,7 @@ export function Markers({
   const last = fresh ? activitySaid(row, now)?.full ?? null : null
   const compact = look.compactMarks
   return (
-    <span data-markers title="" className={cn(CLUSTER, compact ? 'gap-0' : 'gap-0.5')}>
+    <span role="cell" data-markers title="" className={cn(CLUSTER, compact ? 'gap-0' : 'gap-0.5')}>
       {row.stack ? <StackMark row={row} onPick={onPick} tight={compact} /> : SLOT.stack}
       {assigned ? (
         <Mark name="assigned" said={assigned} label={assigned} className={cn(FACES_MARK.assigned, compact && 'px-0')}>
