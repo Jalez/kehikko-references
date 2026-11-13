@@ -254,7 +254,7 @@ describe('with nothing on the other end', () => {
     await act(async () => {
       await new Promise((done) => setTimeout(done, 800))
     })
-    expect(screen.getByText('Nothing is framing this page — open References in Kehikot.')).toBeTruthy()
+    expect(screen.getByText('Nothing is framing this page — open Issues & PRs in Kehikot.')).toBeTruthy()
     expect(document.querySelector('[data-cover]')?.getAttribute('data-cover')).toBe('unhosted')
     /* Not an empty list, and not a sentence that reads like one. */
     expect(document.querySelectorAll('li')).toHaveLength(0)
@@ -348,7 +348,7 @@ describe('with a host answering', () => {
     globalThis.fetch = (() => Promise.reject(new TypeError('Load failed'))) as unknown as typeof fetch
     try {
       await act(async () => void (await probeServer()))
-      expect(screen.getByText('References’ own server is not answering.')).toBeTruthy()
+      expect(screen.getByText('Issues & PRs’ own server is not answering.')).toBeTruthy()
       expect(document.querySelectorAll('li[data-ref]')).toHaveLength(0)
 
       /* Still down: the press asks, hears nothing, and reads nothing from the host. */
@@ -1602,7 +1602,7 @@ describe('what a reload keeps', () => {
 
   /**
    * One host process's store of containers, keyed the way the host keys them:
-   * by kehikko. A References container is one placement on one kehikko.
+   * by kehikko. An Issues & PRs container is one placement on one kehikko.
    */
   const store = (initial: Record<string, Choice>) => ({ ...initial })
 

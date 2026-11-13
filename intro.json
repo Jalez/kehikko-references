@@ -2,7 +2,7 @@
   "slides": [
     {
       "title": "Only this epic's issues and MRs",
-      "body": "Your tracker holds hundreds of issues and merge requests. References shows the ones this epic's steps name, plus the changes that close or are part of them, GitHub and GitLab in one list.",
+      "body": "Your tracker holds hundreds of issues and merge requests. Issues & PRs shows the ones this epic's steps name, plus the changes that close or are part of them, GitHub and GitLab in one list.",
       "art": {
         "label": "the project's issues and merge requests, those outside the epic fading out, and the footer saying 4 of 466 shown, this epic",
         "shapes": [
@@ -71,7 +71,7 @@
         "label": "the header's filter menu open, Asked to review picked under Scope, and the list narrowing to three",
         "shapes": [
           { "kind": "box", "x": 20, "y": 6, "w": 280, "h": 18, "round": 4, "tone": "card" },
-          { "kind": "text", "x": 28, "y": 18, "text": "References", "size": 7, "tone": "text" },
+          { "kind": "text", "x": 28, "y": 18, "text": "Issues & PRs", "size": 7, "tone": "text" },
           { "kind": "text", "x": 232, "y": 18, "text": "View ▾", "size": 7, "tone": "muted" },
           { "kind": "box", "x": 272, "y": 9, "w": 14, "h": 12, "round": 3, "tone": "strong" },
           { "kind": "text", "x": 279, "y": 18, "text": "▽", "size": 7, "middle": true, "tone": "text" },
@@ -139,9 +139,9 @@
     },
     {
       "title": "Agents see what you picked",
-      "body": "References has no tools of its own. An agent reads the same refs with read_tracker, sees your pick with read_canvas, and may change Sort by.",
+      "body": "Issues & PRs has no tools of its own. An agent reads the same refs with read_tracker, sees your pick with read_canvas, and may change Sort by.",
       "art": {
-        "label": "an agent calling read_canvas and read_tracker and getting the picked merge request back, beside References",
+        "label": "an agent calling read_canvas and read_tracker and getting the picked merge request back, beside Issues & PRs",
         "shapes": [
           { "kind": "pane", "x": 12, "y": 10, "w": 150, "h": 130 },
           { "kind": "text", "x": 22, "y": 36, "text": "read_canvas", "size": 8, "mono": true, "tone": "strong", "motion": "rise", "delay": 0.3 },

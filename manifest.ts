@@ -31,7 +31,7 @@ export const HELP = {
     {
       title: 'What agents can do',
       points: [
-        'References has no tools of its own. An agent reads the same issues and changes through Kehikot, and sees what is picked on the kehikko.',
+        'Issues & PRs has no tools of its own. An agent reads the same issues and changes through Kehikot, and sees what is picked on the kehikko.',
         'An agent may press Sort by in the header; it changes only the order.',
       ],
     },
@@ -367,7 +367,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
   kind: MANIFEST_KIND,
   protocol: PROTOCOL,
   id: ID,
-  name: 'References',
+  name: 'Issues & PRs',
   /* The icon a host draws beside the name: a key of the protocol's module icons, never a path
      or URL; the same key Kehikot's official list gives it. */
   icon: 'lucide:link',
@@ -492,7 +492,7 @@ export const MANIFEST: Manifest = manifestSchema.parse({
    */
   services: {
     'module.folders': {
-      name: 'References',
+      name: 'Issues & PRs',
       folders: [{ folder: 'references', says: 'Tracker readings cached by earlier versions; nothing authored, rebuilt from the trackers.', derived: true }],
     },
   },

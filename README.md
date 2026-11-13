@@ -1,4 +1,4 @@
-# References
+# Issues & PRs
 
 Every issue, merge request and pull request in a project — GitHub and GitLab
 together — as one dense list. A row is an identifier, a state, a title and who
@@ -464,9 +464,9 @@ are not the same fact:
 | | what it means |
 |---|---|
 | **Waiting for Kehikot…** | The page loaded under a second ago. A greeting may still come. |
-| **Nothing is framing this page — open References in Kehikot.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. |
+| **Nothing is framing this page — open Issues & PRs in Kehikot.** | Nothing greeted it. There is no project, no reading, and nothing to list — which is not an empty list. |
 | **No project is open — open one in Kehikot.** | Framed, and `projectPath` was null. Not a fault. |
-| **References’ own server is not answering.** + Try again | The process that serves this page has stopped. The rows are the host’s, but a page whose server is gone cannot be reloaded or updated, so it says so. |
+| **Issues & PRs’ own server is not answering.** + Try again | The process that serves this page has stopped. The rows are the host’s, but a page whose server is gone cannot be reloaded or updated, so it says so. |
 | **This page is older than its server — reloading…** | The server restarted since the page loaded. It reloads itself, once. |
 | **Reading the trackers for \<project\>.** | The question is out, or the host is reading for the first time. The one honest whole-container wait. |
 | **The host reads no tracker for this project.** | The reading has no sources. Not an empty tracker: nothing was read. |

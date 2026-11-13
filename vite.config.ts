@@ -77,7 +77,7 @@ export default defineConfig({
   base: './',
   plugins: [
     serves({ id: ID, prefer: PREFERRED_PORT }),
-    doors({ manifest: MANIFEST, answer, build: BUILD, ours, ancestors: [STUB_HOST], page: { title: 'References' } }),
+    doors({ manifest: MANIFEST, answer, build: BUILD, ours, ancestors: [STUB_HOST], page: { title: 'Issues & PRs' } }),
     react(),
     tailwindcss(),
     /* 3.29.0: the record 3.28.0 kept of what it told agents, removed once the host says where it is. */
