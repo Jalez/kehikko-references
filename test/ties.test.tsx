@@ -138,14 +138,14 @@ describe('"This epic" reaches the work that is part of its issues', () => {
 })
 
 describe('the tie on the row', () => {
-  const rows = byRef(collect([...PART, ...CLOSES]))
+  const rows = byRef(collect([...PART, ...CLOSES, row('#50')]))
   const draw = (ref: string) =>
     render(<ReferenceRow row={rows.get(ref)!} landed={false} selected={false} onPick={() => {}} onToggle={() => {}} />)
 
   test('the change says which issue it is part of, in words', () => {
     const { container } = draw('!3907')
     const tie = container.querySelector('[data-tie]')
-    expect(tie?.textContent).toBe('part of #3912')
+    expect(tie?.textContent).toBe('Part of #3912')
     /* Text, never a link. */
     expect(tie?.querySelector('a')).toBeNull()
     expect(overview(rows.get('!3907')!)).toContain('part of #3912')
@@ -153,21 +153,21 @@ describe('the tie on the row', () => {
 
   test('the issue says which changes are part of it', () => {
     const { container } = draw('#3912')
-    expect(container.querySelector('[data-tie]')?.textContent).toBe('has contributions from !3907')
+    expect(container.querySelector('[data-tie]')?.textContent).toBe('Has contributions from !3907')
     expect(overview(rows.get('#3912')!)).toContain('has contributions from !3907')
   })
 
   test('a row with no tie draws none', () => {
-    const { container } = draw('!3251')
-    expect(container.querySelector('[data-tie]')).toBeNull()
-    expect(overview(rows.get('!3251')!)).not.toContain('part of')
+    const { container } = draw('#50')
+    expect(container.querySelector('[data-tie]')?.textContent).toBe('')
+    expect(overview(rows.get('#50')!)).not.toContain('part of')
   })
 
   test('a ref is drawn as text, whatever it says', () => {
     const odd = collect([row('!9', { contributes: ['<b>#1</b>'] })])[0]!
     expect(odd.partOf).toEqual(['<b>#1</b>'])
     const { container } = render(<ReferenceRow row={odd} landed={false} selected={false} onPick={() => {}} onToggle={() => {}} />)
-    expect(container.querySelector('[data-tie]')?.textContent).toBe('part of <b>#1</b>')
+    expect(container.querySelector('[data-tie]')?.textContent).toBe('Part of <b>#1</b>')
     expect(container.querySelector('[data-tie] b')).toBeNull()
   })
 })
@@ -215,5 +215,53 @@ describe('"This epic" reaches the changes that close its issues', () => {
   test('a picked part that lists #3913 shows the closing change', () => {
     const parts = [{ id: 'p', heading: 'P', refs: ['#3913'], picked: true }]
     expect(sift(rows, { ...EVERYTHING, parts }).map((one) => one.ref).sort()).toEqual(['!4019', '#3913'])
+  })
+})
+
+describe('the relation column', () => {
+  const rows = byRef(collect([...PART, ...CLOSES, row('!1', { kind: 'change', contributes: ['#3912'], links: [{ ref: '#7', relation: 'closes' }, { ref: '#8', relation: 'closes' }] }), row('#7'), row('#8')]))
+  const draw = (ref: string) =>
+    render(<ReferenceRow row={rows.get(ref)!} landed={false} selected={false} onPick={() => {}} onToggle={() => {}} />)
+  const cells = (container: HTMLElement) => container.querySelectorAll('li [role="cell"]').length
+
+  test('a change that closes an issue says so in the column', () => {
+    const { container } = draw('!3251')
+    expect(container.querySelector('[data-relation]')?.textContent).toBe('Closes #2638')
+  })
+
+  test('the issue says which change closed it', () => {
+    const { container } = draw('#2638')
+    expect(container.querySelector('[data-relation]')?.textContent).toBe('Closed by !3251')
+  })
+
+  test('several relations: the first, then +N, all of them in the tooltip and for a screen reader', () => {
+    const { container } = draw('!1')
+    const cell = container.querySelector('[data-relation]') as HTMLElement
+    expect(cell.querySelector('.truncate')?.textContent).toBe('Closes #7')
+    expect(cell.querySelector('[data-relation-more]')?.textContent).toBe('+2')
+    expect(cell.title).toBe('Closes #7; Closes #8; Part of #3912')
+    expect(cell.textContent).toContain('Closes #8; Part of #3912')
+  })
+
+  test('no relation: the cell is there and empty', () => {
+    const { container } = draw('#7')
+    const cell = container.querySelector('[data-relation]')
+    expect(cell).not.toBeNull()
+    expect(cell?.textContent).toBe('')
+  })
+
+  test('every row has the same cells, whatever the reading holds for it', () => {
+    const counts = ['!3251', '#2638', '!1', '#7', '!3907', '#3912'].map((ref) => {
+      const { container } = draw(ref)
+      const n = cells(container)
+      cleanup()
+      return n
+    })
+    expect(new Set(counts).size).toBe(1)
+    const bare = draw('#7').container
+    expect(bare.querySelector('li')?.getAttribute('role')).toBe('row')
+    for (const slot of ['activity', 'labels', 'day', 'role', 'relation'].map((c) => `[data-cell="${c}"]`)) {
+      expect(bare.querySelector(slot)).not.toBeNull()
+    }
   })
 })

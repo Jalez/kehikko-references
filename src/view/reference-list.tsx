@@ -85,7 +85,18 @@ export function ReferenceList({
   const columns = facesColumns(rows)
   const widths = { '--faces-assigned': `${columns.assigned}px`, '--faces-review': `${columns.review}px` } as CSSProperties
   return (
-    <ul ref={list} data-fit={fit} className="divide-border" style={widths}>
+    <div role="table" aria-label="Issues and pull requests" aria-rowcount={rows.length + 1}>
+    {/* The column names, for a screen reader: a table says what each cell is. */}
+    <div role="rowgroup" className="sr-only">
+      <div role="row">
+        <span role="columnheader">Selected</span>
+        <span role="columnheader">Reference</span>
+        <span role="columnheader">Relation</span>
+        <span role="columnheader">Status</span>
+        <span role="columnheader">Copy</span>
+      </div>
+    </div>
+    <ul role="rowgroup" ref={list} data-fit={fit} className="divide-border" style={widths}>
       {rows.map((row) => (
         <ReferenceRow
           key={row.key}
@@ -101,5 +112,6 @@ export function ReferenceList({
         />
       ))}
     </ul>
+    </div>
   )
 }
