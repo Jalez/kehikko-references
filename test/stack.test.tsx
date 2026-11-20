@@ -141,8 +141,9 @@ describe('a copy takes no stack unless asked', () => {
     expect(idsOfAll([line[0]!]).plain).toBe('#21')
     expect(idsOfAll(fork).plain).toBe(fork.map((r) => r.ref).join(' '))
   })
-  test('on adds the stacks to the rows, which are the same rows', () => {
-    expect(payloadOfAll(line, WITH).plain.startsWith(payloadOfAll(line).plain)).toBe(true)
+  test('on copies the same rows, inside their stack', () => {
+    const on = payloadOfAll(line, WITH).plain
+    for (const one of payloadOfAll(line).plain.split('\n')) expect(on).toContain(one)
     expect(idsOfAll(line, WITH).plain).toBe('#21 #22 #23\n\nStack, bottom first: #21 → #22 → #23')
   })
   test('related is the stack by definition: whole, whatever the choice', () => {
@@ -224,62 +225,48 @@ describe('a copy takes the stack along', () => {
   const fork = collect(FORK)
   const pick = (...refs: string[]) => refs.map((ref) => fork.find((r) => r.ref === ref)!)
 
-  test('one stacked change: its line, then the forked stack as ids in a code block, the others not selected', () => {
+  const bare = (text: string) => text.replace(/\]\([^)]*\)/g, ']')
+  const FORKED = 'Forked stack of 4, each change under the one it is built on:'
+
+  test('one stacked change: copied inside its stack, a nested list with every title, the others not selected', () => {
     const p = payloadOfAll(pick('#13'), WITH)
-    expect(p.plain).toBe(
-      [
-        `[#13](${fork[1]!.url}) left`,
-        '',
-        'Forked stack, bottom first:',
-        '```text',
-        '#12 (not selected)',
-        '├─ #13',
-        '│  └─ #15 (not selected)',
-        '└─ #14 (not selected)',
-        '```',
-      ].join('\n'),
+    expect(p.plain).toBe([FORKED, '- #12 base (not selected)', `  - [#13](${fork[1]!.url}) left`, '    - #15 top (not selected)', '  - #14 right (not selected)'].join('\n'))
+    expect(p.html).toBe(
+      `<p>${FORKED}</p><ul><li>#12 base (not selected)<ul><li><a href="${fork[1]!.url}">#13</a> left<ul><li>#15 top (not selected)</li></ul></li><li>#14 right (not selected)</li></ul></li></ul>`,
     )
-    expect(p.html).toContain(`<p>Forked stack, bottom first:</p><pre>#12 (not selected)\n├─ <a href="${fork[1]!.url}">#13</a>\n│  └─ #15 (not selected)\n└─ #14 (not selected)</pre>`)
-    expect(p.plain).not.toContain('(copied)')
   })
 
-  test('the whole stack selected: titles once in the list, the tree is ids only with no markers', () => {
+  test('the whole stack selected: each change once, linked with its title, and no markers', () => {
     const p = payloadOfAll(fork, WITH)
-    expect(p.plain.split('\n').slice(4)).toEqual(['', 'Forked stack, bottom first:', '```text', '#12', '├─ #13', '│  └─ #15', '└─ #14', '```'])
+    expect(bare(p.plain).split('\n')).toEqual([FORKED, '- [#12] base', '  - [#13] left', '    - [#15] top', '  - [#14] right'])
     expect(p.plain.match(/ base/g)).toHaveLength(1)
-    expect(p.plain.match(/Forked stack/g)).toHaveLength(1)
+    expect(p.plain).not.toContain('(not selected)')
   })
 
-  test('a line: one line of ids, in Markdown and html', () => {
+  test('a line: each change nested under the one below it, in Markdown and html', () => {
     const line = collect(LINE)
     const p = payloadOfAll([line[2]!], WITH)
-    expect(p.plain.split('\n').slice(1)).toEqual(['', 'Stack, bottom first:', '#21 (not selected) → #22 (not selected) → #23'])
-    expect(p.html).toContain(`<p>Stack, bottom first:</p><p>#21 (not selected) → #22 (not selected) → <a href="${line[2]!.url}">#23</a></p>`)
-    expect(payloadOfAll(line, WITH).plain.split('\n').slice(-1)).toEqual(['#21 → #22 → #23'])
+    expect(bare(p.plain).split('\n')).toEqual(['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', '  - #22 two (not selected)', '    - [#23] three'])
+    expect(p.html).toContain(`<ul><li>#21 one (not selected)<ul><li>#22 two (not selected)<ul><li><a href="${line[2]!.url}">#23</a> three</li></ul></li></ul></li></ul>`)
   })
 
-  test('mixed: stacked, unstacked and a stack with an unselected member', () => {
+  test('mixed: each stack stands where its first row was, unstacked rows as lines', () => {
     const rows = [...collect(LINE), ...fork, ...collect([row('#99', { kind: 'change', title: 'alone' })])]
-    const picked = ['#99', '#13', '#21', '#23', '#14'].map((ref) => rows.find((r) => r.ref === ref)!)
-    const ordered = [rows.find((r) => r.ref === '#21')!, rows.find((r) => r.ref === '#23')!, rows.find((r) => r.ref === '#13')!, rows.find((r) => r.ref === '#14')!, picked[0]!]
-    expect(payloadOfAll(ordered, WITH).plain.replace(/\]\([^)]*\)/g, ']')).toBe(
+    const ordered = ['#21', '#23', '#13', '#14', '#99'].map((ref) => rows.find((r) => r.ref === ref)!)
+    expect(bare(payloadOfAll(ordered, WITH).plain)).toBe(
       [
-        '[#21] one',
-        '[#23] three',
-        '[#13] left',
-        '[#14] right',
+        'Stack of 3, each change under the one it is built on:',
+        '- [#21] one',
+        '  - #22 two (not selected)',
+        '    - [#23] three',
+        '',
+        FORKED,
+        '- #12 base (not selected)',
+        '  - [#13] left',
+        '    - #15 top (not selected)',
+        '  - [#14] right',
+        '',
         '[#99] alone',
-        '',
-        'Stack, bottom first:',
-        '#21 → #22 (not selected) → #23',
-        '',
-        'Forked stack, bottom first:',
-        '```text',
-        '#12 (not selected)',
-        '├─ #13',
-        '│  └─ #15 (not selected)',
-        '└─ #14',
-        '```',
       ].join('\n'),
     )
   })
@@ -319,7 +306,7 @@ describe('a copy takes the stack along', () => {
     )
     const selected = items.find((item) => item.id === 'selected')!
     expect(selected).toMatchObject({ text: 'Copied 1 + stack' })
-    expect((selected as { tooltip?: string }).tooltip).toStartWith(`[#13](${fork[1]!.url}) left`)
+    expect((selected as { tooltip?: string }).tooltip).toContain(`[#13](${fork[1]!.url}) left`)
     expect((selected as { tooltip: string }).tooltip.length).toBeLessThanOrEqual(240)
     /* The footer's press says which copy the host carried. */
     const kinds: string[] = []
