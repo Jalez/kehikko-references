@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { copyPayload, payloadOfAll, type Copyable } from '@/live/copy.ts'
-import { useStackChoice } from './copy-many.tsx'
+import { useReadingUrls, useStackChoice } from './copy-many.tsx'
 
 /**
  * Copies the row's reference (linked), and its title, and the stack it is in when "With stack" is on. Beside the row's button,
@@ -12,6 +12,7 @@ import { useStackChoice } from './copy-many.tsx'
  */
 export function CopyButton({ row }: { row: Copyable }) {
   const withStack = useStackChoice() && Boolean(row.stack)
+  const urls = useReadingUrls()
   const [done, setDone] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
@@ -24,7 +25,7 @@ export function CopyButton({ row }: { row: Copyable }) {
           aria-label={`Copy ${row.ref} with its link and title${withStack ? ', and its stack' : ''}`}
           onClick={(event) => {
             event.stopPropagation()
-            void copyPayload(payloadOfAll([row], { stack: withStack })).then((ok) => {
+            void copyPayload(payloadOfAll([row], { stack: withStack, urls })).then((ok) => {
               if (!ok) return
               setDone(true)
               if (timer.current) clearTimeout(timer.current)

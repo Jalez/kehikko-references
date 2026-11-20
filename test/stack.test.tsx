@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 
 import { collect } from '@/live/collect.ts'
-import { copiedSaid, idsOfAll, payloadOfAll } from '@/live/copy.ts'
+import { copiedSaid, HARD_BREAK, idsOfAll, payloadOfAll, urlsOf } from '@/live/copy.ts'
 import { footerItems, footerPressed } from '@/live/footer.ts'
 import { stackPlaces, stackSaid, type StackMember } from '@/live/markers.ts'
 import { isForked, stackLines, stackPath, stackSentence, stacksOf, stackTree } from '@/live/stack.ts'
@@ -226,57 +226,70 @@ describe('a copy takes the stack along', () => {
   const pick = (...refs: string[]) => refs.map((ref) => fork.find((r) => r.ref === ref)!)
 
   const bare = (text: string) => text.replace(/\]\([^)]*\)/g, ']')
-  const FORKED = 'Forked stack of 4, each change under the one it is built on:'
+  /** The lines of a copy as a reader sees them: the hard breaks off, the no-break spaces as spaces. */
+  const seen = (text: string) => text.split('\n').map((line) => line.replace(/ {2}$/, '').replace(/\u00a0/g, ' '))
+  const FORKED = 'Forked stack of 4:'
+  const NB = '\u00a0'
 
-  test('one stacked change: copied inside its stack, a nested list with every title, the others not selected', () => {
-    const p = payloadOfAll(pick('#13'), WITH)
-    expect(p.plain).toBe([FORKED, '- #12 base (not selected)', `  - [#13](${fork[1]!.url}) left`, '    - #15 top (not selected)', '  - #14 right (not selected)'].join('\n'))
-    expect(p.html).toBe(
-      `<p>${FORKED}</p><ul><li>#12 base (not selected)<ul><li><a href="${fork[1]!.url}">#13</a> left<ul><li>#15 top (not selected)</li></ul></li><li>#14 right (not selected)</li></ul></li></ul>`,
+  test('one stacked change: copied inside its stack, drawn as a tree, every member linked and titled', () => {
+    const p = payloadOfAll(pick('#13'), { ...WITH, urls: urlsOf(fork) })
+    expect(p.plain).toBe(
+      [FORKED, `[#12](${fork[0]!.url}) base`, `├─${NB}[#13](${fork[1]!.url}) left`, `│${NB}${NB}└─${NB}[#15](${fork[3]!.url}) top`, `└─${NB}[#14](${fork[2]!.url}) right`].join('  \n'),
     )
+    const pre = (glyphs: string) => `<span style="white-space:pre;font-family:monospace">${glyphs}</span>`
+    expect(p.html).toBe(
+      `<p>${FORKED}</p>` +
+        `<div><a href="${fork[0]!.url}">#12</a> base</div>` +
+        `<div>${pre('├─&nbsp;')}<a href="${fork[1]!.url}">#13</a> left</div>` +
+        `<div>${pre('│&nbsp;&nbsp;└─&nbsp;')}<a href="${fork[3]!.url}">#15</a> top</div>` +
+        `<div>${pre('└─&nbsp;')}<a href="${fork[2]!.url}">#14</a> right</div>`,
+    )
+    expect(p.plain).not.toContain('selected')
   })
 
-  test('the whole stack selected: each change once, linked with its title, and no markers', () => {
+  test('a member the reading has no URL for stays plain; without the lookup only copied rows are linked', () => {
+    const p = payloadOfAll(pick('#13'), WITH)
+    expect(seen(p.plain)).toEqual([FORKED, '#12 base', `├─ [#13](${fork[1]!.url}) left`, '│  └─ #15 top', '└─ #14 right'])
+    const some = urlsOf(fork.filter((r) => r.ref !== '#15'))
+    expect(seen(bare(payloadOfAll(pick('#13'), { ...WITH, urls: some }).plain))).toEqual([FORKED, '[#12] base', '├─ [#13] left', '│  └─ #15 top', '└─ [#14] right'])
+  })
+
+  test('the whole stack selected: each change once, linked with its title', () => {
     const p = payloadOfAll(fork, WITH)
-    expect(bare(p.plain).split('\n')).toEqual([FORKED, '- [#12] base', '  - [#13] left', '    - [#15] top', '  - [#14] right'])
+    expect(seen(bare(p.plain))).toEqual([FORKED, '[#12] base', '├─ [#13] left', '│  └─ [#15] top', '└─ [#14] right'])
     expect(p.plain.match(/ base/g)).toHaveLength(1)
-    expect(p.plain).not.toContain('(not selected)')
   })
 
-  test('a line: each change nested under the one below it, in Markdown and html', () => {
+  test('a line is a tree too: each change under the one below it, in Markdown and html', () => {
     const line = collect(LINE)
-    const p = payloadOfAll([line[2]!], WITH)
-    expect(bare(p.plain).split('\n')).toEqual(['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', '  - #22 two (not selected)', '    - [#23] three'])
-    expect(p.html).toContain(`<ul><li>#21 one (not selected)<ul><li>#22 two (not selected)<ul><li><a href="${line[2]!.url}">#23</a> three</li></ul></li></ul></li></ul>`)
+    const p = payloadOfAll([line[2]!], { ...WITH, urls: urlsOf(line) })
+    expect(seen(bare(p.plain))).toEqual(['Stack of 3:', '[#21] one', '└─ [#22] two', '   └─ [#23] three'])
+    expect(p.html).toContain(`<div><span style="white-space:pre;font-family:monospace">&nbsp;&nbsp;&nbsp;└─&nbsp;</span><a href="${line[2]!.url}">#23</a> three</div>`)
   })
 
   test('mixed: each stack stands where its first row was, unstacked rows as lines', () => {
     const rows = [...collect(LINE), ...fork, ...collect([row('#99', { kind: 'change', title: 'alone' })])]
     const ordered = ['#21', '#23', '#13', '#14', '#99'].map((ref) => rows.find((r) => r.ref === ref)!)
-    expect(bare(payloadOfAll(ordered, WITH).plain)).toBe(
-      [
-        'Stack of 3, each change under the one it is built on:',
-        '- [#21] one',
-        '  - #22 two (not selected)',
-        '    - [#23] three',
-        '',
-        FORKED,
-        '- #12 base (not selected)',
-        '  - [#13] left',
-        '    - #15 top (not selected)',
-        '  - [#14] right',
-        '',
-        '[#99] alone',
-      ].join('\n'),
-    )
+    expect(seen(bare(payloadOfAll(ordered, { ...WITH, urls: urlsOf(rows) }).plain))).toEqual([
+      'Stack of 3:',
+      '[#21] one',
+      '└─ [#22] two',
+      '   └─ [#23] three',
+      '',
+      FORKED,
+      '[#12] base',
+      '├─ [#13] left',
+      '│  └─ [#15] top',
+      '└─ [#14] right',
+      '',
+      '[#99] alone',
+    ])
   })
 
-  test('Copy ids: the ids, then the stacks as refs, the same shape and the same marks', () => {
-    expect(idsOfAll(pick('#15', '#14'), WITH).plain).toBe(
-      ['#15 #14', '', 'Forked stack, bottom first:', '#12 (not selected)', '├─ #13 (not selected)', '│  └─ #15', '└─ #14'].join('\n'),
-    )
+  test('Copy ids: the ids, then the stacks as refs, the same shape', () => {
+    expect(idsOfAll(pick('#15', '#14'), WITH).plain).toBe(['#15 #14', '', 'Forked stack, bottom first:', '#12', '├─ #13', '│  └─ #15', '└─ #14'].join('\n'))
     expect(idsOfAll(collect(LINE), WITH).plain).toBe('#21 #22 #23\n\nStack, bottom first: #21 → #22 → #23')
-    expect(idsOfAll([collect(LINE)[0]!], WITH).plain).toBe('#21\n\nStack, bottom first: #21 → #22 (not selected) → #23 (not selected)')
+    expect(idsOfAll([collect(LINE)[0]!], WITH).plain).toBe('#21\n\nStack, bottom first: #21 → #22 → #23')
     /* A rich paste keeps the lines. */
     expect(idsOfAll(pick('#14'), WITH).html).toStartWith('<pre>#14\n\n')
   })
@@ -291,7 +304,7 @@ describe('a copy takes the stack along', () => {
     const rows = [...collect(LINE), ...fork]
     const picked = [rows.find((r) => r.ref === '#14')!, rows.find((r) => r.ref === '#22')!]
     expect(stacksOf(picked).map((s) => s.place.members[0]!.ref)).toEqual(['#12', '#21'])
-    expect(stackLines(stacksOf(picked)[1]!.place, ['#22'])).toEqual(['#21 (not selected) → #22 → #23 (not selected)'])
+    expect(stackLines(stacksOf(picked)[1]!.place)).toEqual(['#21 → #22 → #23'])
   })
 
   test('what was copied is said: in the bar and the footer, the text in the footer’s tooltip', async () => {
@@ -314,5 +327,114 @@ describe('a copy takes the stack along', () => {
     await footerPressed('copy', undefined, acts, 'copy')
     await footerPressed('copy-ids', undefined, acts, 'copy')
     expect(kinds).toEqual(['linked', 'ids'])
+  })
+})
+
+/**
+ * The person's own stack, as they pasted it: a forked stack of 13 merge requests,
+ * ten levels deep at its deepest, with only !4563 and !5033 copied.
+ *
+ * ```
+ * !4563
+ * ├─ !4572
+ * │  └─ !4581 → !4582 → !4583 → !4584
+ * │                              ├─ !4786 → !5081 → !5082 → !5083
+ * │                              └─ !4975 → !5019
+ * └─ !5033
+ * ```
+ */
+describe('a forked stack of 13, two of it copied', () => {
+  const mr = (n: number) => `https://gitlab.example.com/group/project/-/merge_requests/${n}`
+  const change = (n: number, title: string, stack: { below?: string; above?: string[] }) =>
+    row(`!${n}`, { kind: 'change', host: 'gitlab.example.com', repo: 'group/project', url: mr(n), title, stack })
+  const READING = collect([
+    change(4563, 'feat(core): keep unfinished features off behind a flag', { above: ['!4572', '!5033'] }),
+    change(4572, 'feat(views): save and load views behind the views flag', { below: '!4563', above: ['!4581'] }),
+    change(4581, 'feat(views): views list', { below: '!4572', above: ['!4582'] }),
+    change(4582, 'feat(views): views menu', { below: '!4581', above: ['!4583'] }),
+    change(4583, 'feat(views): rename a view', { below: '!4582', above: ['!4584'] }),
+    change(4584, 'feat(views): share a view', { below: '!4583', above: ['!4786', '!4975'] }),
+    change(4786, 'feat(views): view defaults', { below: '!4584', above: ['!5081'] }),
+    change(5081, 'feat(views): default columns', { below: '!4786', above: ['!5082'] }),
+    change(5082, 'feat(views): default sort', { below: '!5081', above: ['!5083'] }),
+    change(5083, 'feat(views): default filters', { below: '!5082' }),
+    change(4975, 'feat(views): view history', { below: '!4584', above: ['!5019'] }),
+    change(5019, 'feat(views): restore a view', { below: '!4975' }),
+    change(5033, 'Draft: feat(dashboard): dashboard behind its flag', { below: '!4563' }),
+    change(5031, 'Draft: fix(api): unstacked before', {}),
+    change(5032, 'Draft: fix(api): unstacked after', {}),
+  ] as never)
+  const by = (ref: string) => READING.find((r) => r.ref === ref)!
+  /** As copied: a plain row first, then the two stacked ones with a plain row between them. */
+  const copied = ['!5031', '!4563', '!5032', '!5033'].map(by)
+  const copy = () => payloadOfAll(copied, { stack: true, urls: urlsOf(READING) })
+
+  const TREE: [string, number][] = [
+    ['', 4563],
+    ['├─ ', 4572],
+    ['│  └─ ', 4581],
+    ['│     └─ ', 4582],
+    ['│        └─ ', 4583],
+    ['│           └─ ', 4584],
+    ['│              ├─ ', 4786],
+    ['│              │  └─ ', 5081],
+    ['│              │     └─ ', 5082],
+    ['│              │        └─ ', 5083],
+    ['│              └─ ', 4975],
+    ['│                 └─ ', 5019],
+    ['└─ ', 5033],
+  ]
+  const member = (prefix: string, n: number) => `${prefix}[!${n}](${mr(n)}) ${by(`!${n}`).title}`
+
+  test('drawn as a tree: one line per member, its prefix, its link and its title — every member linked', () => {
+    const lines = copy().plain.split('\n')
+    expect(lines.map((line) => line.replace(/ {2}$/, '').replace(/ /g, ' '))).toEqual([
+      member('', 5031),
+      '',
+      'Forked stack of 13:',
+      ...TREE.map(([prefix, n]) => member(prefix, n)),
+      '',
+      member('', 5032),
+    ])
+    expect(copy().plain).not.toContain('selected')
+    /* Each line of the tree but its last ends in the hard break, and its prefix's spaces are no-break. */
+    const block = lines.slice(2, 2 + 1 + TREE.length)
+    for (const line of block.slice(0, -1)) expect(line.endsWith(HARD_BREAK)).toBe(true)
+    expect(block.at(-1)!.endsWith(' ')).toBe(false)
+    for (const line of block) expect(line.replace(/ {2}$/, '').match(/^[│├└─ ]*/)![0]).not.toContain(' ')
+  })
+
+  test('html: one div per member, its prefix kept, the ref a link, then the title', () => {
+    const { html } = copy()
+    const divs = [...html.matchAll(/<div>(.*?)<\/div>/g)].map((m) => m[1]!)
+    expect(divs).toHaveLength(2 + TREE.length)
+    expect(divs[0]).toBe(`<a href="${mr(5031)}">!5031</a> ${by('!5031').title}`)
+    expect(divs.at(-1)).toBe(`<a href="${mr(5032)}">!5032</a> ${by('!5032').title}`)
+    expect(html.indexOf('<p>Forked stack of 13:</p>')).toBeGreaterThan(html.indexOf('!5031'))
+    TREE.forEach(([prefix, n], i) => {
+      const glyphs = prefix.replace(/ /g, '&nbsp;')
+      const drawn = glyphs ? `<span style="white-space:pre;font-family:monospace">${glyphs}</span>` : ''
+      expect(divs[i + 1]).toBe(`${drawn}<a href="${mr(n)}">!${n}</a> ${by(`!${n}`).title}`)
+    })
+    expect(html).not.toContain('<ul>')
+  })
+
+  test('rendered as Markdown (CommonMark, as GitHub and GitLab read it): a line per member, prefixes and links intact', () => {
+    const rendered = Bun.markdown.html(copy().plain)
+    const paragraphs = [...rendered.matchAll(/<p>([\s\S]*?)<\/p>/g)].map((m) => m[1]!)
+    expect(paragraphs).toHaveLength(3)
+    const lines = paragraphs[1]!.split('<br />').map((line) => line.trim())
+    const text = (line: string) => line.replace(/<[^>]+>/g, '').replace(/ /g, ' ')
+    expect(lines.map(text)).toEqual(['Forked stack of 13:', ...TREE.map(([prefix, n]) => `${prefix}!${n} ${by(`!${n}`).title}`)])
+    TREE.forEach(([, n], i) => expect(lines[i + 1]).toContain(`<a href="${mr(n)}">!${n}</a>`))
+    expect(rendered).not.toMatch(/<(pre|code|ul|li)>/)
+    /* Without the hard break the lines run together into one: the break is what keeps them. */
+    const joined = Bun.markdown.html(copy().plain.replaceAll(`${HARD_BREAK}\n`, '\n'))
+    expect(joined).not.toContain('<br')
+  })
+
+  test('Copy ids keeps its shape: the refs, then the stack as refs', () => {
+    const { plain } = idsOfAll(copied, { stack: true })
+    expect(plain.split('\n')).toEqual(['!5031 !4563 !5032 !5033', '', 'Forked stack, bottom first:', ...TREE.map(([prefix, n]) => `${prefix}!${n}`)])
   })
 })
