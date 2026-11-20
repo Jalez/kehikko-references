@@ -1,5 +1,5 @@
 import { stacksOf } from './stack.ts'
-import { idsOfAll, payloadOfAll, type Copied, type Payload } from './copy.ts'
+import { idsOfAll, payloadOfAll, urlsOf, type Copied, type Payload } from './copy.ts'
 import { relatedOf } from './one-up.ts'
 import type { Reference } from './reference.ts'
 
@@ -13,7 +13,9 @@ import type { Reference } from './reference.ts'
  * - **this**: the item;
  * - **filtered**: every row the current filters and scope show, in the order shown;
  * - **related**: the item's whole stack and what it is tied to (`relatedOf`),
- *   each stack whole, so nothing in it is "(not selected)".
+ *   each stack whole whatever the choice.
+ *
+ * A stack member that was not copied is linked from the whole reading (`rows`).
  */
 
 export type MenuScope = 'this' | 'filtered' | 'related'
@@ -58,7 +60,7 @@ export function menuCopy(
   stack = false,
 ): { payload: Payload; copied: Copied } {
   const picked = menuRows(action.scope, row, shown, rows)
-  const options = { whole: action.scope === 'related', stack }
+  const options = { whole: action.scope === 'related', stack, urls: urlsOf(rows) }
   const payload = action.kind === 'ids' ? idsOfAll(picked, options) : payloadOfAll(picked, options)
   const stacks = options.whole || stack ? stacksOf(picked).length : 0
   return { payload, copied: { count: picked.length, stacks, plain: payload.plain } }

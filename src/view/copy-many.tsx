@@ -20,6 +20,13 @@ import { stacksOf } from '@/live/stack.ts'
 export const StackChoice = createContext(false)
 export const useStackChoice = () => useContext(StackChoice)
 
+/**
+ * Every row of the reading's web URL, by ref (`urlsOf`): what a copy with its stack links
+ * the members from, so a change that was not copied is still a link. The page provides it.
+ */
+export const ReadingUrls = createContext<ReadonlyMap<string, string>>(new Map())
+export const useReadingUrls = () => useContext(ReadingUrls)
+
 /** The two things a copy of several rows can be. */
 export type CopyKind = 'linked' | 'ids'
 
@@ -67,7 +74,7 @@ export function copiedOf(kind: CopyKind, rows: Copyable[], options: CopyOptions 
  * how many stacks came along, and the text — for a few seconds after, or null.
  * One place, so the bar, the footer and Cmd+C say the same.
  */
-export function useCopyMany(rows: Copyable[], stack = false) {
+export function useCopyMany(rows: Copyable[], stack = false, urls?: ReadonlyMap<string, string>) {
   const [copied, setCopied] = useState<Copied | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), [])
@@ -80,22 +87,22 @@ export function useCopyMany(rows: Copyable[], stack = false) {
   const copy = useCallback(
     (kind: CopyKind) => {
       if (rows.length === 0) return Promise.resolve(false)
-      const what = copiedOf(kind, rows, { stack })
-      return copyPayload(payloadFor(kind, rows, { stack })).then((ok) => {
+      const what = copiedOf(kind, rows, { stack, urls })
+      return copyPayload(payloadFor(kind, rows, { stack, urls })).then((ok) => {
         if (!ok) return false
         say(what)
         return true
       })
     },
-    [rows, say, stack],
+    [rows, say, stack, urls],
   )
   /* The host wrote the clipboard itself, in the person's click (protocol 2.40.0): say it was copied, as a copy here would. */
   const noteCopied = useCallback(
     (kind: CopyKind = 'linked') => {
       if (rows.length === 0) return
-      say(copiedOf(kind, rows, { stack }))
+      say(copiedOf(kind, rows, { stack, urls }))
     },
-    [rows, say, stack],
+    [rows, say, stack, urls],
   )
   return { copied, copy, noteCopied }
 }

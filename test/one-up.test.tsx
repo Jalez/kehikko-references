@@ -176,35 +176,43 @@ describe('what each menu action copies', () => {
   const action = (id: string) => MENU_ACTIONS.find((a) => a.id === id)!
   const copy = (id: string, ref = '#22', stack = true) => menuCopy(action(id), by(ref), shown, READING, stack)
 
-  test('copy this, with link: copied inside its stack, every change with its title, the others not selected', () => {
+  test('copy this, with link: copied inside its stack, drawn as a tree, every change linked from the reading', () => {
     expect(copy('this-linked').payload.plain).toBe(
-      ['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', `  - [#22](${url('#22')}) two`, '    - #23 three (not selected)'].join('\n'),
+      ['Stack of 3:', `[#21](${url('#21')}) one`, `└─\u00a0[#22](${url('#22')}) two`, `\u00a0\u00a0\u00a0└─\u00a0[#23](${url('#23')}) three`].join('  \n'),
     )
   })
   test('copy this id', () => {
-    expect(copy('this-ids').payload.plain).toBe('#22\n\nStack, bottom first: #21 (not selected) → #22 → #23 (not selected)')
+    expect(copy('this-ids').payload.plain).toBe('#22\n\nStack, bottom first: #21 → #22 → #23')
     expect(copy('this-ids', '#30').payload.plain).toBe('#30')
   })
   test('copy all filtered: what the list shows, in its order', () => {
-    expect(copy('filtered-ids').payload.plain).toBe('#23 #22 #30\n\nStack, bottom first: #21 (not selected) → #22 → #23')
+    expect(copy('filtered-ids').payload.plain).toBe('#23 #22 #30\n\nStack, bottom first: #21 → #22 → #23')
     expect(copy('filtered-linked').payload.plain).toBe(
-      ['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', `  - [#22](${url('#22')}) two`, `    - [#23](${url('#23')}) three`, '', `[#30](${url('#30')}) elsewhere`].join('\n'),
+      [
+        'Stack of 3:  ',
+        `[#21](${url('#21')}) one  `,
+        `└─\u00a0[#22](${url('#22')}) two  `,
+        `\u00a0\u00a0\u00a0└─\u00a0[#23](${url('#23')}) three`,
+        '',
+        `[#30](${url('#30')}) elsewhere`,
+      ].join('\n'),
     )
     expect(copy('filtered-ids').copied).toMatchObject({ count: 3, stacks: 1 })
   })
-  test('copy related: the whole stack, then the tie, and nothing in the stack is "not selected"', () => {
+  test('copy related: the whole stack, then the tie', () => {
     expect(copy('related-ids').payload.plain).toBe('#22 #21 #23 #9\n\nStack, bottom first: #21 → #22 → #23')
     const linked = copy('related-linked').payload
-    expect(linked.plain).not.toContain('not selected')
-    expect(linked.plain.split('\n')).toEqual([
-      'Stack of 3, each change under the one it is built on:',
-      `- [#21](${url('#21')}) one`,
-      `  - [#22](${url('#22')}) two`,
-      `    - [#23](${url('#23')}) three`,
+    expect(linked.plain.split('\n').map((line) => line.replace(/ {2}$/, '').replace(/\u00a0/g, ' '))).toEqual([
+      'Stack of 3:',
+      `[#21](${url('#21')}) one`,
+      `└─ [#22](${url('#22')}) two`,
+      `   └─ [#23](${url('#23')}) three`,
       '',
       `[#9](${url('#9')}) the issue`,
     ])
-    expect(linked.html).toContain(`<ul><li><a href="${url('#21')}">#21</a> one<ul><li><a href="${url('#22')}">#22</a> two`)
+    expect(linked.html).toContain(
+      `<div><a href="${url('#21')}">#21</a> one</div><div><span style="white-space:pre;font-family:monospace">└─&nbsp;</span><a href="${url('#22')}">#22</a> two</div>`,
+    )
   })
   test('with stack off (the default) the copies are the rows and nothing else', () => {
     expect(copy('this-ids', '#22', false).payload.plain).toBe('#22')
@@ -216,7 +224,7 @@ describe('what each menu action copies', () => {
   })
   test('copy related keeps the whole stack with the choice off', () => {
     expect(copy('related-ids', '#22', false).payload.plain).toBe('#22 #21 #23 #9\n\nStack, bottom first: #21 → #22 → #23')
-    expect(copy('related-linked', '#22', false).payload.plain).toContain('Stack of 3, each change under the one it is built on:')
+    expect(copy('related-linked', '#22', false).payload.plain).toContain('Stack of 3:')
   })
   test('With stack means something only when the item or a shown row is stacked', () => {
     expect(menuHasStacks(by('#30'), [by('#30'), by('#9')])).toBe(false)
@@ -313,7 +321,7 @@ describe('the item menu', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('menu').querySelector('[data-action="this-ids"]')!)
     })
-    expect(copies[1]!.plain).toBe('#22\n\nStack, bottom first: #21 (not selected) → #22 → #23 (not selected)')
+    expect(copies[1]!.plain).toBe('#22\n\nStack, bottom first: #21 → #22 → #23')
   })
 
   test('Shift+F10 opens it from the keyboard, focus on the first item; arrows move, Enter chooses, focus returns', async () => {

@@ -101,16 +101,12 @@ export function stackHeading(place: StackPlace): string {
   return `${place.forked ? 'Forked stack' : 'Stack'}, bottom first:`
 }
 
-/** The marker on a stack member that was not among the copied rows: the only one a reader learns from. */
-export const NOT_SELECTED = ' (not selected)'
-
 /**
  * A stack as lines of references, no titles (the list above has them, once):
  * a line of changes as one line (`!21 → !22 → !23`), a forked stack as a tree.
- * A member that was not copied says so. `label` writes a ref (plain, or a link).
+ * `label` writes a ref (plain, or a link).
  */
-export function stackLines(place: StackPlace, copied: readonly string[], label: (ref: string) => string = (ref) => ref): string[] {
-  const one = (ref: string) => `${label(ref)}${copied.includes(ref) ? '' : NOT_SELECTED}`
-  if (!place.forked) return [place.members.map((m) => one(m.ref)).join(' → ')]
-  return stackTree(place.members).map((line) => `${line.prefix}${one(line.ref)}`)
+export function stackLines(place: StackPlace, label: (ref: string) => string = (ref) => ref): string[] {
+  if (!place.forked) return [place.members.map((m) => label(m.ref)).join(' → ')]
+  return stackTree(place.members).map((line) => `${line.prefix}${label(line.ref)}`)
 }

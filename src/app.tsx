@@ -5,7 +5,7 @@ import { Cover, coverFor, useServerStanding } from 'kehikot-module-protocol/clie
 
 import { ID } from '../manifest.ts'
 import { collect } from '@/live/collect.ts'
-import { copiedSaid, selectedInOrder, type Copied } from '@/live/copy.ts'
+import { copiedSaid, selectedInOrder, urlsOf, type Copied } from '@/live/copy.ts'
 import { hasNewActivity, isUnseen, markSeen, oneUpFits, oneUpOrder, positionSaid, seenOf, type SeenBook } from '@/live/one-up.ts'
 import { avatarHostsOfReading, pinImagePolicy } from '@/live/faces.ts'
 import { reading, writing, type QuietBook } from '@/live/keep.ts'
@@ -41,7 +41,7 @@ import {
   Troubled,
 } from '@/view/absence.tsx'
 import { stacksOf } from '@/live/stack.ts'
-import { payloadFor, StackChoice, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
+import { payloadFor, ReadingUrls, StackChoice, takesCopyKey, useCopyMany } from '@/view/copy-many.tsx'
 import { Heading } from '@/view/heading.tsx'
 import { SelectionMenu } from '@/view/selection-menu.tsx'
 import { ReferenceList } from '@/view/reference-list.tsx'
@@ -688,7 +688,9 @@ export function App() {
    * says when the key is this page's rather than a text copy's).
    */
   const selected = useMemo(() => selectedInOrder(shown, selection), [shown, selection])
-  const { copied, copy, noteCopied } = useCopyMany(selected, withStack)
+  /* Every row of the reading's URL: a copy with its stack links each member from here, copied or not. */
+  const readingUrls = useMemo(() => urlsOf(rows), [rows])
+  const { copied, copy, noteCopied } = useCopyMany(selected, withStack, readingUrls)
   /* Protocol 2.40.0: the footer the host draws is declared only where the host also carries out the
      selection's copy and open in the person's click; anywhere else the page keeps its own bar. */
   const footing = declaresFooter(drawsFooter, hostCarries)
@@ -843,14 +845,14 @@ export function App() {
             epics: where === 'hosted' ? inEpicsState : null,
             stacked: selectedStacked,
             withStack,
-            linked: payloadFor('linked', selected, { stack: withStack }),
-            ids: payloadFor('ids', selected, { stack: withStack }),
+            linked: payloadFor('linked', selected, { stack: withStack, urls: readingUrls }),
+            ids: payloadFor('ids', selected, { stack: withStack, urls: readingUrls }),
             urls: selected.flatMap((row) => (row.url ? [row.url] : [])),
           }
         : null,
       { position: oneUp && ordered.length ? positionSaid(oneUpAt.at, ordered.length) : null, menu: menuSaid, trouble: troubleNow },
     )
-  }, [troubleNow, listed, sight, shown.length, rows.length, sifting.scope, fresh.size, selected, selectedStacked, withStack, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
+  }, [troubleNow, listed, sight, shown.length, rows.length, sifting.scope, fresh.size, selected, selectedStacked, withStack, readingUrls, copied, where, inEpicsState, oneUp, ordered.length, oneUpAt.at, menuSaid])
   useEffect(() => {
     if (footing) footer(footerNow)
   }, [footing, footerNow, footer])
@@ -913,6 +915,7 @@ export function App() {
        part company at any width. It is named `frame` so that a row's title
        can ask it directly, past the row's own container (`reference-row.tsx`). */
     <StackChoice.Provider value={withStack}>
+    <ReadingUrls.Provider value={readingUrls}>
     <div data-kehikot-page ref={frame} className="@container/frame flex h-full flex-col">
       {/*
         A source that could not be read, over the rows it gave before.
@@ -1058,6 +1061,7 @@ export function App() {
         />
       )}
     </div>
+    </ReadingUrls.Provider>
     </StackChoice.Provider>
   )
 }

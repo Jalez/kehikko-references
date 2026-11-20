@@ -16,17 +16,25 @@
  * A row in a stack takes its stack along only when asked (`stack: true`; "with
  * stack" in the menus and the footer, off until the person turns it on, and
  * always on for a copy of the related references). Then the stack IS where its
- * rows are copied: at the first of them, the whole stack as one nested list,
- * bottom first, each change under the one it is built on, each with its link
- * and title — so what is connected with what is read from the same lines that
- * carry the links. A nested list is what keeps both the links and the tree in a
- * paste: Markdown for GitHub, GitLab and a terminal, `<ul>` for Slack, Teams, a
- * document or a mail. A member that was not copied has its title and says
- * `(not selected)`, with no link (only copied rows bring one).
+ * rows are copied: at the first of them, the whole stack drawn as a tree, one
+ * line per change, bottom first, each change under the one it is built on with
+ * the `├─ `/`└─ `/`│  ` glyphs `tree` draws, then its link and title. Every
+ * member is drawn the same way, copied or not, and linked whenever the reading
+ * holds its `url` (`urls`): a reader of the paste wants to open any of them.
+ *
+ * A drawn tree, not a nested list: a pasted nested list loses its indentation
+ * in most places, and with it the tree. The lines survive a paste as lines:
+ *
+ * - Markdown ends each line but the last with two spaces, the hard break
+ *   GitHub, GitLab and every CommonMark reader take, and spells the prefix's
+ *   spaces as no-break spaces, which nothing strips from the start of a line.
+ *   No code block: the links stay links.
+ * - HTML is one `<div>` per line, the prefix kept with `white-space:pre` and,
+ *   for the places that drop styles (Slack, mail), `&nbsp;`.
  */
 
 import type { StackPlace } from './markers.ts'
-import { NOT_SELECTED, stackHeading, stackLines, stacksOf } from './stack.ts'
+import { stackHeading, stackLines, stacksOf, stackTree } from './stack.ts'
 
 export interface Copyable {
   ref: string
@@ -67,59 +75,64 @@ export function payloadOf(row: Copyable): Payload {
 }
 
 /**
- * How a copy marks its stacks. `whole`: a copy of an item's related references,
- * which carries its whole stack on purpose, so no member is "(not selected)".
+ * What a copy takes along. `whole`: a copy of an item's related references,
+ * which carries its whole stack on purpose, whatever the choice.
  */
 export interface CopyOptions {
   whole?: boolean
   /** Take the stacks the rows are in along. Off by default: a copy is the rows and nothing else. */
   stack?: boolean
+  /**
+   * Every row of the reading's web URL, by ref (`urlsOf`): a stack member that was
+   * not copied is linked from here. One the reading has no URL for stays plain.
+   */
+  urls?: ReadonlyMap<string, string>
 }
 
-/** The stacks the rows are in, each with what counts as copied in it: every member for a whole copy. */
-function stacksCopied(rows: Copyable[], options: CopyOptions) {
+/** The ref → URL lookup a copy links its stack members from: every row of the reading that has one. */
+export function urlsOf(rows: Iterable<{ ref: string; url: string | null }>): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const row of rows) if (row.url) out.set(row.ref, row.url)
+  return out
+}
+
+/** The stacks the rows are in, each once. */
+function stacksCopied(rows: Copyable[], options: CopyOptions): StackPlace[] {
   if (!options.stack && !options.whole) return []
-  return stacksOf(rows).map(({ place, copied }) => ({ place, copied: options.whole ? place.members.map((m) => m.ref) : copied }))
+  return stacksOf(rows).map(({ place }) => place)
 }
 
 /** What a copied stack is headed with: how many changes, and whether it forks. */
 export function mergedHeading(place: StackPlace): string {
-  return `${place.forked ? 'Forked stack' : 'Stack'} of ${place.members.length}, each change under the one it is built on:`
+  return `${place.forked ? 'Forked stack' : 'Stack'} of ${place.members.length}:`
 }
 
-/** One stack as a nested list in the two formats: each member linked (when copied) with its title, under the change it sits on. */
-function mergedStack(place: StackPlace, copied: readonly string[], byRef: ReadonlyMap<string, Copyable>): Payload {
+/** The hard break that ends a Markdown line: two spaces, which GitHub, GitLab and CommonMark all take. */
+export const HARD_BREAK = '  '
+
+/** A tree prefix whose spaces nothing strips or collapses: no-break spaces. */
+function keptPrefix(prefix: string): string {
+  return prefix.replace(/ /g, '\u00a0')
+}
+
+/**
+ * One stack as a drawn tree in the two formats: its heading, then a line per
+ * member — the tree prefix, the ref linked when a URL is known, the title.
+ */
+function mergedStack(place: StackPlace, byRef: ReadonlyMap<string, Copyable>, urls: ReadonlyMap<string, string> | undefined): Payload {
   const top = Math.min(...place.members.map((m) => m.depth))
+  const lines = stackTree(place.members.map((m) => ({ ...m, depth: m.depth - top })))
   const plain: string[] = [mergedHeading(place)]
   let html = `<p>${escapeHtml(mergedHeading(place))}</p>`
-  let open = 0
-  for (const m of place.members) {
-    const depth = m.depth - top
-    const row = byRef.get(m.ref)
-    const one = row ?? { ref: m.ref, title: m.title, url: null }
-    const said = payloadOf(one)
-    const mark = copied.includes(m.ref) ? '' : NOT_SELECTED
-    plain.push(`${'  '.repeat(depth)}- ${said.plain}${mark}`)
-    /* Open a list for each level deeper, close down to this one, then this item. */
-    if (depth + 1 > open) {
-      while (open < depth + 1) {
-        html += '<ul>'
-        open += 1
-      }
-    } else {
-      html += '</li>'
-      while (open > depth + 1) {
-        html += '</ul></li>'
-        open -= 1
-      }
-    }
-    html += `<li>${said.html}${escapeHtml(mark)}`
+  for (const line of lines) {
+    const row = byRef.get(line.ref)
+    const said = payloadOf({ ref: line.ref, title: row?.title ?? line.title, url: row?.url ?? urls?.get(line.ref) ?? null })
+    const prefix = keptPrefix(line.prefix)
+    plain.push(`${prefix}${said.plain}`)
+    const drawn = prefix ? `<span style="white-space:pre;font-family:monospace">${escapeHtml(prefix).replace(/\u00a0/g, '&nbsp;')}</span>` : ''
+    html += `<div>${drawn}${said.html}</div>`
   }
-  while (open > 0) {
-    html += '</li></ul>'
-    open -= 1
-  }
-  return { plain: plain.join('\n'), html }
+  return { plain: plain.join(`${HARD_BREAK}\n`), html }
 }
 
 /**
@@ -133,11 +146,11 @@ export function payloadOfAll(rows: Copyable[], options: CopyOptions = {}): Paylo
     return { html: each.map((p) => `<div>${p.html}</div>`).join(''), plain: each.map((p) => p.plain).join('\n') }
   }
   const byRef = new Map(rows.map((row) => [row.ref, row]))
-  const stackOf = new Map<string, (typeof stacks)[number]>()
-  for (const one of stacks) for (const m of one.place.members) stackOf.set(m.ref, one)
+  const stackOf = new Map<string, StackPlace>()
+  for (const one of stacks) for (const m of one.members) stackOf.set(m.ref, one)
   const plain: string[] = []
   let html = ''
-  const done = new Set<(typeof stacks)[number]>()
+  const done = new Set<StackPlace>()
   for (const row of rows) {
     const one = stackOf.get(row.ref)
     if (!one) {
@@ -148,8 +161,8 @@ export function payloadOfAll(rows: Copyable[], options: CopyOptions = {}): Paylo
     }
     if (done.has(one)) continue
     done.add(one)
-    const block = mergedStack(one.place, one.copied, byRef)
-    /* A blank line before and after a list, so Markdown takes it as one. */
+    const block = mergedStack(one, byRef, options.urls)
+    /* A blank line before and after a stack, so Markdown keeps it apart from the lines around it. */
     plain.push(`${plain.length ? '\n' : ''}${block.plain}\n`)
     html += block.html
   }
@@ -164,8 +177,8 @@ export function payloadOfAll(rows: Copyable[], options: CopyOptions = {}): Paylo
  */
 export function idsOfAll(rows: Copyable[], options: CopyOptions = {}): Payload {
   let plain = rows.map((row) => row.ref).join(' ')
-  for (const { place, copied } of stacksCopied(rows, options)) {
-    const lines = stackLines(place, copied)
+  for (const place of stacksCopied(rows, options)) {
+    const lines = stackLines(place)
     plain += place.forked ? `\n\n${stackHeading(place)}\n${lines.join('\n')}` : `\n\n${stackHeading(place)} ${lines[0]}`
   }
   return { html: plain.includes('\n') ? `<pre>${escapeHtml(plain)}</pre>` : escapeHtml(plain), plain }
