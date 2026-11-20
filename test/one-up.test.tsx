@@ -176,9 +176,9 @@ describe('what each menu action copies', () => {
   const action = (id: string) => MENU_ACTIONS.find((a) => a.id === id)!
   const copy = (id: string, ref = '#22', stack = true) => menuCopy(action(id), by(ref), shown, READING, stack)
 
-  test('copy this, with link: the title line, then its stack as ids, the others not selected', () => {
+  test('copy this, with link: copied inside its stack, every change with its title, the others not selected', () => {
     expect(copy('this-linked').payload.plain).toBe(
-      `[#22](${url('#22')}) two\n\nStack, bottom first:\n#21 (not selected) → #22 → #23 (not selected)`,
+      ['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', `  - [#22](${url('#22')}) two`, '    - #23 three (not selected)'].join('\n'),
     )
   })
   test('copy this id', () => {
@@ -188,21 +188,23 @@ describe('what each menu action copies', () => {
   test('copy all filtered: what the list shows, in its order', () => {
     expect(copy('filtered-ids').payload.plain).toBe('#23 #22 #30\n\nStack, bottom first: #21 (not selected) → #22 → #23')
     expect(copy('filtered-linked').payload.plain).toBe(
-      [`[#23](${url('#23')}) three`, `[#22](${url('#22')}) two`, `[#30](${url('#30')}) elsewhere`, '', 'Stack, bottom first:', '#21 (not selected) → #22 → #23'].join('\n'),
+      ['Stack of 3, each change under the one it is built on:', '- #21 one (not selected)', `  - [#22](${url('#22')}) two`, `    - [#23](${url('#23')}) three`, '', `[#30](${url('#30')}) elsewhere`].join('\n'),
     )
     expect(copy('filtered-ids').copied).toMatchObject({ count: 3, stacks: 1 })
   })
-  test('copy related: the whole stack and the tie, and nothing in the stack is "not selected"', () => {
+  test('copy related: the whole stack, then the tie, and nothing in the stack is "not selected"', () => {
     expect(copy('related-ids').payload.plain).toBe('#22 #21 #23 #9\n\nStack, bottom first: #21 → #22 → #23')
     const linked = copy('related-linked').payload
     expect(linked.plain).not.toContain('not selected')
-    expect(linked.plain.split('\n').slice(0, 4)).toEqual([
-      `[#22](${url('#22')}) two`,
-      `[#21](${url('#21')}) one`,
-      `[#23](${url('#23')}) three`,
+    expect(linked.plain.split('\n')).toEqual([
+      'Stack of 3, each change under the one it is built on:',
+      `- [#21](${url('#21')}) one`,
+      `  - [#22](${url('#22')}) two`,
+      `    - [#23](${url('#23')}) three`,
+      '',
       `[#9](${url('#9')}) the issue`,
     ])
-    expect(linked.html).toContain(`<a href="${url('#21')}">#21</a> → <a href="${url('#22')}">#22</a>`)
+    expect(linked.html).toContain(`<ul><li><a href="${url('#21')}">#21</a> one<ul><li><a href="${url('#22')}">#22</a> two`)
   })
   test('with stack off (the default) the copies are the rows and nothing else', () => {
     expect(copy('this-ids', '#22', false).payload.plain).toBe('#22')
@@ -214,7 +216,7 @@ describe('what each menu action copies', () => {
   })
   test('copy related keeps the whole stack with the choice off', () => {
     expect(copy('related-ids', '#22', false).payload.plain).toBe('#22 #21 #23 #9\n\nStack, bottom first: #21 → #22 → #23')
-    expect(copy('related-linked', '#22', false).payload.plain).toContain('Stack, bottom first')
+    expect(copy('related-linked', '#22', false).payload.plain).toContain('Stack of 3, each change under the one it is built on:')
   })
   test('With stack means something only when the item or a shown row is stacked', () => {
     expect(menuHasStacks(by('#30'), [by('#30'), by('#9')])).toBe(false)

@@ -15,16 +15,18 @@
  *
  * A row in a stack takes its stack along only when asked (`stack: true`; "with
  * stack" in the menus and the footer, off until the person turns it on, and
- * always on for a copy of the related references): after the rows, each
- * stack they are in once, bottom first, as references only (the titles are in
- * the list above, once). A line of changes is one line (`!21 → !22 → !23`); a
- * forked stack is a tree, in a code block in the Markdown and `<pre>` in the
- * html, so the fork survives the paste. A member that was not copied says
- * `(not selected)`; nothing else is marked.
+ * always on for a copy of the related references). Then the stack IS where its
+ * rows are copied: at the first of them, the whole stack as one nested list,
+ * bottom first, each change under the one it is built on, each with its link
+ * and title — so what is connected with what is read from the same lines that
+ * carry the links. A nested list is what keeps both the links and the tree in a
+ * paste: Markdown for GitHub, GitLab and a terminal, `<ul>` for Slack, Teams, a
+ * document or a mail. A member that was not copied has its title and says
+ * `(not selected)`, with no link (only copied rows bring one).
  */
 
 import type { StackPlace } from './markers.ts'
-import { stackHeading, stackLines, stacksOf } from './stack.ts'
+import { NOT_SELECTED, stackHeading, stackLines, stacksOf } from './stack.ts'
 
 export interface Copyable {
   ref: string
@@ -64,27 +66,6 @@ export function payloadOf(row: Copyable): Payload {
   }
 }
 
-/** One stack's block in the two formats: the heading, then its references only, a tree in a code block for a fork. */
-function stackBlock(place: StackPlace, copied: readonly string[], urls: ReadonlyMap<string, string | null>): Payload {
-  const heading = stackHeading(place)
-  const plainLines = stackLines(place, copied)
-  const link = (ref: string) => {
-    const url = urls.get(ref)
-    return url ? `<a href="${escapeHtml(url)}">${escapeHtml(ref)}</a>` : escapeHtml(ref)
-  }
-  /* Each ref is fenced by NULs: the odd pieces are refs (linked), the even ones text. */
-  const htmlLines = stackLines(place, copied, (ref) => `\u0000${ref}\u0000`).map((line) =>
-    line.split('\u0000').map((piece, i) => (i % 2 ? link(piece) : escapeHtml(piece))).join(''),
-  )
-  if (place.forked) {
-    return {
-      plain: `${heading}\n\`\`\`text\n${plainLines.join('\n')}\n\`\`\``,
-      html: `<p>${escapeHtml(heading)}</p><pre>${htmlLines.join('\n')}</pre>`,
-    }
-  }
-  return { plain: `${heading}\n${plainLines.join('\n')}`, html: `<p>${escapeHtml(heading)}</p><p>${htmlLines.join('')}</p>` }
-}
-
 /**
  * How a copy marks its stacks. `whole`: a copy of an item's related references,
  * which carries its whole stack on purpose, so no member is "(not selected)".
@@ -101,18 +82,78 @@ function stacksCopied(rows: Copyable[], options: CopyOptions) {
   return stacksOf(rows).map(({ place, copied }) => ({ place, copied: options.whole ? place.members.map((m) => m.ref) : copied }))
 }
 
-/** Several rows (or one), one line each with its title, in the same two formats, and then each stack they are in, as references. */
+/** What a copied stack is headed with: how many changes, and whether it forks. */
+export function mergedHeading(place: StackPlace): string {
+  return `${place.forked ? 'Forked stack' : 'Stack'} of ${place.members.length}, each change under the one it is built on:`
+}
+
+/** One stack as a nested list in the two formats: each member linked (when copied) with its title, under the change it sits on. */
+function mergedStack(place: StackPlace, copied: readonly string[], byRef: ReadonlyMap<string, Copyable>): Payload {
+  const top = Math.min(...place.members.map((m) => m.depth))
+  const plain: string[] = [mergedHeading(place)]
+  let html = `<p>${escapeHtml(mergedHeading(place))}</p>`
+  let open = 0
+  for (const m of place.members) {
+    const depth = m.depth - top
+    const row = byRef.get(m.ref)
+    const one = row ?? { ref: m.ref, title: m.title, url: null }
+    const said = payloadOf(one)
+    const mark = copied.includes(m.ref) ? '' : NOT_SELECTED
+    plain.push(`${'  '.repeat(depth)}- ${said.plain}${mark}`)
+    /* Open a list for each level deeper, close down to this one, then this item. */
+    if (depth + 1 > open) {
+      while (open < depth + 1) {
+        html += '<ul>'
+        open += 1
+      }
+    } else {
+      html += '</li>'
+      while (open > depth + 1) {
+        html += '</ul></li>'
+        open -= 1
+      }
+    }
+    html += `<li>${said.html}${escapeHtml(mark)}`
+  }
+  while (open > 0) {
+    html += '</li></ul>'
+    open -= 1
+  }
+  return { plain: plain.join('\n'), html }
+}
+
+/**
+ * Several rows (or one), one line each with its title, in the same two formats. With their stacks,
+ * a stacked row is copied inside its stack, which stands where the first of its rows would.
+ */
 export function payloadOfAll(rows: Copyable[], options: CopyOptions = {}): Payload {
-  const each = rows.map(payloadOf)
-  let html = each.map((p) => `<div>${p.html}</div>`).join('')
-  let plain = each.map((p) => p.plain).join('\n')
-  const urls = new Map(rows.map((row) => [row.ref, row.url]))
-  for (const { place, copied } of stacksCopied(rows, options)) {
-    const block = stackBlock(place, copied, urls)
-    plain += `\n\n${block.plain}`
+  const stacks = stacksCopied(rows, options)
+  if (!stacks.length) {
+    const each = rows.map(payloadOf)
+    return { html: each.map((p) => `<div>${p.html}</div>`).join(''), plain: each.map((p) => p.plain).join('\n') }
+  }
+  const byRef = new Map(rows.map((row) => [row.ref, row]))
+  const stackOf = new Map<string, (typeof stacks)[number]>()
+  for (const one of stacks) for (const m of one.place.members) stackOf.set(m.ref, one)
+  const plain: string[] = []
+  let html = ''
+  const done = new Set<(typeof stacks)[number]>()
+  for (const row of rows) {
+    const one = stackOf.get(row.ref)
+    if (!one) {
+      const said = payloadOf(row)
+      plain.push(said.plain)
+      html += `<div>${said.html}</div>`
+      continue
+    }
+    if (done.has(one)) continue
+    done.add(one)
+    const block = mergedStack(one.place, one.copied, byRef)
+    /* A blank line before and after a list, so Markdown takes it as one. */
+    plain.push(`${plain.length ? '\n' : ''}${block.plain}\n`)
     html += block.html
   }
-  return { html, plain }
+  return { html, plain: plain.join('\n').replace(/\n{3,}/g, '\n\n').trim() }
 }
 
 /**
